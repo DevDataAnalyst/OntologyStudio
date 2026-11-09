@@ -391,6 +391,6 @@ Ideas the current design leaves room for, none of them built yet:
 - export to other semantic-layer formats,
 - MCP tools so external agents can query the ontology.
 
-## Third-party code
+## License
 
-[Cytoscape.js](https://js.cytoscape.org/) is bundled in `components/ontology_graph/` under the MIT license; see [`CYTOSCAPE_LICENSE`](components/ontology_graph/CYTOSCAPE_LICENSE).
+[MIT](LICENSE). [Cytoscape.js](https://js.cytoscape.org/), bundled in `components/ontology_graph/`, is also MIT licensed; see [`CYTOSCAPE_LICENSE`](components/ontology_graph/CYTOSCAPE_LICENSE).

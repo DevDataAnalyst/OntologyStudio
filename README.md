@@ -13,6 +13,50 @@ The workflow is **Connect → Analyze → Edit → Export**. An **Ask** tab then
 
 No Databricks workspace handy? The same engine runs locally on a SQLite file or a `.sql` script, in the app or from a [command-line interface](#command-line-interface).
 
+<p align="center">
+  <img src="docs/images/overview.png" width="640" alt="Ontology Studio at a glance: Databricks catalog tables go into the Streamlit app, which analyzes relationships, metrics and dimensions into an editable network diagram, and the ontology is exported as YAML">
+</p>
+
+## Walkthrough
+
+These screenshots use the AdventureWorks sample tables (`adventureworks.dbo`) in Unity Catalog. Click an image to see it full size.
+
+### 1. Pick tables, build, and edit the network
+
+In the sidebar, choose **Unity Catalog**, a catalog, one or more schemas and up to 100 tables, then click **Analyze & build**. The **Network** tab draws every class and relationship: orange squares are facts, blue circles are dimensions, grey circles are entities. Click a class to edit its role, description, synonyms, column roles and metrics in the inspector on the right.
+
+![Network tab: the ontology diagram with the Order fact selected in the inspector](docs/images/network.png)
+
+### 2. Review the ontology YAML
+
+The **Ontology YAML** tab shows the whole ontology, with validation notes at the top. Edit the YAML and click **Apply YAML edits** to update the diagram, or download it.
+
+![Ontology YAML tab with validation notes and the generated YAML](docs/images/ontology-yaml.png)
+
+### 3. Generate metric views
+
+The **Metric views** tab builds one metric view per fact, with joins nested for snowflake schemas. Download it, or deploy it to Unity Catalog.
+
+![Metric views tab showing the YAML for the Order fact](docs/images/metric-views.png)
+
+### 4. Check the semantic layer
+
+The **Semantic layer** tab lists code meanings, metrics and business rules, each with its provenance. Here the LLM filled in the code meanings and the business rules.
+
+![Semantic layer tab with value meanings, metrics and business rules](docs/images/semantic-layer.png)
+
+### 5. Review tables and relationships
+
+The **Tables** tab lists every class with its source table, row count and key (ticked when the key was inferred), and every relationship with its join columns and confidence.
+
+![Tables tab with classes and relationships](docs/images/tables.png)
+
+### 6. Ask a question
+
+The **Ask (Text-to-SQL)** tab writes SQL for a business question from the ontology and runs it as you. With **Compare with schema-only** ticked, it also shows a baseline written from the bare table and column names.
+
+![Ask tab with a question and the SQL generated from the ontology](docs/images/ask.png)
+
 ---
 
 ## Features

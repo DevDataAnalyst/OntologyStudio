@@ -1,0 +1,34 @@
+version: '1.1'
+source: store_visits
+joins:
+- name: customer
+  source: dim_customer
+  'on': source.cust_id = customer.customer_key
+  joins:
+  - name: region
+    source: dim_region
+    'on': customer.region_code = region.region_code
+dimensions:
+- name: visited_on
+  expr: visited_on
+  display_name: Visited On
+- name: customer_name
+  expr: customer.customer_name
+  display_name: Customer Name
+- name: customer_segment
+  expr: customer.segment
+  display_name: Segment
+- name: region_name
+  expr: customer.region.region_name
+  display_name: Region Name
+measures:
+- name: store_visit_count
+  expr: COUNT(1)
+  display_name: Store Visit Count
+  comment: Number of store visit records
+- name: sum_minutes
+  expr: SUM(minutes)
+  display_name: Sum Minutes
+  comment: Sum of minutes
+  synonyms:
+  - minutes

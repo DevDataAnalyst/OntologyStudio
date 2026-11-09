@@ -1,0 +1,599 @@
+ontology:
+  name: Retail
+  iri: http://example.org/ontology/retail#
+  prefix: ex
+  version: 1.0.0
+  generated_at: '2026-11-08T05:41:48Z'
+  generated_by: sql2ontology
+  source:
+    type: sqlite
+    name: retail_star
+    dialect: sqlite
+  stats:
+    classes: 6
+    data_properties: 20
+    object_properties: 10
+    junction_tables_collapsed: 0
+prefixes:
+  ex: http://example.org/ontology/retail#
+  xsd: http://www.w3.org/2001/XMLSchema#
+  rdfs: http://www.w3.org/2000/01/rdf-schema#
+  owl: http://www.w3.org/2002/07/owl#
+  rdf: http://www.w3.org/1999/02/22-rdf-syntax-ns#
+classes:
+  Customer:
+    label: customer
+    source_table: dim_customer
+    source_columns:
+    - customer_key
+    - customer_name
+    - segment
+    - region_code
+    identifier:
+    - customerKey
+    instance_count: 200
+    provenance: schema
+    identifier_inferred: true
+    data_properties:
+      customerKey:
+        label: customer key
+        range: xsd:integer
+        required: true
+        unique: true
+        identifier: true
+        cardinality:
+          min: 1
+          max: 1
+        provenance: schema
+        source_column: customer_key
+        sql_type: INTEGER
+        semantic_role: key
+      customerName:
+        label: customer name
+        range: xsd:string
+        required: false
+        cardinality:
+          min: 0
+          max: 1
+        samples:
+        - C1
+        - C2
+        - C3
+        - C4
+        - C5
+        provenance: schema
+        source_column: customer_name
+        sql_type: TEXT
+        semantic_role: dimension
+      segment:
+        label: segment
+        range: xsd:string
+        required: false
+        cardinality:
+          min: 0
+          max: 1
+        allowed_values:
+        - Corporate
+        - Retail
+        - SMB
+        provenance: schema+profile
+        source_column: segment
+        sql_type: TEXT
+        semantic_role: dimension
+    role: dimension
+  Date:
+    label: date
+    source_table: dim_date
+    source_columns:
+    - date_key
+    - full_date
+    - month_name
+    - fiscal_year
+    identifier:
+    - dateKey
+    instance_count: 28
+    provenance: schema
+    identifier_inferred: true
+    data_properties:
+      dateKey:
+        label: date key
+        range: xsd:integer
+        required: true
+        unique: true
+        identifier: true
+        cardinality:
+          min: 1
+          max: 1
+        provenance: schema
+        source_column: date_key
+        sql_type: INTEGER
+        semantic_role: key
+      fullDate:
+        label: full date
+        range: xsd:date
+        required: false
+        cardinality:
+          min: 0
+          max: 1
+        samples:
+        - '2024-01-01'
+        - '2024-01-02'
+        - '2024-01-03'
+        - '2024-01-04'
+        - '2024-01-05'
+        provenance: schema
+        source_column: full_date
+        sql_type: DATE
+        semantic_role: time
+      monthName:
+        label: month name
+        range: xsd:string
+        required: false
+        cardinality:
+          min: 0
+          max: 1
+        allowed_values:
+        - January
+        provenance: schema+profile
+        source_column: month_name
+        sql_type: TEXT
+        semantic_role: dimension
+      fiscalYear:
+        label: fiscal year
+        range: xsd:integer
+        required: false
+        cardinality:
+          min: 0
+          max: 1
+        samples:
+        - 2024
+        provenance: schema
+        source_column: fiscal_year
+        sql_type: INTEGER
+        semantic_role: dimension
+    role: dimension
+  Product:
+    label: product
+    source_table: dim_product
+    source_columns:
+    - product_key
+    - product_name
+    - category
+    - list_price
+    identifier:
+    - productKey
+    instance_count: 60
+    provenance: schema
+    identifier_inferred: true
+    data_properties:
+      productKey:
+        label: product key
+        range: xsd:integer
+        required: true
+        unique: true
+        identifier: true
+        cardinality:
+          min: 1
+          max: 1
+        provenance: schema
+        source_column: product_key
+        sql_type: INTEGER
+        semantic_role: key
+      productName:
+        label: product name
+        range: xsd:string
+        required: false
+        cardinality:
+          min: 0
+          max: 1
+        samples:
+        - P1
+        - P2
+        - P3
+        - P4
+        - P5
+        provenance: schema
+        source_column: product_name
+        sql_type: TEXT
+        semantic_role: dimension
+      category:
+        label: category
+        range: xsd:string
+        required: false
+        cardinality:
+          min: 0
+          max: 1
+        allowed_values:
+        - Apparel
+        - Bikes
+        - Gear
+        - Parts
+        provenance: schema+profile
+        source_column: category
+        sql_type: TEXT
+        semantic_role: dimension
+      listPrice:
+        label: list price
+        range: xsd:double
+        required: false
+        cardinality:
+          min: 0
+          max: 1
+        samples:
+        - 286.44
+        - 588.58
+        - 29.4
+        - 655.2
+        - 407.61
+        provenance: schema
+        source_column: list_price
+        sql_type: REAL
+        semantic_role: measure
+        aggregation: AVG
+    role: dimension
+  Region:
+    label: region
+    source_table: dim_region
+    source_columns:
+    - region_code
+    - region_name
+    identifier:
+    - regionCode
+    instance_count: 3
+    provenance: schema
+    identifier_inferred: true
+    data_properties:
+      regionCode:
+        label: region code
+        range: xsd:string
+        required: true
+        unique: true
+        identifier: true
+        cardinality:
+          min: 1
+          max: 1
+        provenance: schema
+        source_column: region_code
+        sql_type: TEXT
+        semantic_role: key
+      regionName:
+        label: region name
+        range: xsd:string
+        required: false
+        cardinality:
+          min: 0
+          max: 1
+        samples:
+        - East
+        - West
+        - North
+        provenance: schema
+        source_column: region_name
+        sql_type: TEXT
+        semantic_role: dimension
+    role: dimension
+  Sale:
+    label: sale
+    source_table: fact_sales
+    source_columns:
+    - sales_id
+    - customer_key
+    - product_key
+    - order_date_key
+    - quantity
+    - net_amount
+    - discount_pct
+    identifier:
+    - salesId
+    instance_count: 3000
+    provenance: schema
+    identifier_inferred: true
+    data_properties:
+      salesId:
+        label: sales id
+        range: xsd:integer
+        required: true
+        unique: true
+        identifier: true
+        cardinality:
+          min: 1
+          max: 1
+        provenance: schema
+        source_column: sales_id
+        sql_type: INTEGER
+        semantic_role: key
+      quantity:
+        label: quantity
+        range: xsd:integer
+        required: false
+        cardinality:
+          min: 0
+          max: 1
+        samples:
+        - 3
+        - 5
+        - 2
+        - 1
+        - 4
+        provenance: schema
+        source_column: quantity
+        sql_type: INTEGER
+        semantic_role: measure
+        aggregation: SUM
+      netAmount:
+        label: net amount
+        range: xsd:double
+        required: false
+        cardinality:
+          min: 0
+          max: 1
+        samples:
+        - 1944.98
+        - 1294.12
+        - 630.49
+        - 338.71
+        - 1713.99
+        provenance: schema
+        source_column: net_amount
+        sql_type: REAL
+        semantic_role: measure
+        aggregation: SUM
+      discountPct:
+        label: discount pct
+        range: xsd:double
+        required: false
+        cardinality:
+          min: 0
+          max: 1
+        samples:
+        - 0.0
+        - 0.05
+        - 0.1
+        provenance: schema
+        source_column: discount_pct
+        sql_type: REAL
+        semantic_role: measure
+        aggregation: AVG
+    role: fact
+  StoreVisit:
+    label: store visit
+    source_table: store_visits
+    source_columns:
+    - visit_id
+    - cust_id
+    - visited_on
+    - minutes
+    identifier:
+    - visitId
+    instance_count: 500
+    provenance: schema
+    identifier_inferred: true
+    data_properties:
+      visitId:
+        label: visit id
+        range: xsd:integer
+        required: true
+        unique: true
+        identifier: true
+        cardinality:
+          min: 1
+          max: 1
+        provenance: schema
+        source_column: visit_id
+        sql_type: INTEGER
+        semantic_role: key
+      visitedOn:
+        label: visited on
+        range: xsd:date
+        required: false
+        cardinality:
+          min: 0
+          max: 1
+        samples:
+        - '2024-01-05'
+        provenance: schema
+        source_column: visited_on
+        sql_type: DATE
+        semantic_role: time
+      minutes:
+        label: minutes
+        range: xsd:integer
+        required: false
+        cardinality:
+          min: 0
+          max: 1
+        samples:
+        - 54
+        - 49
+        - 5
+        - 68
+        - 79
+        provenance: schema
+        source_column: minutes
+        sql_type: INTEGER
+        semantic_role: measure
+        aggregation: SUM
+    role: fact
+object_properties:
+  hasRegion:
+    label: has region
+    domain: Customer
+    range: Region
+    cardinality: many-to-one
+    functional: true
+    required: false
+    inverse: hasCustomers
+    join:
+      from:
+      - dim_customer.region_code
+      to:
+      - dim_region.region_code
+    confidence: 0.95
+    provenance: discovered
+  hasCustomers:
+    label: has customers
+    domain: Region
+    range: Customer
+    cardinality: one-to-many
+    functional: false
+    inverse: hasRegion
+  hasCustomer:
+    label: has customer
+    domain: Sale
+    range: Customer
+    cardinality: many-to-one
+    functional: true
+    required: false
+    inverse: hasSales
+    join:
+      from:
+      - fact_sales.customer_key
+      to:
+      - dim_customer.customer_key
+    confidence: 0.95
+    provenance: discovered
+  hasSales:
+    label: has sales
+    domain: Customer
+    range: Sale
+    cardinality: one-to-many
+    functional: false
+    inverse: hasCustomer
+  hasProduct:
+    label: has product
+    domain: Sale
+    range: Product
+    cardinality: many-to-one
+    functional: true
+    required: false
+    inverse: productHasSales
+    join:
+      from:
+      - fact_sales.product_key
+      to:
+      - dim_product.product_key
+    confidence: 0.95
+    provenance: discovered
+  productHasSales:
+    label: product has sales
+    domain: Product
+    range: Sale
+    cardinality: one-to-many
+    functional: false
+    inverse: hasProduct
+  hasOrderDate:
+    label: has order date
+    domain: Sale
+    range: Date
+    cardinality: many-to-one
+    functional: true
+    required: false
+    inverse: dateHasSales
+    join:
+      from:
+      - fact_sales.order_date_key
+      to:
+      - dim_date.date_key
+    confidence: 0.75
+    provenance: discovered
+  dateHasSales:
+    label: date has sales
+    domain: Date
+    range: Sale
+    cardinality: one-to-many
+    functional: false
+    inverse: hasOrderDate
+  storeVisitHasCustomer:
+    label: store visit has customer
+    domain: StoreVisit
+    range: Customer
+    cardinality: many-to-one
+    functional: true
+    required: false
+    inverse: hasStoreVisits
+    join:
+      from:
+      - store_visits.cust_id
+      to:
+      - dim_customer.customer_key
+    confidence: 0.9
+    provenance: discovered
+  hasStoreVisits:
+    label: has store visits
+    domain: Customer
+    range: StoreVisit
+    cardinality: one-to-many
+    functional: false
+    inverse: storeVisitHasCustomer
+value_meanings: []
+rules: []
+metrics:
+- name: sale_count
+  description: Number of sale records
+  base_class: Sale
+  sql: COUNT(1)
+  provenance: heuristic
+- name: sum_quantity
+  description: Sum of quantity
+  base_class: Sale
+  sql: SUM(quantity)
+  provenance: heuristic
+  synonyms:
+  - quantity
+- name: sum_net_amount
+  description: Sum of net amount
+  base_class: Sale
+  sql: SUM(net_amount)
+  provenance: heuristic
+  synonyms:
+  - net amount
+- name: avg_discount_pct
+  description: Avg of discount pct
+  base_class: Sale
+  sql: AVG(discount_pct)
+  provenance: heuristic
+  synonyms:
+  - discount pct
+- name: store_visit_count
+  description: Number of store visit records
+  base_class: StoreVisit
+  sql: COUNT(1)
+  provenance: heuristic
+- name: sum_minutes
+  description: Sum of minutes
+  base_class: StoreVisit
+  sql: SUM(minutes)
+  provenance: heuristic
+  synonyms:
+  - minutes
+suggested_relationships: []
+lineage:
+  tables: []
+  columns: []
+synonyms_index:
+  category: Product.category
+  customer: Customer
+  customer key: Customer.customerKey
+  customer name: Customer.customerName
+  date: Date
+  date key: Date.dateKey
+  discount pct: Sale.discountPct
+  fiscal year: Date.fiscalYear
+  full date: Date.fullDate
+  list price: Product.listPrice
+  minutes: StoreVisit.minutes
+  month name: Date.monthName
+  net amount: Sale.netAmount
+  product: Product
+  product key: Product.productKey
+  product name: Product.productName
+  quantity: Sale.quantity
+  region: Region
+  region code: Region.regionCode
+  region name: Region.regionName
+  sale: Sale
+  sales id: Sale.salesId
+  segment: Customer.segment
+  store visit: StoreVisit
+  visit id: StoreVisit.visitId
+  visited on: StoreVisit.visitedOn

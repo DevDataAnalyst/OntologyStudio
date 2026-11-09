@@ -1,0 +1,396 @@
+# Ontology Studio
+
+**Turn a set of Unity Catalog tables into a governed semantic layer: an editable ontology plus Databricks metric views.**
+
+Ontology Studio (`sql2ontology`) is a Streamlit app that runs on [Databricks Apps](https://docs.databricks.com/aws/en/dev-tools/databricks-apps/). Point it at up to 100 tables and views in Unity Catalog. It works out how they fit together, even when no foreign keys are declared. You fix what it got wrong on an interactive diagram, then export two things you keep:
+
+1. **An ontology YAML file.** Classes, properties, relationships, code meanings, business rules, metrics, synonyms and lineage, with provenance on every element.
+2. **Databricks metric views** (YAML spec 1.1), one per fact table. Download them, or deploy them to Unity Catalog in one click.
+
+Every SQL statement runs **as the signed-in user** (on-behalf-of-user authorization), so Unity Catalog grants, row filters and column masks still apply. The app never reads data the user couldn't already read.
+
+The workflow is **Connect → Analyze → Edit → Export**. An **Ask** tab then shows whether the ontology actually helps an LLM: it writes SQL for the same question with and without the ontology, side by side.
+
+No Databricks workspace handy? The same engine runs locally on a SQLite file or a `.sql` script, in the app or from a [command-line interface](#command-line-interface).
+
+---
+
+## Features
+
+### 1. Connect
+
+- **Unity Catalog** (on Databricks): pick a catalog, one or more of its schemas, and up to 100 tables and views from those schemas. Declared foreign keys that point into another schema or catalog are resolved too.
+- **Upload a file**: a SQLite database (`.db`, `.sqlite`, `.sqlite3`) or a SQL script (`.sql`, `.ddl`, `.txt`). With the dialect on **auto**, a script first runs in an in-memory SQLite database, so dumps with `INSERT`s get profiled too. Otherwise, or if that fails, the DDL is parsed with [sqlglot](https://github.com/tobymao/sqlglot) in the dialect you pick: MySQL, Postgres, T-SQL, Oracle, Snowflake, Databricks, BigQuery, Redshift, DuckDB or Teradata.
+- **Saved version**: reload an ontology you saved earlier to a Unity Catalog Volume (needs [`ONTOLOGY_STORE`](#configuration)).
+
+### 2. Analyze
+
+| Step | What it does |
+|---|---|
+| **Objects** | Reads `information_schema` in each catalog: tables, views, columns, comments, and primary key, unique and foreign key constraints. Declared foreign keys resolve across schemas and catalogs. |
+| **Profiling** | Row counts, distinct counts (`approx_count_distinct` on Unity Catalog), non-null counts, up to 5 sample values per column, and the distinct values of low-cardinality text columns (enumerations). On Unity Catalog it profiles 8 tables in parallel and skips complex types (`ARRAY`, `MAP`, `STRUCT`, `VARIANT`, …). |
+| **Primary keys** | Uses declared keys. Where there are none, it infers one from a unique, non-null column with a key-like name (`*_id`, `*_key`, `*_sk`, `*_code`, …) or a name that starts with the table's entity. Needs profiling, which is on by default. |
+| **Relationships** | Scores every candidate join from five signals (below). Strong joins are accepted; the rest become suggestions for you to review. |
+| **Lineage** | Reads `system.access.table_lineage` and `system.access.column_lineage` (last 180 days by default). Upstream and downstream tables outside your selection appear as external nodes. |
+| **Semantics** | Classifies each class as **fact**, **dimension** or **entity**, and each column as **key**, **time**, **measure** or **dimension**. Measures get a default aggregation: `AVG` for prices, rates and ratios, otherwise `SUM`. Every fact gets base metrics: a row count plus one metric per measure. |
+| **LLM enrichment** (optional) | Fills in descriptions, synonyms, code meanings, business rules and metrics, grounded in documents you upload (below). |
+
+#### How relationships are found
+
+Unity Catalog constraints are informational and often missing, so each candidate join collects evidence and gets one confidence score between 0 and 1:
+
+| Signal | Effect on the score |
+|---|---|
+| Declared foreign key | Taken as given (1.0). |
+| Naming | Same name as the target's key, e.g. `fact_sales.customer_key = dim_customer.customer_key` (0.60). A column that names the entity, e.g. `cust_id → customers` (0.55). A column that ends with the key's name (0.40). |
+| Type check | −0.30 when one side is numeric and the other is text. |
+| Value overlap | A sampled `LEFT JOIN` for the top 80 candidates: what share of up to 5,000 distinct child values exist in the parent key. ≥ 98% adds 0.35, ≥ 90% adds 0.25, ≥ 70% adds 0.10, anything lower subtracts 0.50. |
+| Query history | Equality joins that people actually ran, parsed with sqlglot from finished `SELECT`s in `system.query.history` (last 90 days, up to 3,000 statements). Raises the score to at least 0.45, plus up to 0.30 more the more often the join appears. |
+
+The best target per child column wins. Joins at or above the threshold (0.75 by default, adjustable in the sidebar) become relationships. Joins between 0.30 and the threshold become **suggestions**, with their evidence attached, which you accept or reject. Nothing is added silently.
+
+If the query text in `system.query.history` is redacted for the user, the app skips that signal and says so.
+
+#### LLM enrichment, grounded in your documents
+
+On Databricks, tick the LLM option and upload a data dictionary, KPI definitions or code lists (`.md`, `.txt`, `.csv`, `.json`, `.yaml`). The Foundation Model endpoint then adds:
+
+- descriptions and synonyms for classes and columns,
+- **value meanings** for coded columns (`line_cd: M → Mountain`),
+- **business rules** with SQL hints (*fiscal year starts 1 July*),
+- **metrics** with SQL expressions (*AOV = SUM(subtotal) / COUNT(order)*).
+
+Guardrails:
+
+- The model is told to use only the classes and columns it was given.
+- It only fills **empty** descriptions and code meanings. It never overwrites what came from the schema.
+- Rules and metrics that point at unknown classes are dropped.
+- Everything it adds is tagged `provenance: docs/<file>` when a document supports it, or `provenance: llm` when it doesn't.
+
+Classes go to the model in batches of 25, with up to 60,000 characters of your documents.
+
+### 3. Edit
+
+**The network diagram** (Cytoscape.js, bundled with the app, no CDN):
+
+- **Nodes:** amber squares are facts, blue circles are dimensions, grey circles are entities, purple circles are bridges, and dashed outlines are external tables that only appear in lineage.
+- **Edges:** solid lines are relationships, labelled with name, cardinality and confidence. Dashed orange lines are suggestions. Dotted green lines are lineage.
+- **Toolbar:**
+  - **＋ Connect:** click the class that holds the key, then the class it points to. The app guesses the join columns; check them in the inspector.
+  - **Repoint target / Repoint source:** select a relationship, then click its new class.
+  - **Delete** the selected relationship. **✓ Accept** or **✕ Reject** the selected suggestion.
+  - **Layout**, **Fit**, **Find class…**, and show/hide toggles for relationships, suggestions, lineage and edge labels.
+  - Keyboard: `C` connect, `Del` delete, `Esc` cancel.
+- **Drag nodes** to arrange them. Positions are saved in the ontology (`layout:`), so the diagram looks the same next time.
+
+**The inspector** (right panel) edits whatever you click:
+
+- **Class:** rename it, set its role (fact, dimension, entity or bridge), description and synonyms; set each column's role, aggregation and description; add, replace or delete metrics.
+- **Relationship:** name, cardinality and the join columns on both sides, or delete it.
+- **Suggestion:** confidence and evidence, then accept or reject.
+- **Lineage edge:** event count, when it was last seen, and the column mappings.
+- **Nothing selected:** add a relationship from a form, accept every suggestion at 60% or more, reject them all, or re-run the classification.
+
+**Other tabs:**
+
+- **Ontology YAML:** edit the YAML and click **Apply YAML edits** to redraw the diagram. Validation notes flag relationships that point at missing classes, inverses that don't point back, classes without an identifier, and coded values that still have no meaning.
+- **Semantic layer:** edit value meanings, and review metrics, business rules and the synonyms index.
+- **Tables:** classes, relationships and suggestions as plain tables.
+
+### 4. Export
+
+**Ontology YAML.** Readable and diff-able, so it can live in git. Trimmed from [`samples/retail_star.ontology.yaml`](samples/retail_star.ontology.yaml):
+
+```yaml
+classes:
+  Customer:
+    source_table: dim_customer
+    identifier: [customerKey]
+    identifier_inferred: true
+    role: dimension
+object_properties:
+  hasRegion:
+    domain: Customer
+    range: Region
+    cardinality: many-to-one
+    inverse: hasCustomers
+    join:
+      from: [dim_customer.region_code]
+      to: [dim_region.region_code]
+    confidence: 0.95
+    provenance: discovered
+```
+
+The file also carries `value_meanings`, `rules`, `metrics`, `suggested_relationships`, `lineage`, a `synonyms_index` (business term → class, column, metric or rule), the diagram `layout`, and standard RDF/OWL/XSD prefixes.
+
+**Databricks metric views** (YAML spec 1.1), one per fact:
+
+- many-to-one joins from the fact, nested for snowflake schemas (up to 3 levels deep),
+- dimensions from the fact and from every class it joins to,
+- measures from the ontology's metrics, plus an aggregate for each measure column that has no metric yet.
+
+Trimmed from [`samples/metric_views/sale_metrics.yaml`](samples/metric_views/sale_metrics.yaml):
+
+```yaml
+version: '1.1'
+source: fact_sales
+joins:
+- name: customer
+  source: dim_customer
+  'on': source.customer_key = customer.customer_key
+  joins:
+  - name: region
+    source: dim_region
+    'on': customer.region_code = region.region_code
+dimensions:
+- name: region_name
+  expr: customer.region.region_name
+  display_name: Region Name
+measures:
+- name: sum_net_amount
+  expr: SUM(net_amount)
+  display_name: Sum Net Amount
+```
+
+In the **Metric views** tab you can:
+
+- download one view as YAML,
+- download a zip with every view, its `CREATE OR REPLACE VIEW … WITH METRICS LANGUAGE YAML` statement, and the ontology,
+- or click **🚀 Deploy to Unity Catalog**. This runs the `CREATE` statement as you, so you need `CREATE TABLE` on the target schema. It is available when the source is Unity Catalog. The target defaults to `<fact's catalog>.<fact's schema>.<fact>_metrics`, and you can change it.
+
+**Versions.** With `ONTOLOGY_STORE` set, **💾 Save version to Volume** (in the Ontology YAML tab) writes `<ONTOLOGY_STORE>/<ontology name>/<UTC timestamp>.yaml` plus a `latest.yaml`. Reload any of them from **Saved version** in the sidebar.
+
+### 5. Ask: test the ontology
+
+Type a business question. The Foundation Model writes SQL **from the ontology** (classes, synonyms, joins, code meanings, rules and metrics). With **Compare with schema-only** on, it also writes a **baseline** query from the bare table and column names, so you can see both SQL statements and both result sets side by side.
+
+Generated SQL only runs if it is a single read-only `SELECT` or `WITH` statement. It runs on Unity Catalog as you, or on the SQLite file or script you uploaded. The Ask tab needs the model endpoint, so it works on Databricks only.
+
+---
+
+## Architecture
+
+```mermaid
+flowchart LR
+    U(["Signed-in user"])
+    subgraph APP["Databricks App · Streamlit (app.py)"]
+        UI["Sidebar: Connect · Analyze<br/>Tabs: Network · YAML · Metric views<br/>Semantic layer · Tables · Ask"]
+        ENG["Engine (modules/)"]
+        UI --> ENG
+    end
+    U --> UI
+    ENG -- "SQL as the user" --> WH[("SQL warehouse")]
+    WH --> UCT["Unity Catalog<br/>information_schema · your tables"]
+    WH --> SYS["System tables<br/>access.table_lineage · access.column_lineage<br/>query.history"]
+    ENG -- "app service principal" --> FM["Foundation Model endpoint"]
+    ENG -- "as the user, else the app service principal" --> VOL[("UC Volume<br/>ontology versions")]
+```
+
+The engine is a pipeline over one source-neutral model ([`modules/schema_model.py`](modules/schema_model.py)), so a new source only needs a new extractor:
+
+```
+uc.py / extractors.py  →  DatabaseSchema
+  → discovery.py         keys, join candidates, confidence scores
+  → ontology_builder.py  classes, properties, relationships, YAML, validation
+  → semantics.py         fact/dimension, measure/dimension, base metrics
+  → llm_enrich.py        optional semantic layer from your documents
+  → graph_component.py + ontology_edit.py   diagram and edits
+  → metric_views.py / store.py              exports and versions
+```
+
+### Who runs what
+
+| Operation | Runs as | Needs |
+|---|---|---|
+| Browsing, profiling, discovery, lineage, query history, Ask queries, metric view deploys | **The signed-in user.** Databricks Apps forwards the user's token (`X-Forwarded-Access-Token`) and the app connects to the SQL warehouse with it. | The `sql` user authorization scope, and the user's own grants. |
+| LLM enrichment and Ask SQL generation | **The app's service principal** | `CAN_QUERY` on the serving endpoint (the `serving-endpoint` app resource). |
+| Saving and loading versions | **The user first**, then the app's service principal if the user's token can't reach the Volume | The `files.files` scope for the user, or `READ VOLUME` / `WRITE VOLUME` for the service principal. |
+
+---
+
+## Deploy to Databricks Apps
+
+### Prerequisites
+
+- A Databricks workspace with Unity Catalog and Databricks Apps.
+- A SQL warehouse. A serverless one is a good fit; metric view deploys need a recent warehouse version.
+- User authorization (on-behalf-of-user) for apps. If you don't see a **User authorization** section when you edit an app, ask a workspace admin to enable it.
+- Optional: a Foundation Model serving endpoint, e.g. the pay-per-token `databricks-meta-llama-3-3-70b-instruct`.
+- The [Databricks CLI](https://docs.databricks.com/aws/en/dev-tools/cli/install), signed in to the workspace (`databricks auth login`).
+
+### Steps
+
+1. **Get the code.**
+
+   ```bash
+   git clone https://github.com/DevDataAnalyst/OntologyStudio.git
+   cd OntologyStudio
+   ```
+
+2. **Create the app** with its resources and user authorization scope.
+
+   In the UI: **Compute → Apps → Create app → Custom**, named `ontology-studio`. Then, under **App resources**, add:
+
+   | Resource | Key (must match `app.yaml`) | Permission | Used for |
+   |---|---|---|---|
+   | SQL warehouse | `sql-warehouse` | Can use | Required. Every SQL statement. Injected as `SQL_WAREHOUSE_ID`. |
+   | Serving endpoint | `serving-endpoint` | Can query | Optional. LLM enrichment and the Ask tab. |
+
+   Under **User authorization**, add the `sql` scope. Add `files.files` too if users should save versions to a Volume with their own permissions.
+
+   Or with the CLI: save this as `app.json`, put in your warehouse ID, and run `databricks apps create --json @app.json`.
+
+   ```json
+   {
+     "name": "ontology-studio",
+     "description": "Turn Unity Catalog tables into an editable ontology and metric views",
+     "resources": [
+       { "name": "sql-warehouse",
+         "sql_warehouse": { "id": "<your-warehouse-id>", "permission": "CAN_USE" } },
+       { "name": "serving-endpoint",
+         "serving_endpoint": { "name": "databricks-meta-llama-3-3-70b-instruct", "permission": "CAN_QUERY" } }
+     ],
+     "user_api_scopes": ["sql"]
+   }
+   ```
+
+3. **Review [`app.yaml`](app.yaml).** It holds no workspace IDs: the warehouse comes from the `sql-warehouse` resource. Set `TARGET_CATALOG` / `TARGET_SCHEMA` and `ONTOLOGY_STORE` if you want them (see [Configuration](#configuration)).
+
+4. **Upload the code** to your workspace.
+
+   ```bash
+   databricks sync . /Workspace/Users/<you>/ontology-studio
+   ```
+
+5. **Deploy.** If the app is stopped, run `databricks apps start ontology-studio` first.
+
+   ```bash
+   databricks apps deploy ontology-studio --source-code-path /Workspace/Users/<you>/ontology-studio
+   ```
+
+6. **Open the app** from **Compute → Apps**, or get its URL with `databricks apps get ontology-studio`. Each user is asked once to allow the app to act on their behalf.
+
+To ship a change, repeat steps 4 and 5.
+
+### Permissions users need
+
+| To | Grant |
+|---|---|
+| Run anything | `CAN USE` on the SQL warehouse |
+| Analyze tables | `USE CATALOG`, `USE SCHEMA` and `SELECT` on them |
+| See lineage | `SELECT` on `system.access.table_lineage` and `system.access.column_lineage` |
+| Mine joins from query history | `SELECT` on `system.query.history`. The SQL text is redacted unless the user is an account admin or in the `databricks_pii_access` group. |
+| Deploy metric views | `CREATE TABLE` on the target schema |
+| Save versions with their own identity | `READ VOLUME` / `WRITE VOLUME` on the Volume (with the `files.files` scope) |
+
+A missing grant only switches off that signal. The app shows a warning and carries on.
+
+---
+
+## Configuration
+
+[`app.yaml`](app.yaml) sets the start command and these environment variables:
+
+| Variable | In `app.yaml` | What it does |
+|---|---|---|
+| `SQL_WAREHOUSE_ID` | `valueFrom: sql-warehouse` | Warehouse for every SQL statement. Required on Databricks. |
+| `FM_ENDPOINT_NAME` | `databricks-meta-llama-3-3-70b-instruct` | Serving endpoint for LLM enrichment and Ask. To use whatever endpoint you picked as the resource instead, replace its `value:` line with `valueFrom: serving-endpoint`. |
+| `TARGET_CATALOG` / `TARGET_SCHEMA` | `main` / `default` | Catalog and schema pre-selected in the picker. Optional. |
+| `ONTOLOGY_STORE` | empty (off) | A Volume path such as `/Volumes/main/ontology/store` to save and reload versions. Optional. |
+| `STREAMLIT_SERVER_MAX_UPLOAD_SIZE` | `500` | Upload limit in MB. |
+
+The app knows it is on Databricks when the Apps runtime sets `DATABRICKS_APP_NAME` (or `DATABRICKS_HOST`). Without them, the Unity Catalog source, lineage, query history, LLM enrichment and the Ask tab are switched off.
+
+---
+
+## Run locally
+
+Locally the app works on uploaded files. Unity Catalog needs the Apps runtime, which forwards the user's token. Python 3.10 or later.
+
+```bash
+python -m pip install -r requirements.txt
+python -m streamlit run app.py
+```
+
+Upload `samples/retail_star.db` and click **Analyze & build**.
+
+If `DATABRICKS_HOST` is set in your shell, unset it first. Otherwise the app thinks it is on Databricks and asks for a forwarded user token.
+
+## Command-line interface
+
+The CLI runs the same engine on a SQLite file or a SQL script, so an ontology rebuild can be a CI step:
+
+```bash
+python cli.py samples/retail_star.db --name Retail -o retail.yaml --metric-views out/
+python cli.py samples/shop_mysql.sql --dialect mysql --name Shop -o shop.yaml
+```
+
+| Flag | Meaning |
+|---|---|
+| `-o, --output FILE` | Write the ontology YAML here (default: stdout). |
+| `--metric-views DIR` | Also write one metric view YAML per fact into `DIR`. |
+| `--dialect NAME` | SQL dialect of a script (default `auto`). |
+| `--name NAME` | Ontology name (default: the file name). |
+| `--base-iri IRI`, `--prefix P` | IRI and prefix for the ontology (defaults `http://example.org/ontology/`, `ex`). |
+| `--threshold N` | Accept discovered joins at or above this confidence (default `0.75`). |
+| `--infer` | Also infer foreign keys from `*_id` column names. |
+| `--raw-names` | Keep SQL names instead of `Customer` / `firstName` style names. |
+| `--keep-junctions` | Keep junction tables as classes instead of many-to-many relationships. |
+| `--no-profile` | Skip data profiling. |
+
+Value-overlap checks run when the input can be loaded into SQLite. Validation notes and warnings go to stderr.
+
+## Samples
+
+| File | What it shows |
+|---|---|
+| `samples/retail_star.db` | A retail star schema with **no declared foreign keys**, so discovery has to find every join. Its outputs are `retail_star.ontology.yaml` and `metric_views/`. |
+| `samples/hr.db` + `samples/hr_dictionary.md` | An HR schema with declared foreign keys, a junction table and a view, plus a short data dictionary (grades, regions, KPIs, a rule) to try LLM enrichment with. Output: `hr.ontology.yaml`. |
+| `samples/shop_mysql.sql` | MySQL DDL with a self-reference, an `ENUM`, an `ALTER TABLE` foreign key and a junction table that collapses into a many-to-many relationship. Output: `shop_mysql.ontology.yaml`. |
+
+## Project layout
+
+```
+app.py                          Streamlit UI: connect · analyze · network + inspector · exports · Ask
+app.yaml                        Databricks Apps start command and environment
+cli.py                          The same engine from the command line
+requirements.txt                Python dependencies
+components/ontology_graph/      Editable network diagram (Cytoscape.js, bundled)
+modules/db_connection.py        On-behalf-of-user SQL warehouse connection
+modules/uc.py                   Unity Catalog browse, extract (up to 100 objects), profile, lineage, query-history joins
+modules/extractors.py           SQLite and SQL-script extractors
+modules/schema_model.py         Source-neutral relational model
+modules/discovery.py            Primary key inference, relationship discovery and scoring
+modules/ontology_builder.py     Relational → ontology mapping, YAML, validation, synonyms index
+modules/semantics.py            Fact/dimension and measure/dimension classification, base metrics
+modules/ontology_edit.py        Edits: add, repoint and delete relationships, rename, roles, metrics
+modules/graph_component.py      Diagram ⇄ ontology bridge
+modules/metric_views.py         Databricks metric view YAML 1.1 and DDL
+modules/store.py                Versions in a Unity Catalog Volume
+modules/llm_enrich.py           Optional LLM semantic layer
+modules/ask.py                  Text-to-SQL test bench (ontology vs. baseline)
+samples/                        Sample databases, scripts, docs and their generated outputs
+```
+
+## Security and governance notes
+
+- **No credentials in the code or config.** The app uses the identity the Apps runtime injects, plus the user's forwarded token. The warehouse ID comes from an app resource.
+- **Parameterized SQL.** Values go through named parameters. Catalog, schema and table names are checked against `[A-Za-z0-9_-]` and back-quoted.
+- **Read-only Ask.** Generated SQL runs only if it is a single `SELECT` or `WITH` statement.
+- **What the LLM sees.** Enrichment sends class, column and relationship names, comments, sample values and enumerations, plus the documents you upload, to the serving endpoint in your workspace. Turn off profiling for tables whose values should not be in a prompt.
+- **Provenance.** Classes, columns, relationships, code meanings, rules and metrics carry a `provenance` tag: `schema`, `profile`, `inferred`, `discovered`, `heuristic`, `manual`, `docs/<file>` or `llm`.
+- **No CDN.** Cytoscape.js ships with the app, so the diagram loads nothing from the internet.
+
+## Roadmap
+
+Ideas the current design leaves room for, none of them built yet:
+
+- a certification workflow (draft, reviewed, certified) for terms, joins and metrics,
+- a golden question set that re-runs the Ask comparison on every ontology change,
+- an answerability check that asks for clarification when a question uses a concept the ontology lacks,
+- export to other semantic-layer formats,
+- MCP tools so external agents can query the ontology.
+
+## Third-party code
+
+[Cytoscape.js](https://js.cytoscape.org/) is bundled in `components/ontology_graph/` under the MIT license; see [`CYTOSCAPE_LICENSE`](components/ontology_graph/CYTOSCAPE_LICENSE).

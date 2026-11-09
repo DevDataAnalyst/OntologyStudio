@@ -1,0 +1,64 @@
+version: '1.1'
+source: fact_sales
+joins:
+- name: customer
+  source: dim_customer
+  'on': source.customer_key = customer.customer_key
+  joins:
+  - name: region
+    source: dim_region
+    'on': customer.region_code = region.region_code
+- name: product
+  source: dim_product
+  'on': source.product_key = product.product_key
+- name: date_dim
+  source: dim_date
+  'on': source.order_date_key = date_dim.date_key
+dimensions:
+- name: customer_name
+  expr: customer.customer_name
+  display_name: Customer Name
+- name: customer_segment
+  expr: customer.segment
+  display_name: Segment
+- name: region_name
+  expr: customer.region.region_name
+  display_name: Region Name
+- name: product_name
+  expr: product.product_name
+  display_name: Product Name
+- name: product_category
+  expr: product.category
+  display_name: Category
+- name: date_full_date
+  expr: date_dim.full_date
+  display_name: Full Date
+- name: date_month_name
+  expr: date_dim.month_name
+  display_name: Month Name
+- name: date_fiscal_year
+  expr: date_dim.fiscal_year
+  display_name: Fiscal Year
+measures:
+- name: sale_count
+  expr: COUNT(1)
+  display_name: Sale Count
+  comment: Number of sale records
+- name: sum_quantity
+  expr: SUM(quantity)
+  display_name: Sum Quantity
+  comment: Sum of quantity
+  synonyms:
+  - quantity
+- name: sum_net_amount
+  expr: SUM(net_amount)
+  display_name: Sum Net Amount
+  comment: Sum of net amount
+  synonyms:
+  - net amount
+- name: avg_discount_pct
+  expr: AVG(discount_pct)
+  display_name: Avg Discount Pct
+  comment: Avg of discount pct
+  synonyms:
+  - discount pct

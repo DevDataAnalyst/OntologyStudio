@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Ontology network</title>
+<script src="./cytoscape.min.js"></script>
+<style>
+  :root { --bg:#ffffff; --fg:#1f2430; --muted:#6b7280; --line:#d6dae1; --panel:#f6f7f9; --accent:#2563eb; }
+  .dark { --bg:#0e1117; --fg:#e6e8eb; --muted:#9aa3ae; --line:#2c323c; --panel:#161a22; --accent:#60a5fa; }
+  html, body { margin:0; padding:0; background:var(--bg); color:var(--fg);
+               font-family: "Source Sans Pro", "Segoe UI", Helvetica, Arial, sans-serif; font-size:13px; }
+  #wrap { display:flex; flex-direction:column; border:1px solid var(--line); border-radius:10px; overflow:hidden; }
+  #bar { display:flex; flex-wrap:wrap; align-items:center; gap:6px; padding:6px 8px; background:var(--panel);
+         border-bottom:1px solid var(--line); }
+  #bar .grp { display:flex; gap:4px; align-items:center; padding-right:8px; border-right:1px solid var(--line); }
+  #bar .grp:last-child { border-right:none; }
+  button { font:inherit; color:var(--fg); background:var(--bg); border:1px solid var(--line); border-radius:6px;
+           padding:3px 9px; cursor:pointer; }
+  button:hover:not(:disabled) { border-color:var(--accent); }
+  button.on { background:var(--accent); color:#fff; border-color:var(--accent); }
+  button:disabled { opacity:.4; cursor:default; }
+  label.tg { display:flex; gap:3px; align-items:center; color:var(--muted); cursor:pointer; }
+  input[type=search] { font:inherit; color:var(--fg); background:var(--bg); border:1px solid var(--line);
+                       border-radius:6px; padding:3px 8px; width:140px; }
+  #cy { flex:1; position:relative; }
+  #status { position:absolute; left:10px; top:8px; z-index:5; background:var(--panel); color:var(--fg);
+            border:1px solid var(--line); border-radius:6px; padding:3px 8px; max-width:70%; pointer-events:none; }
+  #legend { position:absolute; right:10px; bottom:8px; z-index:5; background:var(--panel); border:1px solid var(--line);
+            border-radius:6px; padding:4px 8px; color:var(--muted); line-height:1.6; pointer-events:none; }
+  .sw { display:inline-block; width:10px; height:10px; border-radius:3px; margin:0 3px 0 6px; vertical-align:-1px; }
+  .ln { display:inline-block; width:18px; height:0; border-top:2px solid; margin:0 3px 0 8px; vertical-align:3px; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="bar">
+    <div class="grp">
+      <button id="mSelect" class="on" title="Select, drag and inspect (Esc)">Select</button>
+      <button id="mConnect" title="Click a class, then the class it points to (C)">＋ Connect</button>
+    </div>
+    <div class="grp">
+      <button id="bRepT" disabled title="Select a relationship, then click its new target class">Repoint target</button>
+      <button id="bRepS" disabled title="Select a relationship, then click its new source class">Repoint source</button>
+      <button id="bDel" disabled title="Delete the selected relationship (Del)">Delete</button>
+      <button id="bAcc" disabled title="Accept the selected suggestion">✓ Accept</button>
+      <button id="bRej" disabled title="Reject the selected suggestion">✕ Reject</button>
+    </div>
+    <div class="grp">
+      <button id="bLayout" title="Re-run automatic layout">Layout</button>
+      <button id="bFit" title="Fit to screen">Fit</button>
+      <input id="q" type="search" placeholder="Find class…" />
+    </div>
+    <div class="grp">
+      <label class="tg"><input type="checkbox" id="tRel" checked />Relationships</label>
+      <label class="tg"><input type="checkbox" id="tSug" checked />Suggestions</label>
+      <label class="tg"><input type="checkbox" id="tLin" checked />Lineage</label>
+      <label class="tg"><input type="checkbox" id="tLbl" checked />Edge labels</label>
+    </div>
+  </div>
+  <div id="cy">
+    <div id="status">Ready</div>
+    <div id="legend">
+      <span class="sw" style="background:#f59e0b"></span>Fact
+      <span class="sw" style="background:#3b82f6"></span>Dimension
+      <span class="sw" style="background:#64748b"></span>Entity
+      <span class="sw" style="background:transparent;border:1px dashed #94a3b8"></span>External
+      <span class="ln" style="border-color:#64748b"></span>Relationship
+      <span class="ln" style="border-color:#f97316;border-top-style:dashed"></span>Suggested
+      <span class="ln" style="border-color:#10b981;border-top-style:dotted"></span>Lineage
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  // ------------------------------------------------------------------ Streamlit protocol
+  function post(type, data) {
+    window.parent.postMessage(Object.assign({ isStreamlitMessage: true, type: type }, data || {}), "*");
+  }
+  var counter = 0;
+  function send(evt) {
+    evt.nonce = Date.now() + "-" + (counter++);
+    post("streamlit:setComponentValue", { value: evt, dataType: "json" });
+  }
+
+  var cy = null, mode = "select", pendingSource = null, height = 640, layoutDone = false;
+  var $ = function (id) { return document.getElementById(id); };
+  var status = function (t) { $("status").textContent = t; };
+
+  var ROLE_COLOR = { fact: "#f59e0b", dimension: "#3b82f6", entity: "#64748b", bridge: "#8b5cf6" };
+
+  function style(dark) {
+    var fg = dark ? "#e6e8eb" : "#1f2430", sub = dark ? "#9aa3ae" : "#6b7280";
+    return [
+      { selector: "node", style: {
+          "label": "data(label)", "color": fg, "font-size": 12, "text-valign": "bottom", "text-margin-y": 5,
+          "text-wrap": "wrap", "text-max-width": 140, "background-color": function (n) {
+            return ROLE_COLOR[n.data("role")] || "#64748b"; },
+          "width": function (n) { return n.data("role") === "fact" ? 46 : 34; },
+          "height": function (n) { return n.data("role") === "fact" ? 46 : 34; },
+          "shape": function (n) { return n.data("role") === "fact" ? "round-rectangle" : "ellipse"; },
+          "border-width": 2, "border-color": dark ? "#0e1117" : "#ffffff" } },
+      { selector: "node.external", style: { "background-opacity": 0, "border-style": "dashed",
+          "border-color": "#94a3b8", "color": sub, "font-style": "italic", "width": 26, "height": 26 } },
+      { selector: "node:selected", style: { "border-color": "#ef4444", "border-width": 4 } },
+      { selector: "node.pending", style: { "border-color": "#22c55e", "border-width": 5 } },
+      { selector: "node.hit", style: { "border-color": "#eab308", "border-width": 5 } },
+      { selector: "edge", style: {
+          "curve-style": "bezier", "width": 2, "line-color": "#64748b", "target-arrow-color": "#64748b",
+          "target-arrow-shape": "triangle", "arrow-scale": 1.1, "font-size": 9, "color": sub,
+          "text-background-color": dark ? "#0e1117" : "#ffffff", "text-background-opacity": 0.85,
+          "text-background-padding": 2, "text-rotation": "autorotate" } },
+      { selector: "edge.labels", style: { "label": "data(label)" } },
+      { selector: "edge.sug", style: { "line-style": "dashed", "line-color": "#f97316",
+          "target-arrow-color": "#f97316", "width": 2 } },
+      { selector: "edge.lin", style: { "line-style": "dotted", "line-color": "#10b981",
+          "target-arrow-color": "#10b981", "target-arrow-shape": "vee", "width": 2.5 } },
+      { selector: "edge.m2m", style: { "source-arrow-shape": "triangle", "source-arrow-color": "#64748b" } },
+      { selector: "edge:selected", style: { "width": 5, "line-color": "#ef4444", "target-arrow-color": "#ef4444" } },
+      { selector: ".hidden", style: { "display": "none" } }
+    ];
+  }
+
+  // ------------------------------------------------------------------ helpers
+  function selectedEdge() { var e = cy && cy.$("edge:selected"); return e && e.length ? e[0] : null; }
+  function refreshButtons() {
+    var e = selectedEdge(), k = e ? e.data("kind") : null;
+    $("bRepT").disabled = $("bRepS").disabled = $("bDel").disabled = k !== "rel";
+    $("bAcc").disabled = $("bRej").disabled = k !== "sug";
+  }
+  function setMode(m) {
+    mode = m;
+    $("mSelect").classList.toggle("on", m === "select");
+    $("mConnect").classList.toggle("on", m === "connect");
+    $("bRepT").classList.toggle("on", m === "repoint-target");
+    $("bRepS").classList.toggle("on", m === "repoint-source");
+    if (pendingSource) { cy.getElementById(pendingSource).removeClass("pending"); pendingSource = null; }
+    status({ "select": "Select: drag classes, click to inspect",
+             "connect": "Connect: click the source class (the one holding the key)",
+             "repoint-target": "Repoint: click the new TARGET class",
+             "repoint-source": "Repoint: click the new SOURCE class" }[m]);
+  }
+  function positions() {
+    var out = {};
+    cy.nodes().forEach(function (n) { var p = n.position(); out[n.id()] = { x: Math.round(p.x), y: Math.round(p.y) }; });
+    return out;
+  }
+  var posTimer = null;
+  function sendPositions() {
+    clearTimeout(posTimer);
+    posTimer = setTimeout(function () { send({ type: "positions", positions: positions() }); }, 350);
+  }
+  function applyToggles() {
+    cy.batch(function () {
+      cy.edges(".rel").toggleClass("hidden", !$("tRel").checked);
+      cy.edges(".sug").toggleClass("hidden", !$("tSug").checked);
+      cy.edges(".lin").toggleClass("hidden", !$("tLin").checked);
+      cy.nodes(".external").toggleClass("hidden", !$("tLin").checked);
+      cy.edges().toggleClass("labels", $("tLbl").checked);
+    });
+  }
+  function fitView() {
+    cy.fit(undefined, 40);
+    if (cy.zoom() > 1.1) { cy.zoom(1.1); cy.center(); }
+  }
+  function runLayout(fit) {
+    var l = cy.layout({ name: "cose", animate: false, nodeRepulsion: function () { return 9000; },
+                        idealEdgeLength: function () { return 110; }, padding: 30, randomize: true,
+                        componentSpacing: 80, nodeOverlap: 12 });
+    l.one("layoutstop", function () { if (fit !== false) fitView(); sendPositions(); });
+    l.run();
+  }
+
+  // ------------------------------------------------------------------ build / diff
+  function init(args) {
+    cy = cytoscape({ container: $("cy"), elements: [], style: style(args.dark), wheelSensitivity: 0.25,
+                     minZoom: 0.15, maxZoom: 3, boxSelectionEnabled: false });
+    window.__cy = cy;   // handy for debugging / automated UI tests
+
+    cy.on("tap", "node", function (ev) {
+      var n = ev.target, id = n.id();
+      if (n.hasClass("external")) { status("External table (lineage only): " + n.data("full")); return; }
+      if (mode === "connect") {
+        if (!pendingSource) { pendingSource = id; n.addClass("pending");
+          status("Connect: now click the class it points to (the one with the key)"); return; }
+        var src = pendingSource; setMode("select");
+        send({ type: "connect", source: src, target: id });
+        status("Creating relationship " + src + " → " + id + " …");
+        return;
+      }
+      if (mode === "repoint-target" || mode === "repoint-source") {
+        var e = selectedEdge();
+        if (e) { send({ type: "repoint", edge: e.data("pid"),
+                        end: mode === "repoint-target" ? "target" : "source", node: id });
+                 status("Repointing " + e.data("pid") + " …"); }
+        setMode("select"); return;
+      }
+      send({ type: "select", kind: "node", id: id });
+    });
+    cy.on("tap", "edge", function (ev) {
+      if (mode !== "select") return;
+      var e = ev.target;
+      setTimeout(refreshButtons, 0);
+      send({ type: "select", kind: "edge", id: e.id(), edge_kind: e.data("kind"),
+             pid: e.data("pid") || null, sid: e.data("sid") || null });
+    });
+    cy.on("tap", function (ev) {
+      if (ev.target === cy) { setTimeout(refreshButtons, 0);
+        if (mode === "select") send({ type: "select", kind: null, id: null }); }
+    });
+    cy.on("select unselect", "edge", refreshButtons);
+    cy.on("dragfree", "node", sendPositions);
+
+    $("mSelect").onclick = function () { setMode("select"); };
+    $("mConnect").onclick = function () { setMode(mode === "connect" ? "select" : "connect"); };
+    $("bRepT").onclick = function () { setMode("repoint-target"); };
+    $("bRepS").onclick = function () { setMode("repoint-source"); };
+    $("bDel").onclick = function () { var e = selectedEdge(); if (e && e.data("kind") === "rel") {
+      send({ type: "delete", edge: e.data("pid") }); status("Deleting " + e.data("pid") + " …"); } };
+    $("bAcc").onclick = function () { var e = selectedEdge(); if (e && e.data("kind") === "sug") {
+      send({ type: "accept", sid: e.data("sid") }); status("Accepting suggestion …"); } };
+    $("bRej").onclick = function () { var e = selectedEdge(); if (e && e.data("kind") === "sug") {
+      send({ type: "reject", sid: e.data("sid") }); status("Rejecting suggestion …"); } };
+    $("bLayout").onclick = function () { runLayout(true); };
+    $("bFit").onclick = fitView;
+    ["tRel", "tSug", "tLin", "tLbl"].forEach(function (id) { $(id).onchange = applyToggles; });
+    $("q").oninput = function () {
+      var v = this.value.trim().toLowerCase(); cy.nodes().removeClass("hit");
+      if (!v) return;
+      var hits = cy.nodes().filter(function (n) { return n.data("label").toLowerCase().indexOf(v) >= 0; });
+      hits.addClass("hit"); if (hits.length) cy.animate({ center: { eles: hits[0] }, zoom: 1.2 }, { duration: 250 });
+    };
+    document.addEventListener("keydown", function (ev) {
+      if (ev.target.tagName === "INPUT") return;
+      if (ev.key === "Escape") { setMode("select"); cy.elements().unselect(); refreshButtons(); }
+      if (ev.key === "Delete" || ev.key === "Backspace") $("bDel").click();
+      if (ev.key === "c" || ev.key === "C") $("mConnect").click();
+    });
+    setMode("select");
+  }
+
+  function render(args) {
+    height = args.height || 640;
+    document.body.classList.toggle("dark", !!args.dark);
+    $("wrap").style.height = height + "px";
+    post("streamlit:setFrameHeight", { height: height + 4 });
+    if (!cy) init(args);
+    var pos = args.positions || {}, els = args.elements || [];
+    var wanted = {}; els.forEach(function (e) { wanted[e.data.id] = e; });
+    var added = 0, missingPos = 0, center = cy.extent();
+    cy.batch(function () {
+      cy.elements().forEach(function (el) { if (!wanted[el.id()]) el.remove(); });
+      els.filter(function (e) { return !e.data.source; }).concat(els.filter(function (e) { return e.data.source; }))
+        .forEach(function (e) {
+          var ex = cy.getElementById(e.data.id);
+          if (ex && ex.length) { ex.data(e.data); ex.classes(e.classes || ""); return; }
+          var item = { group: e.data.source ? "edges" : "nodes", data: e.data, classes: e.classes || "" };
+          if (!e.data.source) {
+            var p = pos[e.data.id];
+            if (p) item.position = { x: p.x, y: p.y };
+            else { missingPos++; item.position = { x: (center.x1 + center.x2) / 2 + (Math.random() - .5) * 200,
+                                                   y: (center.y1 + center.y2) / 2 + (Math.random() - .5) * 200 }; }
+          }
+          if (item.group === "edges" && (!cy.getElementById(e.data.source).length ||
+                                         !cy.getElementById(e.data.target).length)) return;
+          cy.add(item); added++;
+        });
+    });
+    cy.style(style(args.dark));
+    applyToggles();
+    refreshButtons();
+    var nNodes = cy.nodes().length;
+    if (!layoutDone && nNodes) {
+      layoutDone = true;
+      if (missingPos > nNodes / 2) runLayout(true); else fitView();
+    } else if (missingPos) { sendPositions(); }
+    if (args.message) status(args.message);
+  }
+
+  window.addEventListener("message", function (ev) {
+    if (ev.data && ev.data.type === "streamlit:render") render(ev.data.args || {});
+  });
+  post("streamlit:componentReady", { apiVersion: 1 });
+})();
+</script>
+</body>
+</html>

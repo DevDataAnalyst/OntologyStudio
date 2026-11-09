@@ -1,0 +1,397 @@
+ontology:
+  name: Hr
+  iri: http://example.org/ontology/hr#
+  prefix: ex
+  version: 1.0.0
+  generated_at: '2026-11-08T05:41:49Z'
+  generated_by: sql2ontology
+  source:
+    type: sqlite
+    name: hr
+    dialect: sqlite
+  stats:
+    classes: 4
+    data_properties: 13
+    object_properties: 8
+    junction_tables_collapsed: 1
+prefixes:
+  ex: http://example.org/ontology/hr#
+  xsd: http://www.w3.org/2001/XMLSchema#
+  rdfs: http://www.w3.org/2000/01/rdf-schema#
+  owl: http://www.w3.org/2002/07/owl#
+  rdf: http://www.w3.org/1999/02/22-rdf-syntax-ns#
+classes:
+  Badge:
+    label: badge
+    source_table: badges
+    source_columns:
+    - badge_id
+    - emp_id
+    - issued
+    identifier:
+    - badgeId
+    instance_count: 0
+    provenance: schema
+    data_properties:
+      badgeId:
+        label: badge id
+        range: xsd:integer
+        required: true
+        unique: true
+        identifier: true
+        cardinality:
+          min: 1
+          max: 1
+        provenance: schema
+        source_column: badge_id
+        sql_type: INTEGER
+        semantic_role: key
+      issued:
+        label: issued
+        range: xsd:dateTime
+        required: false
+        cardinality:
+          min: 0
+          max: 1
+        provenance: schema
+        source_column: issued
+        sql_type: TIMESTAMP
+        semantic_role: time
+    role: entity
+  Department:
+    label: department
+    source_table: departments
+    source_columns:
+    - dept_id
+    - dept_name
+    - region
+    identifier:
+    - deptId
+    instance_count: 6
+    provenance: schema
+    data_properties:
+      deptId:
+        label: dept id
+        range: xsd:integer
+        required: true
+        unique: true
+        identifier: true
+        cardinality:
+          min: 1
+          max: 1
+        provenance: schema
+        source_column: dept_id
+        sql_type: INTEGER
+        semantic_role: key
+      deptName:
+        label: dept name
+        range: xsd:string
+        required: true
+        unique: true
+        cardinality:
+          min: 1
+          max: 1
+        samples:
+        - D1
+        - D2
+        - D3
+        - D4
+        - D5
+        provenance: schema
+        source_column: dept_name
+        sql_type: TEXT
+        semantic_role: dimension
+      region:
+        label: region
+        range: xsd:string
+        required: true
+        cardinality:
+          min: 1
+          max: 1
+        allowed_values:
+        - East
+        - North
+        - West
+        provenance: schema+profile
+        source_column: region
+        sql_type: TEXT
+        semantic_role: dimension
+    role: dimension
+  Employee:
+    label: employee
+    source_table: employees
+    source_columns:
+    - emp_id
+    - full_name
+    - grade
+    - salary
+    - hired_on
+    - dept_id
+    - manager_id
+    identifier:
+    - empId
+    instance_count: 40
+    provenance: schema
+    data_properties:
+      empId:
+        label: emp id
+        range: xsd:integer
+        required: true
+        unique: true
+        identifier: true
+        cardinality:
+          min: 1
+          max: 1
+        provenance: schema
+        source_column: emp_id
+        sql_type: INTEGER
+        semantic_role: key
+      fullName:
+        label: full name
+        range: xsd:string
+        required: true
+        cardinality:
+          min: 1
+          max: 1
+        samples:
+        - E1
+        - E2
+        - E3
+        - E4
+        - E5
+        provenance: schema
+        source_column: full_name
+        sql_type: TEXT
+        semantic_role: dimension
+      grade:
+        label: grade
+        range: xsd:string
+        required: false
+        cardinality:
+          min: 0
+          max: 1
+        allowed_values:
+        - A
+        - B
+        - C
+        provenance: schema+profile
+        source_column: grade
+        sql_type: TEXT
+        semantic_role: dimension
+      salary:
+        label: salary
+        range: xsd:double
+        required: false
+        cardinality:
+          min: 0
+          max: 1
+        samples:
+        - 1000.0
+        - 2000.0
+        - 3000.0
+        - 4000.0
+        - 5000.0
+        provenance: schema
+        source_column: salary
+        sql_type: REAL
+        semantic_role: measure
+        aggregation: SUM
+      hiredOn:
+        label: hired on
+        range: xsd:date
+        required: false
+        cardinality:
+          min: 0
+          max: 1
+        samples:
+        - '2020-01-01'
+        provenance: schema
+        source_column: hired_on
+        sql_type: DATE
+        semantic_role: time
+    role: fact
+  Project:
+    label: project
+    source_table: projects
+    source_columns:
+    - project_id
+    - title
+    - budget
+    identifier:
+    - projectId
+    instance_count: 0
+    provenance: schema
+    data_properties:
+      projectId:
+        label: project id
+        range: xsd:integer
+        required: true
+        unique: true
+        identifier: true
+        cardinality:
+          min: 1
+          max: 1
+        provenance: schema
+        source_column: project_id
+        sql_type: INTEGER
+        semantic_role: key
+      title:
+        label: title
+        range: xsd:string
+        required: true
+        cardinality:
+          min: 1
+          max: 1
+        provenance: schema
+        source_column: title
+        sql_type: TEXT
+        semantic_role: dimension
+      budget:
+        label: budget
+        range: xsd:decimal
+        required: false
+        cardinality:
+          min: 0
+          max: 1
+        provenance: schema
+        source_column: budget
+        sql_type: NUMERIC
+        semantic_role: measure
+        aggregation: SUM
+    role: entity
+object_properties:
+  hasEmployee:
+    label: has employee
+    domain: Badge
+    range: Employee
+    cardinality: one-to-one
+    functional: true
+    required: true
+    inverse: hasBadge
+    join:
+      from:
+      - badges.emp_id
+      to:
+      - employees.emp_id
+    provenance: schema
+  hasBadge:
+    label: has badge
+    domain: Employee
+    range: Badge
+    cardinality: one-to-one
+    functional: true
+    inverse: hasEmployee
+  hasManager:
+    label: has manager
+    domain: Employee
+    range: Employee
+    cardinality: many-to-one
+    functional: true
+    required: false
+    inverse: managerOf
+    join:
+      from:
+      - employees.manager_id
+      to:
+      - employees.emp_id
+    provenance: schema
+  managerOf:
+    label: manager of
+    domain: Employee
+    range: Employee
+    cardinality: one-to-many
+    functional: false
+    inverse: hasManager
+  hasDepartment:
+    label: has department
+    domain: Employee
+    range: Department
+    cardinality: many-to-one
+    functional: true
+    required: true
+    inverse: hasEmployees
+    join:
+      from:
+      - employees.dept_id
+      to:
+      - departments.dept_id
+    provenance: schema
+  hasEmployees:
+    label: has employees
+    domain: Department
+    range: Employee
+    cardinality: one-to-many
+    functional: false
+    inverse: hasDepartment
+  projectHasEmployees:
+    label: project has employees
+    domain: Project
+    range: Employee
+    cardinality: many-to-many
+    functional: false
+    inverse: hasProjects
+    join:
+      via: employee_projects
+      from:
+      - employee_projects.project_id
+      to:
+      - employee_projects.emp_id
+    provenance: schema
+  hasProjects:
+    label: has projects
+    domain: Employee
+    range: Project
+    cardinality: many-to-many
+    functional: false
+    inverse: projectHasEmployees
+    join:
+      via: employee_projects
+      from:
+      - employee_projects.emp_id
+      to:
+      - employee_projects.project_id
+value_meanings:
+- class: Employee
+  property: grade
+  column: employees.grade
+  values:
+    A: ''
+    B: ''
+    C: ''
+  provenance: profile
+rules: []
+metrics:
+- name: employee_count
+  description: Number of employee records
+  base_class: Employee
+  sql: COUNT(1)
+  provenance: heuristic
+- name: sum_salary
+  description: Sum of salary
+  base_class: Employee
+  sql: SUM(salary)
+  provenance: heuristic
+  synonyms:
+  - salary
+suggested_relationships: []
+lineage:
+  tables: []
+  columns: []
+synonyms_index:
+  badge: Badge
+  badge id: Badge.badgeId
+  budget: Project.budget
+  department: Department
+  dept id: Department.deptId
+  dept name: Department.deptName
+  emp id: Employee.empId
+  employee: Employee
+  full name: Employee.fullName
+  grade: Employee.grade
+  hired on: Employee.hiredOn
+  issued: Badge.issued
+  project: Project
+  project id: Project.projectId
+  region: Department.region
+  salary: Employee.salary
+  title: Project.title

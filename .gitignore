@@ -1,0 +1,20 @@
+# Databricks CLI state and credentials (sync snapshots hold your workspace host and path)
+.databricks/
+.databrickscfg
+.env
+.streamlit/secrets.toml
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Local CLI output (see "Command-line interface" in the README)
+out/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

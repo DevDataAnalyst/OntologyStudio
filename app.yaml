@@ -1,0 +1,20 @@
+command: ["streamlit", "run", "app.py"]
+
+env:
+  # SQL Warehouse used for Unity Catalog browsing, profiling, discovery, lineage and deploys.
+  # Add it as an app resource with ON-BEHALF-OF-USER authorization.
+  - name: SQL_WAREHOUSE_ID
+    valueFrom: sql-warehouse
+  # Foundation Model endpoint for the optional LLM enrichment and the Ask tab (resource, CAN_QUERY).
+  - name: FM_ENDPOINT_NAME
+    value: "databricks-meta-llama-3-3-70b-instruct"
+  # Pre-selected catalog / schema in the picker (optional)
+  - name: TARGET_CATALOG
+    value: "main"
+  - name: TARGET_SCHEMA
+    value: "default"
+  # Unity Catalog Volume for saved ontology versions (optional), e.g. /Volumes/main/ontology/store
+  - name: ONTOLOGY_STORE
+    value: ""
+  - name: STREAMLIT_SERVER_MAX_UPLOAD_SIZE
+    value: "500"

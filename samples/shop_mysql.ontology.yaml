@@ -1,0 +1,465 @@
+ontology:
+  name: Shop
+  iri: http://example.org/ontology/shop#
+  prefix: ex
+  version: 1.0.0
+  generated_at: '2026-11-08T05:41:49Z'
+  generated_by: sql2ontology
+  source:
+    type: sql_script
+    name: shop_mysql
+    dialect: mysql
+  stats:
+    classes: 5
+    data_properties: 18
+    object_properties: 10
+    junction_tables_collapsed: 1
+prefixes:
+  ex: http://example.org/ontology/shop#
+  xsd: http://www.w3.org/2001/XMLSchema#
+  rdfs: http://www.w3.org/2000/01/rdf-schema#
+  owl: http://www.w3.org/2002/07/owl#
+  rdf: http://www.w3.org/1999/02/22-rdf-syntax-ns#
+classes:
+  Customer:
+    label: customer
+    description: People who buy from the shop
+    source_table: customers
+    source_columns:
+    - customer_id
+    - first_name
+    - email
+    - tier
+    - referred_by
+    - created_at
+    identifier:
+    - customerId
+    provenance: schema+comment
+    data_properties:
+      customerId:
+        label: customer id
+        range: xsd:integer
+        required: true
+        unique: true
+        identifier: true
+        cardinality:
+          min: 1
+          max: 1
+        provenance: schema
+        source_column: customer_id
+        sql_type: INT
+        semantic_role: key
+      firstName:
+        label: first name
+        range: xsd:string
+        required: true
+        cardinality:
+          min: 1
+          max: 1
+        provenance: schema
+        source_column: first_name
+        sql_type: VARCHAR(50)
+        semantic_role: dimension
+      email:
+        label: email
+        range: xsd:string
+        required: true
+        unique: true
+        cardinality:
+          min: 1
+          max: 1
+        provenance: schema
+        source_column: email
+        sql_type: VARCHAR(120)
+        semantic_role: dimension
+      tier:
+        label: tier
+        range: xsd:string
+        required: false
+        cardinality:
+          min: 0
+          max: 1
+        default: silver
+        allowed_values:
+        - gold
+        - silver
+        provenance: schema
+        source_column: tier
+        sql_type: ENUM('gold', 'silver')
+        semantic_role: dimension
+      createdAt:
+        label: created at
+        range: xsd:dateTime
+        required: true
+        cardinality:
+          min: 1
+          max: 1
+        default: CURRENT_TIMESTAMP()
+        provenance: schema
+        source_column: created_at
+        sql_type: DATETIME
+        semantic_role: time
+    role: dimension
+  Product:
+    label: product
+    source_table: products
+    source_columns:
+    - product_id
+    - sku
+    - name
+    - price
+    - is_active
+    identifier:
+    - productId
+    provenance: schema
+    data_properties:
+      productId:
+        label: product id
+        range: xsd:integer
+        required: true
+        unique: true
+        identifier: true
+        cardinality:
+          min: 1
+          max: 1
+        provenance: schema
+        source_column: product_id
+        sql_type: INT
+        semantic_role: key
+      sku:
+        label: sku
+        range: xsd:string
+        required: true
+        unique: true
+        cardinality:
+          min: 1
+          max: 1
+        provenance: schema
+        source_column: sku
+        sql_type: VARCHAR(30)
+        semantic_role: dimension
+      name:
+        label: name
+        range: xsd:string
+        required: true
+        cardinality:
+          min: 1
+          max: 1
+        provenance: schema
+        source_column: name
+        sql_type: VARCHAR(200)
+        semantic_role: dimension
+      price:
+        label: price
+        range: xsd:decimal
+        required: true
+        cardinality:
+          min: 1
+          max: 1
+        provenance: schema
+        source_column: price
+        sql_type: DECIMAL(10, 2)
+        semantic_role: measure
+        aggregation: AVG
+      isActive:
+        label: is active
+        range: xsd:boolean
+        required: true
+        cardinality:
+          min: 1
+          max: 1
+        default: '1'
+        provenance: schema
+        source_column: is_active
+        sql_type: TINYINT(1)
+        semantic_role: dimension
+    role: dimension
+  Category:
+    label: category
+    source_table: categories
+    source_columns:
+    - category_id
+    - title
+    identifier:
+    - categoryId
+    provenance: schema
+    data_properties:
+      categoryId:
+        label: category id
+        range: xsd:integer
+        required: true
+        unique: true
+        identifier: true
+        cardinality:
+          min: 1
+          max: 1
+        provenance: schema
+        source_column: category_id
+        sql_type: INT
+        semantic_role: key
+      title:
+        label: title
+        range: xsd:string
+        required: true
+        cardinality:
+          min: 1
+          max: 1
+        provenance: schema
+        source_column: title
+        sql_type: VARCHAR(80)
+        semantic_role: dimension
+    role: entity
+  Order:
+    label: order
+    source_table: orders
+    source_columns:
+    - order_id
+    - customer_id
+    - order_date
+    - status
+    identifier:
+    - orderId
+    provenance: schema
+    data_properties:
+      orderId:
+        label: order id
+        range: xsd:long
+        required: true
+        unique: true
+        identifier: true
+        cardinality:
+          min: 1
+          max: 1
+        provenance: schema
+        source_column: order_id
+        sql_type: BIGINT
+        semantic_role: key
+      orderDate:
+        label: order date
+        range: xsd:date
+        required: true
+        cardinality:
+          min: 1
+          max: 1
+        provenance: schema
+        source_column: order_date
+        sql_type: DATE
+        semantic_role: time
+      status:
+        label: status
+        range: xsd:string
+        required: true
+        cardinality:
+          min: 1
+          max: 1
+        provenance: schema
+        source_column: status
+        sql_type: VARCHAR(20)
+        semantic_role: dimension
+    role: dimension
+  OrderItem:
+    label: order item
+    source_table: order_items
+    source_columns:
+    - order_id
+    - line_no
+    - product_id
+    - quantity
+    identifier:
+    - orderId
+    - lineNo
+    provenance: schema
+    data_properties:
+      orderId:
+        label: order id
+        range: xsd:long
+        required: true
+        identifier: true
+        cardinality:
+          min: 1
+          max: 1
+        provenance: schema
+        source_column: order_id
+        sql_type: BIGINT
+        semantic_role: key
+      lineNo:
+        label: line no
+        range: xsd:integer
+        required: true
+        identifier: true
+        cardinality:
+          min: 1
+          max: 1
+        provenance: schema
+        source_column: line_no
+        sql_type: INT
+        semantic_role: key
+      quantity:
+        label: quantity
+        range: xsd:integer
+        required: true
+        cardinality:
+          min: 1
+          max: 1
+        provenance: schema
+        source_column: quantity
+        sql_type: INT
+        semantic_role: measure
+        aggregation: SUM
+    role: fact
+object_properties:
+  referredBy:
+    label: referred by
+    domain: Customer
+    range: Customer
+    cardinality: many-to-one
+    functional: true
+    required: false
+    inverse: referredCustomers
+    join:
+      from:
+      - customers.referred_by
+      to:
+      - customers.customer_id
+    provenance: schema
+  referredCustomers:
+    label: referred customers
+    domain: Customer
+    range: Customer
+    cardinality: one-to-many
+    functional: false
+    inverse: referredBy
+  hasCustomer:
+    label: has customer
+    domain: Order
+    range: Customer
+    cardinality: many-to-one
+    functional: true
+    required: true
+    inverse: hasOrders
+    join:
+      from:
+      - orders.customer_id
+      to:
+      - customers.customer_id
+    provenance: schema
+  hasOrders:
+    label: has orders
+    domain: Customer
+    range: Order
+    cardinality: one-to-many
+    functional: false
+    inverse: hasCustomer
+  hasOrder:
+    label: has order
+    domain: OrderItem
+    range: Order
+    cardinality: many-to-one
+    functional: true
+    required: true
+    inverse: hasOrderItems
+    join:
+      from:
+      - order_items.order_id
+      to:
+      - orders.order_id
+    provenance: schema
+  hasOrderItems:
+    label: has order items
+    domain: Order
+    range: OrderItem
+    cardinality: one-to-many
+    functional: false
+    inverse: hasOrder
+  hasProduct:
+    label: has product
+    domain: OrderItem
+    range: Product
+    cardinality: many-to-one
+    functional: true
+    required: true
+    inverse: productHasOrderItems
+    join:
+      from:
+      - order_items.product_id
+      to:
+      - products.product_id
+    provenance: schema
+  productHasOrderItems:
+    label: product has order items
+    domain: Product
+    range: OrderItem
+    cardinality: one-to-many
+    functional: false
+    inverse: hasProduct
+  hasCategories:
+    label: has categories
+    domain: Product
+    range: Category
+    cardinality: many-to-many
+    functional: false
+    inverse: hasProducts
+    join:
+      via: product_categories
+      from:
+      - product_categories.product_id
+      to:
+      - product_categories.category_id
+    provenance: schema
+  hasProducts:
+    label: has products
+    domain: Category
+    range: Product
+    cardinality: many-to-many
+    functional: false
+    inverse: hasCategories
+    join:
+      via: product_categories
+      from:
+      - product_categories.category_id
+      to:
+      - product_categories.product_id
+value_meanings: []
+rules: []
+metrics:
+- name: order_item_count
+  description: Number of order item records
+  base_class: OrderItem
+  sql: COUNT(1)
+  provenance: heuristic
+- name: sum_quantity
+  description: Sum of quantity
+  base_class: OrderItem
+  sql: SUM(quantity)
+  provenance: heuristic
+  synonyms:
+  - quantity
+suggested_relationships: []
+lineage:
+  tables: []
+  columns: []
+synonyms_index:
+  category: Category
+  category id: Category.categoryId
+  created at: Customer.createdAt
+  customer: Customer
+  customer id: Customer.customerId
+  email: Customer.email
+  first name: Customer.firstName
+  is active: Product.isActive
+  line no: OrderItem.lineNo
+  name: Product.name
+  order: Order
+  order date: Order.orderDate
+  order id:
+  - Order.orderId
+  - OrderItem.orderId
+  order item: OrderItem
+  price: Product.price
+  product: Product
+  product id: Product.productId
+  quantity: OrderItem.quantity
+  sku: Product.sku
+  status: Order.status
+  tier: Customer.tier
+  title: Category.title

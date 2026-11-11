@@ -31,7 +31,7 @@ def _is_dim_name(table: str) -> bool:
     return bool(re.match(r"^(dim|d|lkp|ref)_", table, re.I) or re.search(r"_(dim|lookup|lkp|master)$", table, re.I))
 
 
-def classify(onto: dict, overwrite: bool = False) -> dict:
+def classify(onto: dict, overwrite: bool = False, add_metrics: bool = True) -> dict:
     classes, ops = onto["classes"], onto["object_properties"]
     outgoing = {c: 0 for c in classes}
     incoming = {c: 0 for c in classes}
@@ -83,7 +83,8 @@ def classify(onto: dict, overwrite: bool = False) -> dict:
         c["role"] = role
 
     # bridge tables were collapsed into many-to-many relationships; nothing to classify
-    add_base_metrics(onto)
+    if add_metrics:
+        add_base_metrics(onto)
     return onto
 
 

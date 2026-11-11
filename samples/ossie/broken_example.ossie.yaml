@@ -1,0 +1,26 @@
+# Deliberately broken: upload it to see what the Apache Ossie checks report.
+version: 0.3.0.dev0
+name: broken_sales
+datasets:
+  - name: orders
+    source: sales.public.orders
+    primary_keys: [order_id]          # typo: primary_key
+    fields:
+      - name: order_id
+        expression: {sql: order_id}
+      - name: amount
+        expression: {sql: amount}
+        datatype: Datetime              # not a DataType (DateTime?)
+  - name: customers
+    fields:                             # missing source
+      - name: id
+        expression: {sql: id}
+relationships:
+  - name: orders_to_customers
+    from: orders
+    to: customer                        # unknown dataset
+    from_columns: [customer_id]
+    to_columns: [id]
+custom_extensions:                      # renamed to nonportable_extensions in 0.3.0.dev0
+  - vendor_name: DBT
+    data: '{"project": "sales"}'

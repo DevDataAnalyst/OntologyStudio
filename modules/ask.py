@@ -32,9 +32,12 @@ def ontology_context(onto: dict) -> str:
     for c in (keep["classes"] or {}).values():          # trim noise the model doesn't need
         c.pop("instance_count", None)
         c.pop("source_columns", None)
+        c.pop("ossie", None)                            # Apache Ossie round-trip details
         for p in c.get("data_properties", {}).values():
-            for k in ("label", "cardinality", "sql_type", "provenance"):
+            for k in ("label", "cardinality", "sql_type", "provenance", "ossie"):
                 p.pop(k, None)
+    for x in list((keep["object_properties"] or {}).values()) + list(keep["metrics"] or []):
+        x.pop("ossie", None)
     return yaml.safe_dump(keep, sort_keys=False, width=200)
 
 

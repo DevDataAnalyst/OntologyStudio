@@ -1,14 +1,18 @@
 """
 Ontology Studio — Databricks App (Streamlit)
 
-1. Connect   : pick up to 100 tables/views anywhere in Unity Catalog (or upload a SQLite / .sql file)
+1. Connect   : pick up to 100 tables/views anywhere in Unity Catalog (or upload a SQLite / .sql file,
+               or an Apache Ossie semantic model, which is validated against the official spec)
 2. Analyze   : declared keys + discovered joins (naming, value overlap, query history), lineage,
                fact/dimension and measure/dimension classification, base metrics
-3. Edit      : interactive network diagram — drag, connect, repoint, delete, accept/reject
+3. Edit      : interactive D3.js network diagram — drag, connect, repoint, delete, accept/reject
                suggestions; inspector for classes, columns, metrics and joins
-4. Export    : ontology YAML and Databricks metric view YAML (download or deploy to Unity Catalog)
+4. Export    : ontology YAML, Apache Ossie YAML and Databricks metric view YAML (download or deploy
+               to Unity Catalog)
 """
+import hashlib
 import io
+import json
 import os
 import re
 import sqlite3
@@ -19,7 +23,7 @@ import pandas as pd
 import streamlit as st
 import yaml
 
-from modules import discovery, ontology_edit as ed, semantics, store
+from modules import discovery, ontology_edit as ed, ossie, ossie_ui, semantics, store
 from modules import metric_views as mv
 from modules.extractors import from_sql_script, from_sqlite_file, is_sqlite_bytes
 from modules.graph_component import handle_event, network
@@ -80,10 +84,11 @@ def cached(key, fn):
 with st.sidebar:
     st.title("🕸️ Ontology Studio")
     st.header("1 · Connect")
-    sources = (["Unity Catalog"] if ON_DATABRICKS else []) + ["Upload file", "Saved version"]
+    sources = (["Unity Catalog"] if ON_DATABRICKS else []) + ["Upload file", "Ossie YAML", "Saved version"]
     source = st.radio("Source", sources, horizontal=True, label_visibility="collapsed")
 
     selected_fqns, uploaded, dialect, version_path = [], None, "auto", None
+    ossie_rep, ossie_ready, ossie_model = None, False, 0
     if source == "Unity Catalog":
         from modules import uc
         run = uc_runner()
@@ -116,6 +121,37 @@ with st.sidebar:
         uploaded = st.file_uploader("SQLite database or .sql script",
                                     type=["db", "sqlite", "sqlite3", "sql", "ddl", "txt"])
         dialect = st.selectbox("SQL dialect (scripts)", DIALECTS)
+    elif source == "Ossie YAML":
+        ossie_file = st.file_uploader(
+            "Apache Ossie semantic model (.yaml, .yml or .json)", type=["yaml", "yml", "json"],
+            help="One semantic model per file (version, name, datasets …). It is checked against the official "
+                 "Apache Ossie JSON Schema for the version it declares, then with the semantic checks of the "
+                 "reference validator (names, references, keys, metric scoping, SQL, dialect drift).")
+        strict = st.checkbox(f"Require the current spec version ({ossie.CURRENT_VERSION})", value=False,
+                             help="Off: a 0.2.0.dev0 or 0.1.1 file is checked against its own version and gets "
+                                  "a warning plus an upgrade. On: any other version is an error.")
+        if ossie_file is not None:
+            raw = ossie_file.getvalue()
+            okey = (ossie_file.name, hashlib.sha1(raw).hexdigest(), strict)
+            if ss.get("ossie_key") != okey:
+                ss.ossie_key = okey
+                ss.ossie_report = ossie.validate_text(raw.decode("utf-8-sig", errors="replace"),
+                                                      ossie_file.name, strict=strict)
+            ossie_rep = ss.ossie_report
+            ossie_ui.sidebar_badge(ossie_rep)
+            if len(ossie_rep.models) > 1:
+                ossie_model = st.selectbox("Model to load", range(len(ossie_rep.models)),
+                                           format_func=lambda i: ossie_rep.model_names()[i])
+            load_anyway = False
+            if ossie_rep.errors and ossie_rep.convertible:
+                load_anyway = st.checkbox("Load it even though it has errors", value=False,
+                                          help="Draws what can be read; fix the errors before exchanging it.")
+            ossie_ready = ossie_rep.convertible and (not ossie_rep.errors or load_anyway)
+            st.caption("The full report is in the main panel." if ss.onto is None
+                       else "The full report is in the **Apache Ossie** tab.")
+        else:
+            ss.pop("ossie_key", None)
+            ss.pop("ossie_report", None)
     else:
         if store.enabled():
             token = None
@@ -163,8 +199,8 @@ with st.sidebar:
     docs_files = st.file_uploader("Business docs to ground it", type=["md", "txt", "csv", "json", "yaml", "yml"],
                                   accept_multiple_files=True, disabled=not enrich)
 
-    can_go = bool(selected_fqns or uploaded or version_path)
-    go = st.button("Analyze & build" if source != "Saved version" else "Load version",
+    can_go = bool(selected_fqns or uploaded or version_path or ossie_ready)
+    go = st.button({"Saved version": "Load version", "Ossie YAML": "Load Ossie model"}.get(source, "Analyze & build"),
                    type="primary", use_container_width=True, disabled=not can_go)
 
 
@@ -263,6 +299,29 @@ def build():
     return onto
 
 
+def load_ossie(rep: ossie.Report, model_index: int) -> dict:
+    """Validated Ossie model -> ontology (0.1.1 files are unwrapped first)."""
+    doc, notes = rep.document, []
+    if rep.profile is not None and rep.profile.wrapped:
+        docs, notes = ossie.upgrade(doc)
+        doc = docs[min(model_index, len(docs) - 1)]
+    new = ossie.to_ontology(doc, rep.file_name, base_iri=base_iri, prefix=prefix)
+    if enrich:
+        box = status_area.container()
+        bar = box.progress(0.0, "LLM enrichment…")
+        docs_text = {f.name: f.getvalue().decode("utf-8-sig", errors="replace") for f in docs_files or []}
+        try:
+            from modules.llm_enrich import enrich as llm_enrich
+            new = llm_enrich(new, docs_text, progress=lambda f, m: bar.progress(f, m))
+        except Exception as e:  # noqa: BLE001
+            new.setdefault("warnings", []).append(f"LLM enrichment skipped: {e}")
+        status_area.empty()
+    three_part = all(str(c.get("source_fqn") or "").count(".") == 2 for c in new["classes"].values())
+    ss.runner = {"kind": "uc" if ON_DATABRICKS and three_part else None, "dialect": "databricks"}
+    ss.ossie_loaded = {"key": ss.get("ossie_key"), "file": rep.file_name, "notes": notes}
+    return refresh_index(new)
+
+
 if go:
     if source == "Saved version":
         token = None
@@ -270,18 +329,32 @@ if go:
             from modules.db_connection import get_user_token
             token = get_user_token()
         ss.onto = yaml.safe_load(store.load(version_path, token))
+        ss.pop("ossie_loaded", None)
+    elif source == "Ossie YAML":
+        ss.onto = load_ossie(ossie_rep, ossie_model)
     else:
         ss.onto = build()
+        ss.pop("ossie_loaded", None)
     ss.selection, ss.last_nonce = {"kind": None}, None
     ss.graph_key += 1           # fresh diagram for a fresh ontology
 
 onto = ss.onto
 if onto is None:
+    if source == "Ossie YAML" and ss.get("ossie_report") is not None:
+        st.title("Apache Ossie validation")
+        st.caption(f"File: **{ss.ossie_report.file_name}** · fix what the report flags, then "
+                   "**Load Ossie model** to edit it as a network.")
+        ossie_ui.report_view(ss.ossie_report, key="landing")
+        st.stop()
     st.title("Ontology Studio")
     st.markdown(
         "Connect to Unity Catalog tables (or upload a SQLite / `.sql` file), then **Analyze & build**. "
         "You get a network of classes and relationships you can edit, plus exports as ontology "
-        "YAML and Databricks metric views.")
+        "YAML, Apache Ossie YAML and Databricks metric views.\n\n"
+        "Have an **Apache Ossie** semantic model already? Choose **Ossie YAML** in the sidebar: the file is "
+        f"checked against the official specification (current version `{ossie.CURRENT_VERSION}`; older "
+        "`0.2.0.dev0` and `0.1.1` files are checked against their own version and can be upgraded) and can "
+        "then be loaded into the same editor.")
     st.stop()
 
 # =========================================================================== #
@@ -302,8 +375,9 @@ m[5].metric("Metrics", len(onto.get("metrics", [])))
 for w in onto.get("warnings", [])[:8]:
     st.warning(w)
 
-tab_net, tab_yaml, tab_mv, tab_sem, tab_tables, tab_ask = st.tabs(
-    ["🕸️ Network", "Ontology YAML", "Metric views", "Semantic layer", "Tables", "Ask (Text-to-SQL)"])
+tab_net, tab_yaml, tab_ossie, tab_mv, tab_sem, tab_tables, tab_ask = st.tabs(
+    ["🕸️ Network", "Ontology YAML", "Apache Ossie", "Metric views", "Semantic layer", "Tables",
+     "Ask (Text-to-SQL)"])
 
 # =========================================================================== #
 # Network + inspector
@@ -311,11 +385,12 @@ tab_net, tab_yaml, tab_mv, tab_sem, tab_tables, tab_ask = st.tabs(
 with tab_net:
     left, right = st.columns([2.6, 1.2], gap="medium")
     with left:
-        evt = network(onto, height=660, dark=is_dark(), message=ss.graph_msg,
+        evt = network(onto, height=660, dark=is_dark(), message=ss.graph_msg, selected=ss.selection,
                       key=f"graph_{ss.graph_key}")
-        st.caption("Drag to arrange · **＋ Connect**: click the class holding the key, then the class it "
-                   "points to · select a relationship to **Repoint** or **Delete** · dashed orange = "
-                   "suggestion (Accept/Reject) · dotted green = lineage.")
+        st.caption("Drag to arrange · scroll to zoom · double-click a class to focus · **＋ Connect**: drag from "
+                   "the class holding the key to the class it points to · select a relationship to **Repoint** "
+                   "or **Delete** · crow's feet mark the many side · dashed orange = suggestion (Accept/Reject) "
+                   "· dotted green = lineage · hover for details.")
     if evt and evt.get("nonce") != ss.last_nonce:
         ss.last_nonce = evt["nonce"]
         try:
@@ -509,6 +584,9 @@ with tab_yaml:
     if c2.button("Apply YAML edits", use_container_width=True, disabled=edited_yaml == export_text):
         try:
             new = yaml.safe_load(edited_yaml)
+            if isinstance(new, dict) and "datasets" in new and "classes" not in new:
+                raise ValueError("this is an Apache Ossie semantic model, not a studio ontology. Load it with "
+                                 "Source → Ossie YAML in the sidebar so it is validated first.")
             assert isinstance(new, dict) and "classes" in new and "object_properties" in new
             new.setdefault("layout", onto.get("layout", {}))
             ss.onto = refresh_index(new)
@@ -526,6 +604,70 @@ with tab_yaml:
                 st.error(str(e))
     else:
         c3.caption("Set ONTOLOGY_STORE to save versions to a Volume.")
+
+# =========================================================================== #
+# Apache Ossie: validation report, export, validate any document
+# =========================================================================== #
+with tab_ossie:
+    st.markdown(f"[Apache Ossie](https://github.com/apache/ossie) is the vendor-neutral exchange format for "
+                f"semantic models. Files are checked against the official JSON Schema of the version they "
+                f"declare (current: `{ossie.CURRENT_VERSION}`), then with the reference validator's semantic "
+                "checks and a few modelling lints.")
+    pending_rep = ss.get("ossie_report")
+    loaded = ss.get("ossie_loaded")
+    if pending_rep is not None:
+        is_loaded = bool(loaded and loaded.get("key") == ss.get("ossie_key"))
+        st.subheader(f"📄 {pending_rep.file_name}" + ("" if is_loaded else " (uploaded, not loaded)"))
+        for n in (loaded or {}).get("notes", []) if is_loaded else []:
+            st.caption(f"Loaded after upgrade: {n}")
+        ossie_ui.report_view(pending_rep, key="tab")
+        st.divider()
+
+    st.subheader(f"⬇️ Export this ontology as Apache Ossie {ossie.CURRENT_VERSION}")
+    oc1, oc2 = st.columns(2)
+    keep_studio = oc1.checkbox("Keep studio details as ONTOLOGY_STUDIO extensions", value=True,
+                               help="Roles, aggregations, value meanings, rules and provenance travel in "
+                                    "nonportable_extensions, so a round trip through Ossie loses nothing. "
+                                    "Other tools ignore them.")
+    keep_layout = oc2.checkbox("Include the diagram layout", value=False)
+    fingerprint = json.dumps({k: v for k, v in onto.items() if keep_layout or k != "layout"},
+                             sort_keys=True, default=str)
+    xkey = (hashlib.sha1(fingerprint.encode("utf-8")).hexdigest(), keep_studio, keep_layout)
+    if ss.get("ossie_export_key") != xkey:
+        x_doc, x_notes = ossie.from_ontology(onto, include_studio=keep_studio, include_layout=keep_layout)
+        x_text = ossie.dump_yaml(x_doc)
+        x_name = ossie_ui.stem(str(x_doc.get("name") or "model")) + ".ossie.yaml"
+        ss.ossie_export = {"text": x_text, "notes": x_notes, "name": x_name,
+                           "report": ossie.validate_text(x_text, x_name), "doc": x_doc}
+        ss.ossie_export_key = xkey
+    ex = ss.ossie_export
+    ossie_ui.headline(ex["report"])
+    for n in ex["notes"]:
+        st.caption("• " + n)
+    d1, d2, _ = st.columns([1.3, 1.3, 2])
+    d1.download_button("⬇️ Ossie YAML", ex["text"], file_name=ex["name"], mime="application/x-yaml",
+                       type="primary", use_container_width=True)
+    d2.download_button("⬇️ Ossie JSON", json.dumps(ex["doc"], indent=2, default=str),
+                       file_name=ex["name"].replace(".yaml", ".json"), mime="application/json",
+                       use_container_width=True)
+    with st.expander("Preview the exported document"):
+        st.code(ex["text"], language="yaml")
+    if ex["report"].findings:
+        with st.expander(f"Export check details ({len(ex['report'].findings)} finding(s))"):
+            ossie_ui.report_view(ex["report"], key="export", show_stats=False, upgrade=False)
+
+    st.divider()
+    st.subheader("🔎 Validate another document")
+    v1, v2 = st.columns([2, 1])
+    pasted = v1.text_area("Paste Ossie YAML or JSON", height=180, key="ossie_paste",
+                          placeholder="version: 0.3.0.dev0\nname: sales\ndatasets:\n  - name: orders\n    "
+                                      "source: main.sales.orders")
+    v_strict = v2.checkbox("Require the current version", value=False, key="ossie_paste_strict")
+    v2.caption("Nothing is loaded or changed; this only checks the text.")
+    if v2.button("Validate", type="primary", disabled=not pasted.strip(), use_container_width=True):
+        ss.ossie_paste_report = ossie.validate_text(pasted, "pasted.yaml", strict=v_strict)
+    if ss.get("ossie_paste_report") is not None and pasted.strip():
+        ossie_ui.report_view(ss.ossie_paste_report, key="paste")
 
 # =========================================================================== #
 # Metric views

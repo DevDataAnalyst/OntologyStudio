@@ -36,8 +36,36 @@ def _src(c: dict, cid: str) -> str:
 
 
 def _col(p: dict, pid: str) -> str:
+    if p.get("expression"):          # computed field (e.g. imported from an Apache Ossie model)
+        return f"({p['expression']})"
     c = p.get("source_column", pid)
     return c if re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", c) else f"`{c}`"
+
+
+def _dim_expr(p: dict, pid: str, prefix: str) -> str:
+    """Dimension expression; columns of a joined class are prefixed with the join path.
+    A computed expression gets the prefix on each of its bare columns."""
+    if not prefix or not p.get("expression"):
+        return f"{prefix}{_col(p, pid)}"
+    parts = prefix.rstrip(".").split(".")
+    try:
+        import sqlglot
+        from sqlglot import exp
+        tree = sqlglot.parse_one(p["expression"], read="databricks")
+        if len(parts) > 3:
+            raise ValueError("join path too deep to qualify")
+        for col in list(tree.find_all(exp.Column)):
+            if col.table or isinstance(col.this, exp.Star):
+                continue
+            new = exp.column(col.name, table=parts[-1], db=parts[-2] if len(parts) > 1 else None,
+                             catalog=parts[-3] if len(parts) > 2 else None)
+            if col is tree:
+                tree = new
+            else:
+                col.replace(new)
+        return tree.sql(dialect="databricks")
+    except Exception:  # noqa: BLE001
+        return f"{prefix}{_col(p, pid)}"
 
 
 def fact_classes(onto: dict) -> list[str]:
@@ -80,7 +108,7 @@ def build_metric_view(onto: dict, fact: str, include_synonyms: bool = True) -> d
         for pid, p in classes[cid]["data_properties"].items():
             if p.get("semantic_role") in ("dimension", "time") or (
                     prefix and p.get("semantic_role") is None and not p.get("identifier")):
-                expr = f"{prefix}{_col(p, pid)}"
+                expr = _dim_expr(p, pid, prefix)
                 col = p.get("source_column", pid)
                 stem = path_label.rstrip("_").removesuffix("_dim")
                 name = col if (not path_label or col.lower().startswith(stem)) else f"{stem}_{col}"

@@ -1,0 +1,40 @@
+# Passes the schema but fails the semantic checks (references, arity, scoping, SQL).
+version: 0.3.0.dev0
+name: semantic_errors
+datasets:
+  - name: orders
+    source: sales.public.orders
+    primary_key: [order_id]
+    fields:
+      - name: order_id
+        expression: {sql: order_id}
+      - name: customer_id
+        expression: {sql: customer_id}
+      - name: amount
+        expression: {sql: amount}
+        datatype: Decimal
+      - name: amount_total
+        expression: {sql: SUM(amount)}          # aggregate in a field
+    metrics:
+      - name: revenue_per_customer             # dataset metric that reaches into another dataset
+        expression: {sql: SUM(amount) / COUNT(DISTINCT customers.id)}
+      - name: bad_sql
+        expression: {sql: "SUM(amount"}
+  - name: customers
+    source: sales.public.customers
+    primary_key: [id]
+    fields:
+      - name: id
+        expression: {sql: id}
+relationships:
+  - name: orders_to_customers
+    from: orders
+    to: customers
+    from_columns: [customer_id, amount]         # two columns paired with one
+    to_columns: [id]
+metrics:
+  - name: revenue_today
+    expression:
+      sql: SUM(orders.amount) + NOW()
+      dialects:
+        - {dialect: SNOWFLAKE, expression: AVG(orders.amount)}

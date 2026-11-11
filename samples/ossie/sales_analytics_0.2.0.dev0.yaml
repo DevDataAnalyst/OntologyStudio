@@ -1,0 +1,81 @@
+# A small model in the former 0.2.0.dev0 shape (as described in early write-ups of the spec):
+# extension data is a JSON string under custom_extensions, and expressions use dialects lists.
+# Load it to see the version warning and the one-click upgrade to 0.3.0.dev0.
+version: 0.2.0.dev0
+name: sales_analytics
+description: Sales and customer analytics model
+datasets:
+  - name: orders
+    source: sales.public.orders
+    primary_key: [order_id]
+    description: Order transactions
+    fields:
+      - name: order_id
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: order_id
+        datatype: Integer
+      - name: customer_id
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: customer_id
+        datatype: Integer
+      - name: amount
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: amount
+        datatype: Decimal
+      - name: order_date
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: order_date
+        datatype: Date
+  - name: customers
+    source: sales.public.customers
+    primary_key: [id]
+    fields:
+      - name: id
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: id
+        datatype: Integer
+      - name: email_normalized
+        expression:
+          dialects:
+            - dialect: ANSI_SQL
+              expression: LOWER(email)
+            - dialect: SNOWFLAKE
+              expression: LOWER(email)::VARCHAR
+            - dialect: BIGQUERY
+              expression: SAFE_CAST(LOWER(email) AS STRING)
+        description: Normalized email address
+relationships:
+  - name: orders_to_customers
+    from: orders
+    to: customers
+    from_columns: [customer_id]
+    to_columns: [id]
+metrics:
+  - name: total_revenue
+    expression:
+      dialects:
+        - dialect: ANSI_SQL
+          expression: SUM(orders.amount)
+    datatype: Decimal
+    ai_context:
+      synonyms: [revenue, sales]
+  - name: avg_orders
+    expression:
+      dialects:
+        - dialect: ANSI_SQL
+          expression: SUM(orders.amount) / COUNT(DISTINCT customers.id)
+    description: Average order value per customer
+    datatype: Decimal
+custom_extensions:
+  - vendor_name: DBT
+    data: '{"project_name": "sales_analytics", "models_path": "models/semantic"}'

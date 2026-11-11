@@ -1,0 +1,513 @@
+# Apache Ossie 0.3.0.dev0 export of samples/retail_star.ontology.yaml, made by Ontology Studio.
+# Studio-only details (roles, aggregations, provenance) ride in ONTOLOGY_STUDIO nonportable_extensions.
+version: 0.3.0.dev0
+name: Retail
+datasets:
+- name: Customer
+  source: dim_customer
+  primary_key:
+  - customerKey
+  fields:
+  - name: customerKey
+    expression:
+      sql: customer_key
+    datatype: Integer
+    nonportable_extensions:
+    - vendor_name: ONTOLOGY_STUDIO
+      data:
+        semantic_role: key
+        sql_type: INTEGER
+        required: true
+        unique: true
+        provenance: schema
+  - name: customerName
+    expression:
+      sql: customer_name
+    datatype: String
+    nonportable_extensions:
+    - vendor_name: ONTOLOGY_STUDIO
+      data:
+        semantic_role: dimension
+        sql_type: TEXT
+        required: false
+        provenance: schema
+  - name: segment
+    expression:
+      sql: segment
+    datatype: String
+    nonportable_extensions:
+    - vendor_name: ONTOLOGY_STUDIO
+      data:
+        semantic_role: dimension
+        allowed_values:
+        - Corporate
+        - Retail
+        - SMB
+        sql_type: TEXT
+        required: false
+        provenance: schema+profile
+  - name: region_code
+    expression:
+      sql: region_code
+    description: Join key (declared so relationships can name it)
+    nonportable_extensions:
+    - vendor_name: ONTOLOGY_STUDIO
+      data:
+        semantic_role: key
+        added_for: relationship
+  nonportable_extensions:
+  - vendor_name: ONTOLOGY_STUDIO
+    data:
+      role: dimension
+      instance_count: 200
+      provenance: schema
+      identifier_inferred: true
+- name: Date
+  source: dim_date
+  primary_key:
+  - dateKey
+  fields:
+  - name: dateKey
+    expression:
+      sql: date_key
+    datatype: Integer
+    nonportable_extensions:
+    - vendor_name: ONTOLOGY_STUDIO
+      data:
+        semantic_role: key
+        sql_type: INTEGER
+        required: true
+        unique: true
+        provenance: schema
+  - name: fullDate
+    expression:
+      sql: full_date
+    datatype: Date
+    nonportable_extensions:
+    - vendor_name: ONTOLOGY_STUDIO
+      data:
+        semantic_role: time
+        sql_type: DATE
+        required: false
+        provenance: schema
+  - name: monthName
+    expression:
+      sql: month_name
+    datatype: String
+    nonportable_extensions:
+    - vendor_name: ONTOLOGY_STUDIO
+      data:
+        semantic_role: dimension
+        allowed_values:
+        - January
+        sql_type: TEXT
+        required: false
+        provenance: schema+profile
+  - name: fiscalYear
+    expression:
+      sql: fiscal_year
+    datatype: Integer
+    nonportable_extensions:
+    - vendor_name: ONTOLOGY_STUDIO
+      data:
+        semantic_role: dimension
+        sql_type: INTEGER
+        required: false
+        provenance: schema
+  nonportable_extensions:
+  - vendor_name: ONTOLOGY_STUDIO
+    data:
+      role: dimension
+      instance_count: 28
+      provenance: schema
+      identifier_inferred: true
+- name: Product
+  source: dim_product
+  primary_key:
+  - productKey
+  fields:
+  - name: productKey
+    expression:
+      sql: product_key
+    datatype: Integer
+    nonportable_extensions:
+    - vendor_name: ONTOLOGY_STUDIO
+      data:
+        semantic_role: key
+        sql_type: INTEGER
+        required: true
+        unique: true
+        provenance: schema
+  - name: productName
+    expression:
+      sql: product_name
+    datatype: String
+    nonportable_extensions:
+    - vendor_name: ONTOLOGY_STUDIO
+      data:
+        semantic_role: dimension
+        sql_type: TEXT
+        required: false
+        provenance: schema
+  - name: category
+    expression:
+      sql: category
+    datatype: String
+    nonportable_extensions:
+    - vendor_name: ONTOLOGY_STUDIO
+      data:
+        semantic_role: dimension
+        allowed_values:
+        - Apparel
+        - Bikes
+        - Gear
+        - Parts
+        sql_type: TEXT
+        required: false
+        provenance: schema+profile
+  - name: listPrice
+    expression:
+      sql: list_price
+    datatype: Float
+    nonportable_extensions:
+    - vendor_name: ONTOLOGY_STUDIO
+      data:
+        semantic_role: measure
+        aggregation: AVG
+        sql_type: REAL
+        required: false
+        provenance: schema
+  nonportable_extensions:
+  - vendor_name: ONTOLOGY_STUDIO
+    data:
+      role: dimension
+      instance_count: 60
+      provenance: schema
+      identifier_inferred: true
+- name: Region
+  source: dim_region
+  primary_key:
+  - regionCode
+  fields:
+  - name: regionCode
+    expression:
+      sql: region_code
+    datatype: String
+    nonportable_extensions:
+    - vendor_name: ONTOLOGY_STUDIO
+      data:
+        semantic_role: key
+        sql_type: TEXT
+        required: true
+        unique: true
+        provenance: schema
+  - name: regionName
+    expression:
+      sql: region_name
+    datatype: String
+    nonportable_extensions:
+    - vendor_name: ONTOLOGY_STUDIO
+      data:
+        semantic_role: dimension
+        sql_type: TEXT
+        required: false
+        provenance: schema
+  nonportable_extensions:
+  - vendor_name: ONTOLOGY_STUDIO
+    data:
+      role: dimension
+      instance_count: 3
+      provenance: schema
+      identifier_inferred: true
+- name: Sale
+  source: fact_sales
+  primary_key:
+  - salesId
+  fields:
+  - name: salesId
+    expression:
+      sql: sales_id
+    datatype: Integer
+    nonportable_extensions:
+    - vendor_name: ONTOLOGY_STUDIO
+      data:
+        semantic_role: key
+        sql_type: INTEGER
+        required: true
+        unique: true
+        provenance: schema
+  - name: quantity
+    expression:
+      sql: quantity
+    datatype: Integer
+    nonportable_extensions:
+    - vendor_name: ONTOLOGY_STUDIO
+      data:
+        semantic_role: measure
+        aggregation: SUM
+        sql_type: INTEGER
+        required: false
+        provenance: schema
+  - name: netAmount
+    expression:
+      sql: net_amount
+    datatype: Float
+    nonportable_extensions:
+    - vendor_name: ONTOLOGY_STUDIO
+      data:
+        semantic_role: measure
+        aggregation: SUM
+        sql_type: REAL
+        required: false
+        provenance: schema
+  - name: discountPct
+    expression:
+      sql: discount_pct
+    datatype: Float
+    nonportable_extensions:
+    - vendor_name: ONTOLOGY_STUDIO
+      data:
+        semantic_role: measure
+        aggregation: AVG
+        sql_type: REAL
+        required: false
+        provenance: schema
+  - name: customer_key
+    expression:
+      sql: customer_key
+    description: Join key (declared so relationships can name it)
+    nonportable_extensions:
+    - vendor_name: ONTOLOGY_STUDIO
+      data:
+        semantic_role: key
+        added_for: relationship
+  - name: product_key
+    expression:
+      sql: product_key
+    description: Join key (declared so relationships can name it)
+    nonportable_extensions:
+    - vendor_name: ONTOLOGY_STUDIO
+      data:
+        semantic_role: key
+        added_for: relationship
+  - name: order_date_key
+    expression:
+      sql: order_date_key
+    description: Join key (declared so relationships can name it)
+    nonportable_extensions:
+    - vendor_name: ONTOLOGY_STUDIO
+      data:
+        semantic_role: key
+        added_for: relationship
+  metrics:
+  - name: sale_count
+    expression:
+      sql: COUNT(1)
+    description: Number of sale records
+    datatype: Integer
+    nonportable_extensions:
+    - vendor_name: ONTOLOGY_STUDIO
+      data:
+        base_class: Sale
+        provenance: heuristic
+  - name: sum_quantity
+    expression:
+      sql: SUM(quantity)
+    description: Sum of quantity
+    ai_context:
+      synonyms:
+      - quantity
+    nonportable_extensions:
+    - vendor_name: ONTOLOGY_STUDIO
+      data:
+        base_class: Sale
+        provenance: heuristic
+  - name: sum_net_amount
+    expression:
+      sql: SUM(netAmount)
+    description: Sum of net amount
+    ai_context:
+      synonyms:
+      - net amount
+    nonportable_extensions:
+    - vendor_name: ONTOLOGY_STUDIO
+      data:
+        base_class: Sale
+        provenance: heuristic
+  - name: avg_discount_pct
+    expression:
+      sql: AVG(discountPct)
+    description: Avg of discount pct
+    ai_context:
+      synonyms:
+      - discount pct
+    nonportable_extensions:
+    - vendor_name: ONTOLOGY_STUDIO
+      data:
+        base_class: Sale
+        provenance: heuristic
+  nonportable_extensions:
+  - vendor_name: ONTOLOGY_STUDIO
+    data:
+      role: fact
+      instance_count: 3000
+      provenance: schema
+      identifier_inferred: true
+- name: StoreVisit
+  source: store_visits
+  primary_key:
+  - visitId
+  fields:
+  - name: visitId
+    expression:
+      sql: visit_id
+    datatype: Integer
+    nonportable_extensions:
+    - vendor_name: ONTOLOGY_STUDIO
+      data:
+        semantic_role: key
+        sql_type: INTEGER
+        required: true
+        unique: true
+        provenance: schema
+  - name: visitedOn
+    expression:
+      sql: visited_on
+    datatype: Date
+    nonportable_extensions:
+    - vendor_name: ONTOLOGY_STUDIO
+      data:
+        semantic_role: time
+        sql_type: DATE
+        required: false
+        provenance: schema
+  - name: minutes
+    expression:
+      sql: minutes
+    datatype: Integer
+    nonportable_extensions:
+    - vendor_name: ONTOLOGY_STUDIO
+      data:
+        semantic_role: measure
+        aggregation: SUM
+        sql_type: INTEGER
+        required: false
+        provenance: schema
+  - name: cust_id
+    expression:
+      sql: cust_id
+    description: Join key (declared so relationships can name it)
+    nonportable_extensions:
+    - vendor_name: ONTOLOGY_STUDIO
+      data:
+        semantic_role: key
+        added_for: relationship
+  metrics:
+  - name: store_visit_count
+    expression:
+      sql: COUNT(1)
+    description: Number of store visit records
+    datatype: Integer
+    nonportable_extensions:
+    - vendor_name: ONTOLOGY_STUDIO
+      data:
+        base_class: StoreVisit
+        provenance: heuristic
+  - name: sum_minutes
+    expression:
+      sql: SUM(minutes)
+    description: Sum of minutes
+    ai_context:
+      synonyms:
+      - minutes
+    nonportable_extensions:
+    - vendor_name: ONTOLOGY_STUDIO
+      data:
+        base_class: StoreVisit
+        provenance: heuristic
+  nonportable_extensions:
+  - vendor_name: ONTOLOGY_STUDIO
+    data:
+      role: fact
+      instance_count: 500
+      provenance: schema
+      identifier_inferred: true
+relationships:
+- name: hasRegion
+  from: Customer
+  to: Region
+  from_columns:
+  - region_code
+  to_columns:
+  - regionCode
+  nonportable_extensions:
+  - vendor_name: ONTOLOGY_STUDIO
+    data:
+      cardinality: many-to-one
+      inverse: hasCustomers
+      provenance: discovered
+      confidence: 0.95
+- name: hasCustomer
+  from: Sale
+  to: Customer
+  from_columns:
+  - customer_key
+  to_columns:
+  - customerKey
+  nonportable_extensions:
+  - vendor_name: ONTOLOGY_STUDIO
+    data:
+      cardinality: many-to-one
+      inverse: hasSales
+      provenance: discovered
+      confidence: 0.95
+- name: hasProduct
+  from: Sale
+  to: Product
+  from_columns:
+  - product_key
+  to_columns:
+  - productKey
+  nonportable_extensions:
+  - vendor_name: ONTOLOGY_STUDIO
+    data:
+      cardinality: many-to-one
+      inverse: productHasSales
+      provenance: discovered
+      confidence: 0.95
+- name: hasOrderDate
+  from: Sale
+  to: Date
+  from_columns:
+  - order_date_key
+  to_columns:
+  - dateKey
+  nonportable_extensions:
+  - vendor_name: ONTOLOGY_STUDIO
+    data:
+      cardinality: many-to-one
+      inverse: dateHasSales
+      provenance: discovered
+      confidence: 0.75
+- name: storeVisitHasCustomer
+  from: StoreVisit
+  to: Customer
+  from_columns:
+  - cust_id
+  to_columns:
+  - customerKey
+  nonportable_extensions:
+  - vendor_name: ONTOLOGY_STUDIO
+    data:
+      cardinality: many-to-one
+      inverse: hasStoreVisits
+      provenance: discovered
+      confidence: 0.9
+nonportable_extensions:
+- vendor_name: ONTOLOGY_STUDIO
+  data:
+    ontology:
+      iri: http://example.org/ontology/retail#
+      prefix: ex
+      version: 1.0.0
+      generated_by: sql2ontology

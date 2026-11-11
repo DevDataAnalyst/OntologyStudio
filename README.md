@@ -2,10 +2,13 @@
 
 **Turn a set of Unity Catalog tables into a governed semantic layer: an editable ontology plus Databricks metric views.**
 
-Ontology Studio (`sql2ontology`) is a Streamlit app that runs on [Databricks Apps](https://docs.databricks.com/aws/en/dev-tools/databricks-apps/). Point it at up to 100 tables and views in Unity Catalog. It works out how they fit together, even when no foreign keys are declared. You fix what it got wrong on an interactive diagram, then export two things you keep:
+Ontology Studio (`sql2ontology`) is a Streamlit app that runs on [Databricks Apps](https://docs.databricks.com/aws/en/dev-tools/databricks-apps/). Point it at up to 100 tables and views in Unity Catalog. It works out how they fit together, even when no foreign keys are declared. You fix what it got wrong on an interactive diagram, then export what you keep:
 
 1. **An ontology YAML file.** Classes, properties, relationships, code meanings, business rules, metrics, synonyms and lineage, with provenance on every element.
 2. **Databricks metric views** (YAML spec 1.1), one per fact table. Download them, or deploy them to Unity Catalog in one click.
+3. **An [Apache Ossie](https://github.com/apache/ossie) semantic model** (`0.3.0.dev0`), the vendor-neutral exchange format, checked against the official specification before you download it.
+
+Already have an Ossie model? Upload it: the app validates it against the official spec (schema plus the reference validator's semantic checks), shows every problem with its line number and a fix, and loads valid models into the same editor.
 
 Every SQL statement runs **as the signed-in user** (on-behalf-of-user authorization), so Unity Catalog grants, row filters and column masks still apply. The app never reads data the user couldn't already read.
 
@@ -19,13 +22,13 @@ No Databricks workspace handy? The same engine runs locally on a SQLite file or 
 
 ## Walkthrough
 
-These screenshots use the AdventureWorks sample tables (`adventureworks.dbo`) in Unity Catalog. Click an image to see it full size.
+These screenshots use the AdventureWorks sample tables (`adventureworks.dbo`) in Unity Catalog; the network diagram uses the bundled `retail_star.db` sample. Click an image to see it full size.
 
 ### 1. Pick tables, build, and edit the network
 
-In the sidebar, choose **Unity Catalog**, a catalog, one or more schemas and up to 100 tables, then click **Analyze & build**. The **Network** tab draws every class and relationship: orange squares are facts, blue circles are dimensions, grey circles are entities. Click a class to edit its role, description, synonyms, column roles and metrics in the inspector on the right.
+In the sidebar, choose **Unity Catalog**, a catalog, one or more schemas and up to 100 tables, then click **Analyze & build**. The **Network** tab draws every class as a card (**F** amber for facts, **D** blue for dimensions, **E** grey for entities) with its row, column and measure counts, and every relationship with crow's-foot ends on the many side. Click a class to edit its role, description, synonyms, column roles and metrics in the inspector on the right.
 
-![Network tab: the ontology diagram with the Order fact selected in the inspector](docs/images/network.png)
+![Network tab: the D3.js ontology diagram for the retail sample, with facts, dimensions and labelled many-to-one relationships](docs/images/network.svg)
 
 ### 2. Review the ontology YAML
 
@@ -65,6 +68,7 @@ The **Ask (Text-to-SQL)** tab writes SQL for a business question from the ontolo
 
 - **Unity Catalog** (on Databricks): pick a catalog, one or more of its schemas, and up to 100 tables and views from those schemas. Declared foreign keys that point into another schema or catalog are resolved too.
 - **Upload a file**: a SQLite database (`.db`, `.sqlite`, `.sqlite3`) or a SQL script (`.sql`, `.ddl`, `.txt`). With the dialect on **auto**, a script first runs in an in-memory SQLite database, so dumps with `INSERT`s get profiled too. Otherwise, or if that fails, the DDL is parsed with [sqlglot](https://github.com/tobymao/sqlglot) in the dialect you pick: MySQL, Postgres, T-SQL, Oracle, Snowflake, Databricks, BigQuery, Redshift, DuckDB or Teradata.
+- **Ossie YAML**: an [Apache Ossie](https://github.com/apache/ossie) semantic model (`.yaml`, `.yml` or `.json`). It is validated first (see [Apache Ossie](#6-apache-ossie-validation-import-and-export)) and loads into the editor when it passes.
 - **Saved version**: reload an ontology you saved earlier to a Unity Catalog Volume (needs [`ONTOLOGY_STORE`](#configuration)).
 
 ### 2. Analyze
@@ -115,16 +119,17 @@ Classes go to the model in batches of 25, with up to 60,000 characters of your d
 
 ### 3. Edit
 
-**The network diagram** (Cytoscape.js, bundled with the app, no CDN):
+**The network diagram** (D3.js, bundled with the app, no CDN):
 
-- **Nodes:** amber squares are facts, blue circles are dimensions, grey circles are entities, purple circles are bridges, and dashed outlines are external tables that only appear in lineage.
-- **Edges:** solid lines are relationships, labelled with name, cardinality and confidence. Dashed orange lines are suggestions. Dotted green lines are lineage.
+- **Nodes** are cards with a role badge (**F** fact, **D** dimension, **E** entity, **B** bridge) and their row, column and measure counts. Dashed outlines are external tables that only appear in lineage. Hover a card for its table, description and columns (🔑 keys, 🕒 time, Σ measures).
+- **Edges:** relationships are labelled with name, cardinality and confidence, with crow's-foot ends (many-to-one, one-to-one, many-to-many). Dashed orange lines are suggestions. Animated dotted green lines are lineage. Parallel relationships curve apart and self-references loop.
 - **Toolbar:**
-  - **＋ Connect:** click the class that holds the key, then the class it points to. The app guesses the join columns; check them in the inspector.
+  - **＋ Connect:** drag from the class that holds the key to the class it points to (or click both). The app guesses the join columns; check them in the inspector.
   - **Repoint target / Repoint source:** select a relationship, then click its new class.
   - **Delete** the selected relationship. **✓ Accept** or **✕ Reject** the selected suggestion.
-  - **Layout**, **Fit**, **Find class…**, and show/hide toggles for relationships, suggestions, lineage and edge labels.
-  - Keyboard: `C` connect, `Del` delete, `Esc` cancel.
+  - **Layouts:** force-directed, layered (facts on the left, dimensions to the right) and radial (facts in the centre). **Re-layout**, **Fit**, zoom, full screen, **Find class…**, a minimap, and show/hide toggles for relationships, suggestions, lineage, labels and the minimap.
+  - **SVG / PNG** download of the diagram.
+  - Keyboard: `C` connect, `Del` delete, `Esc` cancel, `F` fit, `L` re-layout, `/` find. Double-click a class to focus on it and its neighbours.
 - **Drag nodes** to arrange them. Positions are saved in the ontology (`layout:`), so the diagram looks the same next time.
 
 **The inspector** (right panel) edits whatever you click:
@@ -137,6 +142,7 @@ Classes go to the model in batches of 25, with up to 60,000 characters of your d
 
 **Other tabs:**
 
+- **Apache Ossie:** the validation report of the uploaded file, the export of the current ontology, and a box to validate any pasted document. See [below](#6-apache-ossie-validation-import-and-export).
 - **Ontology YAML:** edit the YAML and click **Apply YAML edits** to redraw the diagram. Validation notes flag relationships that point at missing classes, inverses that don't point back, classes without an identifier, and coded values that still have no meaning.
 - **Semantic layer:** edit value meanings, and review metrics, business rules and the synonyms index.
 - **Tables:** classes, relationships and suggestions as plain tables.
@@ -202,6 +208,8 @@ In the **Metric views** tab you can:
 - download a zip with every view, its `CREATE OR REPLACE VIEW … WITH METRICS LANGUAGE YAML` statement, and the ontology,
 - or click **🚀 Deploy to Unity Catalog**. This runs the `CREATE` statement as you, so you need `CREATE TABLE` on the target schema. It is available when the source is Unity Catalog. The target defaults to `<fact's catalog>.<fact's schema>.<fact>_metrics`, and you can change it.
 
+**Apache Ossie.** The **Apache Ossie** tab exports the ontology as an Ossie `0.3.0.dev0` document (YAML or JSON) and validates it before you download it. See [below](#6-apache-ossie-validation-import-and-export).
+
 **Versions.** With `ONTOLOGY_STORE` set, **💾 Save version to Volume** (in the Ontology YAML tab) writes `<ONTOLOGY_STORE>/<ontology name>/<UTC timestamp>.yaml` plus a `latest.yaml`. Reload any of them from **Saved version** in the sidebar.
 
 ### 5. Ask: test the ontology
@@ -209,6 +217,39 @@ In the **Metric views** tab you can:
 Type a business question. The Foundation Model writes SQL **from the ontology** (classes, synonyms, joins, code meanings, rules and metrics). With **Compare with schema-only** on, it also writes a **baseline** query from the bare table and column names, so you can see both SQL statements and both result sets side by side.
 
 Generated SQL only runs if it is a single read-only `SELECT` or `WITH` statement. It runs on Unity Catalog as you, or on the SQLite file or script you uploaded. The Ask tab needs the model endpoint, so it works on Databricks only.
+
+### 6. Apache Ossie: validation, import and export
+
+[Apache Ossie](https://github.com/apache/ossie) (incubating, formerly Open Semantic Interchange) is a vendor-neutral YAML/JSON format for one semantic model: datasets, relationships, fields and metrics, with per-dialect SQL and AI context.
+
+**Validation.** Choose **Ossie YAML** in the sidebar and upload a file. It is checked against the official JSON Schema of the version it declares, bundled from apache/ossie in [`modules/ossie/schemas/`](modules/ossie/schemas/):
+
+| Declared `version` | Status | Notes |
+|---|---|---|
+| `0.3.0.dev0` | current development version | `nonportable_extensions` with object `data` |
+| `0.2.0.dev0` | former development label | `custom_extensions` with JSON-string `data`; passes with a warning |
+| `0.1.1` | first release (2025-12-11) | models wrapped in a `semantic_model` list; passes with a warning |
+
+Tick **Require the current spec version** to treat anything older than `0.3.0.dev0` as an error. After the schema, the semantic checks follow the reference validator (`validation/validate.py` in apache/ossie):
+
+| Check | Severity |
+|---|---|
+| YAML/JSON parses as one document, no duplicate keys, a mapping at the root | error |
+| JSON Schema: required properties, types, `DataType` values, expression shape, no unknown keys (with "did you mean" hints and migration hints such as `custom_extensions` → `nonportable_extensions`) | error |
+| Extension `data` is JSON: no dates, NaN or non-string keys; unquoted YAML scalars that readers disagree on | error / warning |
+| Unique dataset, field, metric and relationship names; fields and dataset-scoped metrics share one namespace | error |
+| Relationships name declared datasets; keys and join columns name declared fields | error (warning for older versions) |
+| `from_columns` and `to_columns` have the same length | error |
+| Dataset-scoped metrics use their own fields unqualified, or `source.column` | error |
+| Every SQL-family expression parses as one expression (sqlglot) | error |
+| Model metrics use `dataset.field`; `to_columns` covers a key; field shadowing; dialect variants agree; no `NOW()` / `RANDOM()` | warning |
+| Modelling lints: aggregates in fields, metrics without an aggregate, duplicate dialects or relationships, case-only name clashes, fieldless or isolated datasets, ambiguous synonyms | warning / note |
+
+As in the reference validator, the semantic checks run once the schema errors are fixed. The report lists each finding with its path, line number and a fix, and downloads as Markdown. Older documents get an **Upgrade to 0.3.0.dev0** button that rewrites them in the current shape (unwraps `semantic_model`, renames `custom_extensions`, turns JSON-string data into objects, declares fields that keys name) and re-validates the result.
+
+**Import.** **Load Ossie model** turns datasets into classes, fields into properties (`datatype` → XSD range, `is_time` → time role, computed expressions kept), relationships into many-to-one joins, and metrics into metrics whose SQL is rewritten to source columns, so metric views and the Ask tab work on imported models. When every dataset source is a `catalog.schema.table` name, Ask and metric view deploys run against Unity Catalog.
+
+**Export.** The **Apache Ossie** tab exports any ontology as `0.3.0.dev0`. Join columns become declared fields, many-to-many relationships become their junction dataset plus two relationships, and code meanings go into `ai_context`. Studio-only details (roles, aggregations, rules, provenance, optionally the layout) travel in `nonportable_extensions` under `ONTOLOGY_STUDIO`, so a round trip through Ossie loses nothing. The export is validated before you download it.
 
 ---
 
@@ -218,7 +259,7 @@ Generated SQL only runs if it is a single read-only `SELECT` or `WITH` statement
 flowchart LR
     U(["Signed-in user"])
     subgraph APP["Databricks App · Streamlit (app.py)"]
-        UI["Sidebar: Connect · Analyze<br/>Tabs: Network · YAML · Metric views<br/>Semantic layer · Tables · Ask"]
+        UI["Sidebar: Connect · Analyze<br/>Tabs: Network · YAML · Apache Ossie<br/>Metric views · Semantic layer · Tables · Ask"]
         ENG["Engine (modules/)"]
         UI --> ENG
     end
@@ -240,6 +281,7 @@ uc.py / extractors.py  →  DatabaseSchema
   → llm_enrich.py        optional semantic layer from your documents
   → graph_component.py + ontology_edit.py   diagram and edits
   → metric_views.py / store.py              exports and versions
+ossie/validator.py + ossie/convert.py       Apache Ossie checks, import and export
 ```
 
 ### Who runs what
@@ -356,7 +398,7 @@ python -m pip install -r requirements.txt
 python -m streamlit run app.py
 ```
 
-Upload `samples/retail_star.db` and click **Analyze & build**.
+Upload `samples/retail_star.db` and click **Analyze & build**. To try the Ossie checks, choose **Ossie YAML** and upload a file from `samples/ossie/`.
 
 If `DATABRICKS_HOST` is set in your shell, unset it first. Otherwise the app thinks it is on Databricks and asks for a forwarded user token.
 
@@ -391,6 +433,10 @@ Value-overlap checks run when the input can be loaded into SQLite. Validation no
 | `samples/retail_star.db` | A retail star schema with **no declared foreign keys**, so discovery has to find every join. Its outputs are `retail_star.ontology.yaml` and `metric_views/`. |
 | `samples/hr.db` + `samples/hr_dictionary.md` | An HR schema with declared foreign keys, a junction table and a view, plus a short data dictionary (grades, regions, KPIs, a rule) to try LLM enrichment with. Output: `hr.ontology.yaml`. |
 | `samples/shop_mysql.sql` | MySQL DDL with a self-reference, an `ENUM`, an `ALTER TABLE` foreign key and a junction table that collapses into a many-to-many relationship. Output: `shop_mysql.ontology.yaml`. |
+| `samples/ossie/tpcds_semantic_model.ossie.yaml` | The official Apache Ossie TPC-DS example (Apache-2.0): valid, with dataset- and model-scoped metrics. |
+| `samples/ossie/retail_star.ossie.yaml` | The retail sample exported to Ossie `0.3.0.dev0` by the app. |
+| `samples/ossie/sales_analytics_0.2.0.dev0.yaml` | A model in the former `0.2.0.dev0` shape: passes with a warning and offers the upgrade. |
+| `samples/ossie/broken_example.ossie.yaml`, `semantic_errors.ossie.yaml` | Deliberately broken files: schema errors, then semantic errors (references, arity, scoping, SQL). |
 
 ## Project layout
 
@@ -399,7 +445,7 @@ app.py                          Streamlit UI: connect · analyze · network + in
 app.yaml                        Databricks Apps start command and environment
 cli.py                          The same engine from the command line
 requirements.txt                Python dependencies
-components/ontology_graph/      Editable network diagram (Cytoscape.js, bundled)
+components/ontology_graph/      Editable network diagram (D3.js, bundled)
 modules/db_connection.py        On-behalf-of-user SQL warehouse connection
 modules/uc.py                   Unity Catalog browse, extract (up to 100 objects), profile, lineage, query-history joins
 modules/extractors.py           SQLite and SQL-script extractors
@@ -413,6 +459,9 @@ modules/metric_views.py         Databricks metric view YAML 1.1 and DDL
 modules/store.py                Versions in a Unity Catalog Volume
 modules/llm_enrich.py           Optional LLM semantic layer
 modules/ask.py                  Text-to-SQL test bench (ontology vs. baseline)
+modules/ossie/                  Apache Ossie validator, converter and bundled official schemas
+modules/ossie_ui.py             Validation report views
+tests/test_ossie.py             Ossie checks and round trip (python tests/test_ossie.py)
 samples/                        Sample databases, scripts, docs and their generated outputs
 ```
 
@@ -423,7 +472,8 @@ samples/                        Sample databases, scripts, docs and their genera
 - **Read-only Ask.** Generated SQL runs only if it is a single `SELECT` or `WITH` statement.
 - **What the LLM sees.** Enrichment sends class, column and relationship names, comments, sample values and enumerations, plus the documents you upload, to the serving endpoint in your workspace. Turn off profiling for tables whose values should not be in a prompt.
 - **Provenance.** Classes, columns, relationships, code meanings, rules and metrics carry a `provenance` tag: `schema`, `profile`, `inferred`, `discovered`, `heuristic`, `manual`, `docs/<file>` or `llm`.
-- **No CDN.** Cytoscape.js ships with the app, so the diagram loads nothing from the internet.
+- **Uploaded Ossie files are data.** They are read with a safe YAML loader, their SQL is only parsed (never run), and their text is escaped before the diagram shows it.
+- **No CDN.** D3.js ships with the app, so the diagram loads nothing from the internet.
 
 ## Roadmap
 
@@ -432,9 +482,9 @@ Ideas the current design leaves room for, none of them built yet:
 - a certification workflow (draft, reviewed, certified) for terms, joins and metrics,
 - a golden question set that re-runs the Ask comparison on every ontology change,
 - an answerability check that asks for clarification when a question uses a concept the ontology lacks,
-- export to other semantic-layer formats,
+- converters from Ossie to other semantic layers (dbt, LookML, Power BI),
 - MCP tools so external agents can query the ontology.
 
 ## License
 
-[MIT](LICENSE). [Cytoscape.js](https://js.cytoscape.org/), bundled in `components/ontology_graph/`, is also MIT licensed; see [`CYTOSCAPE_LICENSE`](components/ontology_graph/CYTOSCAPE_LICENSE).
+[MIT](LICENSE). [D3.js](https://d3js.org/), bundled in `components/ontology_graph/`, is ISC licensed; see [`D3_LICENSE`](components/ontology_graph/D3_LICENSE). The Apache Ossie schemas in [`modules/ossie/schemas/`](modules/ossie/schemas/) and `samples/ossie/tpcds_semantic_model.ossie.yaml` are Apache-2.0; see the `LICENSE` and `NOTICE` in that folder.

@@ -335,15 +335,16 @@ if go:
     else:
         ss.onto = build()
         ss.pop("ossie_loaded", None)
-    ss.selection, ss.last_nonce = {"kind": None}, None
+    ss.selection, ss.last_nonce, ss.graph_msg = {"kind": None}, None, None
     ss.graph_key += 1           # fresh diagram for a fresh ontology
 
 onto = ss.onto
 if onto is None:
     if source == "Ossie YAML" and ss.get("ossie_report") is not None:
         st.title("Apache Ossie validation")
-        st.caption(f"File: **{ss.ossie_report.file_name}** · fix what the report flags, then "
-                   "**Load Ossie model** to edit it as a network.")
+        nxt = ("**Load Ossie model** in the sidebar to edit it as a network." if ss.ossie_report.ok
+               else "fix what the report flags, then **Load Ossie model** to edit it as a network.")
+        st.caption(f"File: **{ss.ossie_report.file_name}** · {nxt}")
         ossie_ui.report_view(ss.ossie_report, key="landing")
         st.stop()
     st.title("Ontology Studio")

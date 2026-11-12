@@ -24,6 +24,7 @@ import streamlit as st
 import yaml
 
 from modules import discovery, governance as gv, governance_ui as gui, ontology_edit as ed, ossie, ossie_ui
+from modules.dictionary_ui import dictionary_tab
 from modules import semantics, store
 from modules import metric_views as mv
 from modules.extractors import from_sql_script, from_sqlite_file, is_sqlite_bytes
@@ -386,10 +387,10 @@ m[6].metric("Domains", len(onto.get("domains", [])))
 for w in onto.get("warnings", [])[:8]:
     st.warning(w)
 
-(tab_net, tab_home, tab_yaml, tab_ossie, tab_mv, tab_sem, tab_know, tab_review, tab_tables, tab_ask,
+(tab_net, tab_home, tab_dict, tab_yaml, tab_ossie, tab_mv, tab_sem, tab_know, tab_review, tab_tables, tab_ask,
  tab_mon) = st.tabs(
-    ["🕸️ Network", "🏠 Domains", "Ontology YAML", "Apache Ossie", "Metric views", "Semantic layer",
-     "📚 Knowledge", "✅ Review queue", "Tables", "Ask (Text-to-SQL)", "📈 Monitor"])
+    ["🕸️ Network", "🏠 Domains", "📘 Data dictionary", "Ontology YAML", "Apache Ossie", "Metric views",
+     "Semantic layer", "📚 Knowledge", "✅ Review queue", "Tables", "Ask (Text-to-SQL)", "📈 Monitor"])
 
 # =========================================================================== #
 # Network + inspector
@@ -794,6 +795,8 @@ with tab_tables:
 # =========================================================================== #
 with tab_home:
     gui.home_tab(onto, ss.get("runner", {}), uc_runner, ON_DATABRICKS)
+with tab_dict:
+    dictionary_tab(onto, ss.get("runner", {}), uc_runner, ON_DATABRICKS)
 with tab_know:
     gui.knowledge_tab(onto, ss.get("runner", {}), uc_runner, ON_DATABRICKS)
 with tab_review:

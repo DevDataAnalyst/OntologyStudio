@@ -314,6 +314,19 @@ Traces live in the session. Set `TELEMETRY_TABLE` to a `catalog.schema.table` an
 
 **Not built, because a Databricks App can't do it:** Genie Search (the managed enterprise search index over Gmail, SharePoint, Confluence and Google Drive), learning from Power BI / Tableau / SharePoint documents, the Workday connector and org chart, Unity AI Gateway tool policies and hard budget caps for Genie itself, and traces of Genie's own agents. The studio's versions cover its own Ask requests and the data in Unity Catalog and system tables.
 
+### 9. 📘 Data dictionary for Power BI developers
+
+The **📘 Data dictionary** tab shows each data object the way a Power BI developer needs it. Search finds tables, columns, measures and pages by business word ("country", "freight", "ship date"). The model overview lists every table with its role, rows, grain, recommended storage mode, last change and owner. Opening a table shows:
+
+- **The table:** source (`catalog.schema.table`, table or view), grain ("one row per order and product combination"), role, rows, size and last change (from `DESCRIBE DETAIL` and `information_schema.tables`), owner, domains, certification, lineage, and a storage-mode recommendation (Import, Import + incremental refresh, or DirectQuery/composite, by size). Modeling warnings cover multi-column keys, missing or inferred keys, views, self-referencing hierarchies and always-empty columns.
+- **Columns:** Power BI name, SQL type → Power BI data type (Fixed decimal for money, Date for text dates), kind (key, foreign key, date, measure source, attribute), Summarize by, Hide, format string, data category (Country/Region, City, Postal Code…), the column it references, Q&A synonyms, and the profile: null %, distinct count, min/max and samples. Notes flag foreign keys with blanks, 0/1 flags, codes that look like amounts, high-cardinality text, money stored as floating point and date/time columns to split.
+- **Relationships:** the Power BI relationships to create (*:1, single direction), role-playing tables and dates set inactive with the `USERELATIONSHIP` pattern, many-to-many through a bridge, suggested keys, and a **Check now** button that counts rows with an empty or unmatched key (the rows that turn into (Blank)).
+- **Measures (DAX):** the ontology's metrics translated from SQL to DAX (`SUM`/`SUMX`, `RELATED` across *:1 joins, `DIVIDE`, `COUNTROWS`, `DISTINCTCOUNT`, `SWITCH`), with format strings, display folders and optional YTD / prior year / YoY %. The script pastes into DAX query view ("Update model with changes"). Metrics that can't be translated, or that add up a key, are flagged.
+- **Power Query (M):** a script for the Databricks connector that navigates to the table, keeps the useful columns, renames them and sets types, with an optional incremental-refresh filter.
+- **Usage and docs:** how people query the table (learned snippets by authority), who to ask, pages, code values and business rules.
+
+**Take it to Power BI** downloads a starter kit (data dictionary in Markdown, tables/columns/relationships/measures CSVs, `measures.dax`, a Date table and one `.pq` script per table). Profiling (row counts, nulls, distinct values, min/max) needs the build's profiling option; without it the dictionary still shows types, keys, relationships and measures.
+
 ---
 
 ## Architecture
@@ -445,6 +458,7 @@ Push your changes, then deploy again to pick them up. Databricks' **Auto deploy 
 | To | Grant |
 |---|---|
 | Run anything | `CAN USE` on the SQL warehouse |
+| See table size and last change in the data dictionary | `SELECT` on the table (for `DESCRIBE DETAIL`) |
 | Analyze tables | `USE CATALOG`, `USE SCHEMA` and `SELECT` on them |
 | See lineage | `SELECT` on `system.access.table_lineage` and `system.access.column_lineage` |
 | Mine joins and learned snippets from query history | `SELECT` on `system.query.history`. The SQL text is redacted unless the user is an account admin or in the `databricks_pii_access` group. |
@@ -555,9 +569,12 @@ modules/snippets.py             Learned snippets from query history / logs, auth
 modules/review.py               Review queue, promotion of snippets, page drafts
 modules/telemetry.py            Ask traces, feedback, token cost, budgets, warehouse spend
 modules/governance_ui.py        Domains, Knowledge, Review queue, Ask and Monitor tabs
+modules/powerbi.py              Power BI view: types, column settings, grain, relationships, SQL→DAX, M, starter kit
+modules/dictionary_ui.py        📘 Data dictionary tab
 tests/test_ossie.py             Ossie checks and round trip (python tests/test_ossie.py)
 tests/test_governance.py        Domains, snippets, review queue, governance round trip through Ossie
 tests/test_ask.py               Ask engine: Decimal-safe prompts, focus, JSON answers, self-correction
+tests/test_powerbi.py           Data dictionary: Power BI types, settings, relationships, DAX, M, starter kit
 samples/                        Sample databases, scripts, docs and their generated outputs
 ```
 

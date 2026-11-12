@@ -436,6 +436,11 @@ def refresh_index(onto: dict) -> dict:
             add(m.get("name", "").replace("_", " "), f"{kind[:-1]}:{m.get('name')}")
             for syn in m.get("synonyms", []):
                 add(syn, f"{kind[:-1]}:{m.get('name')}")
+    for pg in onto.get("pages", []):
+        if pg.get("status") != "deprecated":
+            add(pg.get("title"), f"page:{pg.get('id')}")
+            for syn in pg.get("synonyms") or []:
+                add(syn, f"page:{pg.get('id')}")
     for vm in onto.get("value_meanings", []):
         for code, meaning in (vm.get("values") or {}).items():
             if meaning:

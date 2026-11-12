@@ -23,7 +23,8 @@ import pandas as pd
 import streamlit as st
 import yaml
 
-from modules import discovery, ontology_edit as ed, ossie, ossie_ui, semantics, store
+from modules import discovery, governance as gv, governance_ui as gui, ontology_edit as ed, ossie, ossie_ui
+from modules import semantics, store
 from modules import metric_views as mv
 from modules.extractors import from_sql_script, from_sqlite_file, is_sqlite_bytes
 from modules.graph_component import handle_event, network
@@ -286,6 +287,12 @@ def build():
         attach_lineage(onto, lineage)
     semantics.classify(onto)
     onto.setdefault("ontology", {})["discovery_notes"] = notes or None
+    gv.ensure(onto)
+    if source == "Unity Catalog":               # domains / certification already tagged in UC
+        status.write("Reading ontology tags…")
+        n_tagged = gv.apply_uc_tags(onto, gv.read_uc_tags(run, selected_fqns))
+        if n_tagged:
+            status.write(f"{n_tagged} table(s) carry domain / certification tags.")
     if enrich:
         bar.progress(0.8, "LLM enrichment…")
         docs = {f.name: f.getvalue().decode("utf-8-sig", errors="replace") for f in docs_files or []}
@@ -339,6 +346,8 @@ if go:
     ss.graph_key += 1           # fresh diagram for a fresh ontology
 
 onto = ss.onto
+if onto is not None:
+    gv.ensure(onto)
 if onto is None:
     if source == "Ossie YAML" and ss.get("ossie_report") is not None:
         st.title("Apache Ossie validation")
@@ -366,19 +375,21 @@ n_rel = sum(1 for p in ops.values() if p.get("join") and p["cardinality"] != "on
     - sum(1 for p in ops.values() if p["cardinality"] == "many-to-many") // 2
 pending = [s for s in onto.get("suggested_relationships", []) if s.get("status") == "proposed"]
 roles = pd.Series([c.get("role", "entity") for c in classes.values()]).value_counts().to_dict()
-m = st.columns(6)
+m = st.columns(7)
 m[0].metric("Classes", len(classes))
 m[1].metric("Facts / Dims", f"{roles.get('fact', 0)} / {roles.get('dimension', 0)}")
 m[2].metric("Relationships", n_rel)
 m[3].metric("Suggestions", len(pending))
 m[4].metric("Lineage edges", len(onto.get("lineage", {}).get("tables", [])))
 m[5].metric("Metrics", len(onto.get("metrics", [])))
+m[6].metric("Domains", len(onto.get("domains", [])))
 for w in onto.get("warnings", [])[:8]:
     st.warning(w)
 
-tab_net, tab_yaml, tab_ossie, tab_mv, tab_sem, tab_tables, tab_ask = st.tabs(
-    ["🕸️ Network", "Ontology YAML", "Apache Ossie", "Metric views", "Semantic layer", "Tables",
-     "Ask (Text-to-SQL)"])
+(tab_net, tab_home, tab_yaml, tab_ossie, tab_mv, tab_sem, tab_know, tab_review, tab_tables, tab_ask,
+ tab_mon) = st.tabs(
+    ["🕸️ Network", "🏠 Domains", "Ontology YAML", "Apache Ossie", "Metric views", "Semantic layer",
+     "📚 Knowledge", "✅ Review queue", "Tables", "Ask (Text-to-SQL)", "📈 Monitor"])
 
 # =========================================================================== #
 # Network + inspector
@@ -419,9 +430,16 @@ with tab_net:
                                     if c.get("role", "entity") in ROLES else 2)
                 desc = st.text_area("Description", c.get("description", "") or "", height=70)
                 syn = st.text_input("Synonyms (comma separated)", ", ".join(c.get("synonyms", [])))
+                doms = st.text_input("Domains (comma separated)", ", ".join(c.get("domains") or []))
+                cert = c.get("certification") or {}
+                g1, g2 = st.columns(2)
+                cstatus = g1.selectbox("Status", gv.STATUSES, index=gv.STATUSES.index(cert.get("status", "draft")))
+                cowner = g2.text_input("Owner", cert.get("owner") or "")
                 if st.form_submit_button("Apply", type="primary"):
                     ed.update_class(onto, cid, role=role, description=desc,
                                     synonyms=syn.split(",") if syn else [])
+                    gv.certify(onto, "class", cid, cstatus, owner=cowner or None, by=gui.current_user(),
+                               domains=[d for d in doms.split(",") if d.strip()])
                     if new_name != cid:
                         try:
                             new = ed.rename_class(onto, cid, new_name)
@@ -772,39 +790,15 @@ with tab_tables:
                                    for s in onto["suggested_relationships"]]), hide_index=True, width="stretch")
 
 # =========================================================================== #
-# Ask
+# Governed + learned knowledge, Ask, Monitor
 # =========================================================================== #
+with tab_home:
+    gui.home_tab(onto, ss.get("runner", {}), uc_runner, ON_DATABRICKS)
+with tab_know:
+    gui.knowledge_tab(onto, ss.get("runner", {}), uc_runner, ON_DATABRICKS)
+with tab_review:
+    gui.review_tab(onto, ON_DATABRICKS)
 with tab_ask:
-    runner = ss.get("runner", {})
-    st.markdown("Ask a business question; the Foundation Model writes SQL **from the ontology** "
-                "(optionally side by side with a schema-only baseline).")
-    if not ON_DATABRICKS:
-        st.info("Needs the Foundation Model endpoint — available when running on Databricks.")
-    q = st.text_input("Question", placeholder="e.g. Net sales by customer segment last month")
-    compare = st.checkbox("Compare with schema-only (baseline)", value=True)
-    if st.button("Ask", disabled=not (q and ON_DATABRICKS)):
-        from modules.ask import generate_sql, is_read_only, run_on_sqlite
-        modes = ["ontology", "baseline"] if compare else ["ontology"]
-        for col, mode in zip(st.columns(len(modes)), modes):
-            with col:
-                st.markdown("**With ontology**" if mode == "ontology" else "**Baseline (schema only)**")
-                try:
-                    sql = generate_sql(q, onto, mode, runner.get("dialect") or "sqlite")
-                except Exception as e:  # noqa: BLE001
-                    st.error(f"SQL generation failed: {e}")
-                    continue
-                st.code(sql, language="sql")
-                if not is_read_only(sql):
-                    st.warning("Not a single read-only query — not executed.")
-                    continue
-                try:
-                    if runner.get("kind") == "sqlite":
-                        res = run_on_sqlite(sql, db_bytes=open(runner["path"], "rb").read())
-                    elif runner.get("kind") == "uc":
-                        res = uc_runner()(sql)
-                    else:
-                        st.caption("No live data for this source — SQL shown only.")
-                        continue
-                    st.dataframe(res, hide_index=True, width="stretch")
-                except Exception as e:  # noqa: BLE001
-                    st.error(f"Query failed: {e}")
+    gui.ask_tab(onto, ss.get("runner", {}), uc_runner, ON_DATABRICKS)
+with tab_mon:
+    gui.monitor_tab(uc_runner, ON_DATABRICKS)

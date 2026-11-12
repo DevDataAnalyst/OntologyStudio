@@ -14,6 +14,8 @@ Every SQL statement runs **as the signed-in user** (on-behalf-of-user authorizat
 
 The workflow is **Connect → Analyze → Edit → Export**. An **Ask** tab then shows whether the ontology actually helps an LLM: it writes SQL for the same question with and without the ontology, side by side.
 
+On top of the modeled ontology, the studio keeps it governed and learning: **domains** that narrow what Ask searches, **certified** metrics and tables, governed wiki **pages**, **learned snippets** mined from query history with an authority score, a **review queue** that proposes what to promote or certify, and a **monitor** with request traces, feedback, cost and per-user budgets. See [Govern and learn](#7-govern-and-learn-domains-certification-pages-learned-snippets).
+
 No Databricks workspace handy? The same engine runs locally on a SQLite file or a `.sql` script, in the app or from a [command-line interface](#command-line-interface).
 
 <p align="center">
@@ -251,6 +253,60 @@ As in the reference validator, the semantic checks run once the schema errors ar
 
 **Export.** The **Apache Ossie** tab exports any ontology as `0.3.0.dev0`. Join columns become declared fields, many-to-many relationships become their junction dataset plus two relationships, and code meanings go into `ai_context`. Studio-only details (roles, aggregations, rules, provenance, optionally the layout) travel in `nonportable_extensions` under `ONTOLOGY_STUDIO`, so a round trip through Ossie loses nothing. The export is validated before you download it.
 
+### 7. Govern and learn: domains, certification, pages, learned snippets
+
+These features follow the ideas in Databricks' Genie ontology (a curated, *modeled* head plus a *learned* tail), built from what a Databricks App can reach: Unity Catalog, system tables and the SQL warehouse.
+
+**🏠 Domains (ontology home).** A domain is a tag for a logical group of assets: Sales, Finance, Supply chain, a region. Subdomains have a parent (`Supply chain/Logistics`), and a table can live in several domains. **✨ Suggest domains** guesses them from table names and joins (a fact takes the domain of the dimensions it references); metrics and rules inherit their base class's domains. The home tab shows a domain map with the tables, metrics, pages and snippets of each domain, and lets you assign tables, certify them and set owners. **Unity Catalog tags** writes `ontology_domain`, `ontology_certification` and `ontology_owner` tags on the source tables (`ALTER TABLE … SET TAGS`, needs `APPLY TAG`), and **Read tags** loads them back; analysis also reads them, so domains tagged once show up in every new ontology.
+
+**Governed metrics.** Every metric, rule, page and table has a status: `draft`, `certified` or `deprecated`, with an owner and who certified it when. Ask marks certified definitions `certified: true` so the model prefers them, and never sends deprecated ones. Editing a certified metric sets it back to draft.
+
+**📚 Pages.** A page is the qualitative counterpart of a metric: a governed Markdown wiki page that explains a concept (net vs gross revenue, what "late" means). Pages have domains, an owner, a status, synonyms and links to classes, metrics and rules. Certified pages go into the Ask prompt first. Download them all as a zip of Markdown files with front matter.
+
+**🧠 Learned snippets.** The studio parses the SQL people actually run (sqlglot) into snippets:
+
+| Kind | Example |
+|---|---|
+| join | `OrderDetail.ProductID = Product.ProductID` |
+| filter | `Order.ShippedDate > Order.RequiredDate` (each `WHERE` condition) |
+| expression | `SUM(OrderDetail.UnitPrice * OrderDetail.Quantity * (1 - OrderDetail.Discount))` named `net_revenue` |
+
+Sources: `system.query.history` for the ontology's tables (with `executed_by` and `query_source`, so it knows whether a query came from a dashboard, Genie space, notebook, job, alert or the SQL editor), an uploaded `.sql` / `.csv` query log, and Ask answers that got a 👍. Each snippet gets an **authority score** from 0 to 1, a transparent weighted blend shown for every snippet:
+
+| Signal | Weight | Meaning |
+|---|---|---|
+| popularity | 0.30 | how often it is used (log scale) |
+| reach | 0.20 | how many different people use it |
+| author | 0.15 | how authoritative its authors are: volume of work, how much of it is shared, how often others reuse their snippets, plus a +0.3 boost for **trusted authors** you name |
+| sharing | 0.15 | share of uses in shared assets (dashboards, Genie spaces, jobs, alerts) |
+| documented | 0.10 | someone explained it in a SQL comment |
+| recency | 0.10 | halves every 90 days |
+
+Snippets with authority ≥ 0.35 (or promoted ones) go into the Ask prompt as examples of how colleagues query the data. **🧑‍🏫 Experts** ranks people per table by authority-weighted use, so you know whom to ask. Try it with **Sample: Northwind query log** ([`samples/query_logs/northwind_query_log.csv`](samples/query_logs/northwind_query_log.csv), 60 queries by five people) on a Northwind SQLite database.
+
+**✅ Review queue.** The studio proposes what an admin should promote, certify or explain, highest priority first:
+
+| Item | Fires when | Actions |
+|---|---|---|
+| 🔥 Popular snippet | authority ≥ 0.5 and not yet a relationship, metric or rule | promote to metric / rule / relationship, draft a page, dismiss |
+| ⚖️ Conflicting definitions | one name with several formulas (`net_revenue` vs `revenue`) | draft a page that settles it, certify one metric (the others are deprecated) |
+| 📝 Needs certification | a draft metric, rule or page that Ask uses, or that came from the LLM, a snippet or a review | certify with an owner, deprecate |
+| 👎 Feedback hotspot | 👎 or failed Ask requests, clustered by domain and the tables their SQL touched | draft a page |
+| 🕳️ Knowledge gap | words asked about twice or more that match nothing in the ontology | draft a page |
+| 🗂️ No domain | tables without a domain (domain-scoped questions skip them) | suggest domains |
+
+Drafted pages use the Foundation Model when **Draft pages with the LLM** is on, otherwise a template filled with the evidence. They arrive as drafts, so they come back to the queue for certification.
+
+### 8. Monitor: traces, feedback, cost and budgets
+
+**Ask** has a **domain scope**: only that domain's tables (plus the tables they join to), metrics, rules, pages and snippets go to the model, and the tab shows how much smaller the prompt is. Every request is traced; rate answers with 👍 / 👎 and a note.
+
+**📈 Monitor** lists the traces with filters (user, domain, status, feedback), and opens any request step by step: scope, the assets in the prompt, model call (tokens, time), warehouse run (rows, time), result. It charts model cost per user and tokens per domain, using editable prices per million input and output tokens. A **daily token budget per user** makes Ask refuse new questions once a user has spent it. **Load warehouse cost** reads `system.billing.usage` and `system.billing.list_prices` for the app's SQL warehouse and splits the spend per user by their share of query time in `system.query.history`.
+
+Traces live in the session. Set `TELEMETRY_TABLE` to a `catalog.schema.table` and every trace is also written to that Delta table as the user (created if missing), so traces survive restarts, budgets hold across sessions and you can build dashboards on them.
+
+**Not built, because a Databricks App can't do it:** Genie Search (the managed enterprise search index over Gmail, SharePoint, Confluence and Google Drive), learning from Power BI / Tableau / SharePoint documents, the Workday connector and org chart, Unity AI Gateway tool policies and hard budget caps for Genie itself, and traces of Genie's own agents. The studio's versions cover its own Ask requests and the data in Unity Catalog and system tables.
+
 ---
 
 ## Architecture
@@ -259,14 +315,15 @@ As in the reference validator, the semantic checks run once the schema errors ar
 flowchart LR
     U(["Signed-in user"])
     subgraph APP["Databricks App · Streamlit (app.py)"]
-        UI["Sidebar: Connect · Analyze<br/>Tabs: Network · YAML · Apache Ossie<br/>Metric views · Semantic layer · Tables · Ask"]
+        UI["Sidebar: Connect · Analyze<br/>Tabs: Network · Domains · YAML · Apache Ossie<br/>Metric views · Semantic layer · Knowledge<br/>Review queue · Tables · Ask · Monitor"]
         ENG["Engine (modules/)"]
         UI --> ENG
     end
     U --> UI
     ENG -- "SQL as the user" --> WH[("SQL warehouse")]
     WH --> UCT["Unity Catalog<br/>information_schema · your tables"]
-    WH --> SYS["System tables<br/>access.table_lineage · access.column_lineage<br/>query.history"]
+    WH --> SYS["System tables<br/>access.table_lineage · access.column_lineage<br/>query.history · billing.usage"]
+    WH --> TEL[("Delta table<br/>Ask traces (optional)")]
     ENG -- "app service principal" --> FM["Foundation Model endpoint"]
     ENG -- "as the user, else the app service principal" --> VOL[("UC Volume<br/>ontology versions")]
 ```
@@ -282,6 +339,8 @@ uc.py / extractors.py  →  DatabaseSchema
   → graph_component.py + ontology_edit.py   diagram and edits
   → metric_views.py / store.py              exports and versions
 ossie/validator.py + ossie/convert.py       Apache Ossie checks, import and export
+governance.py  domains, certification, pages, UC tags      snippets.py  learned snippets + authority
+review.py      review queue, promotion, page drafts         telemetry.py traces, cost, budgets
 ```
 
 ### Who runs what
@@ -381,7 +440,10 @@ Push your changes, then deploy again to pick them up. Databricks' **Auto deploy 
 | Run anything | `CAN USE` on the SQL warehouse |
 | Analyze tables | `USE CATALOG`, `USE SCHEMA` and `SELECT` on them |
 | See lineage | `SELECT` on `system.access.table_lineage` and `system.access.column_lineage` |
-| Mine joins from query history | `SELECT` on `system.query.history`. The SQL text is redacted unless the user is an account admin or in the `databricks_pii_access` group. |
+| Mine joins and learned snippets from query history | `SELECT` on `system.query.history`. The SQL text is redacted unless the user is an account admin or in the `databricks_pii_access` group. |
+| Write or read domain / certification tags | `APPLY TAG` on the tables (write); tags are read from `information_schema.table_tags` |
+| Keep Ask traces in a table | `CREATE TABLE` on the schema of `TELEMETRY_TABLE` the first time, then `MODIFY` and `SELECT` on the table |
+| See warehouse cost | `SELECT` on `system.billing.usage` and `system.billing.list_prices` |
 | Deploy metric views | `CREATE TABLE` on the target schema |
 | Save versions with their own identity | `READ VOLUME` / `WRITE VOLUME` on the Volume (with the `files.files` scope) |
 
@@ -400,6 +462,9 @@ A missing grant only switches off that signal. The app shows a warning and carri
 | `TARGET_CATALOG` / `TARGET_SCHEMA` | `main` / `default` | Catalog and schema pre-selected in the picker. Optional. |
 | `ONTOLOGY_STORE` | empty (off) | A Volume path such as `/Volumes/main/ontology/store` to save and reload versions. Optional. |
 | `STREAMLIT_SERVER_MAX_UPLOAD_SIZE` | `500` | Upload limit in MB. |
+| `TELEMETRY_TABLE` | empty (off) | `catalog.schema.table` to keep Ask traces and feedback in a Delta table. Optional. |
+| `ASK_DAILY_TOKEN_BUDGET` | `0` (no cap) | Default daily token budget per user for Ask; editable in the Monitor tab. Optional. |
+| `FM_PRICE_PER_M_INPUT` / `FM_PRICE_PER_M_OUTPUT` | `0.50` / `1.50` | USD per million tokens used for cost estimates. Optional. |
 
 The app knows it is on Databricks when the Apps runtime sets `DATABRICKS_APP_NAME` (or `DATABRICKS_HOST`). Without them, the Unity Catalog source, lineage, query history, LLM enrichment and the Ask tab are switched off.
 
@@ -453,6 +518,7 @@ Value-overlap checks run when the input can be loaded into SQLite. Validation no
 | `samples/ossie/retail_star.ossie.yaml` | The retail sample exported to Ossie `0.3.0.dev0` by the app. |
 | `samples/ossie/sales_analytics_0.2.0.dev0.yaml` | A model in the former `0.2.0.dev0` shape: passes with a warning and offers the upgrade. |
 | `samples/ossie/broken_example.ossie.yaml`, `semantic_errors.ossie.yaml` | Deliberately broken files: schema errors, then semantic errors (references, arity, scoping, SQL). |
+| `samples/query_logs/northwind_query_log.csv` | 60 Northwind queries by five people from dashboards, notebooks, Genie spaces, a job and the SQL editor, with comments, a popular `net_revenue` and a competing naive `revenue`, for learned snippets and the review queue. |
 
 ## Project layout
 
@@ -477,7 +543,13 @@ modules/llm_enrich.py           Optional LLM semantic layer
 modules/ask.py                  Text-to-SQL test bench (ontology vs. baseline)
 modules/ossie/                  Apache Ossie validator, converter and bundled official schemas
 modules/ossie_ui.py             Validation report views
+modules/governance.py           Domains and subdomains, certification, pages, Unity Catalog tags, domain scoping
+modules/snippets.py             Learned snippets from query history / logs, authority score, experts
+modules/review.py               Review queue, promotion of snippets, page drafts
+modules/telemetry.py            Ask traces, feedback, token cost, budgets, warehouse spend
+modules/governance_ui.py        Domains, Knowledge, Review queue, Ask and Monitor tabs
 tests/test_ossie.py             Ossie checks and round trip (python tests/test_ossie.py)
+tests/test_governance.py        Domains, snippets, review queue, governance round trip through Ossie
 samples/                        Sample databases, scripts, docs and their generated outputs
 ```
 
@@ -487,7 +559,8 @@ samples/                        Sample databases, scripts, docs and their genera
 - **Parameterized SQL.** Values go through named parameters. Catalog, schema and table names are checked against `[A-Za-z0-9_-]` and back-quoted.
 - **Read-only Ask.** Generated SQL runs only if it is a single `SELECT` or `WITH` statement.
 - **What the LLM sees.** Enrichment sends class, column and relationship names, comments, sample values and enumerations, plus the documents you upload, to the serving endpoint in your workspace. Turn off profiling for tables whose values should not be in a prompt.
-- **Provenance.** Classes, columns, relationships, code meanings, rules and metrics carry a `provenance` tag: `schema`, `profile`, `inferred`, `discovered`, `heuristic`, `manual`, `docs/<file>` or `llm`.
+- **Provenance.** Classes, columns, relationships, code meanings, rules and metrics carry a `provenance` tag: `schema`, `profile`, `inferred`, `discovered`, `heuristic`, `manual`, `docs/<file>`, `llm`, `learned` (promoted from a snippet) or `review` (drafted from the review queue).
+- **Learned snippets keep names.** Snippets store who ran each query (`executed_by`) and where. They are saved with the ontology, so treat saved versions and Ossie exports like query history.
 - **Uploaded Ossie files are data.** They are read with a safe YAML loader, their SQL is only parsed (never run), and their text is escaped before the diagram shows it.
 - **No CDN.** D3.js ships with the app, so the diagram loads nothing from the internet.
 
@@ -495,7 +568,6 @@ samples/                        Sample databases, scripts, docs and their genera
 
 Ideas the current design leaves room for, none of them built yet:
 
-- a certification workflow (draft, reviewed, certified) for terms, joins and metrics,
 - a golden question set that re-runs the Ask comparison on every ontology change,
 - an answerability check that asks for clarification when a question uses a concept the ontology lacks,
 - converters from Ossie to other semantic layers (dbt, LookML, Power BI),

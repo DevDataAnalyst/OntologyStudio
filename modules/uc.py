@@ -181,26 +181,26 @@ def _profile_table(run, t: Table, enum_max: int) -> None:
     fq = bq(*t.full_name.split("."))
     cols = [c for c in t.columns if not _COMPLEX.search(c.sql_type)][:120]
     if not cols:
-        t.row_count = int(run(f"SELECT COUNT(*) AS n FROM {fq}").iloc[0, 0])
+        t.row_count = int(run(f"SELECT /* ontology-studio */ COUNT(*) AS n FROM {fq}").iloc[0, 0])
         return
     sel = ", ".join([f"COUNT(*) AS `__n`"]
                     + [f"approx_count_distinct(`{c.name}`) AS `d{i}`" for i, c in enumerate(cols)]
                     + [f"COUNT(`{c.name}`) AS `nn{i}`" for i, c in enumerate(cols)])
-    stats = run(f"SELECT {sel} FROM {fq}").iloc[0]
+    stats = run(f"SELECT /* ontology-studio */ {sel} FROM {fq}").iloc[0]
     t.row_count = int(stats["__n"])
     if not t.row_count:
         return
     for i, c in enumerate(cols):
         c.distinct_count = int(stats[f"d{i}"])
         c.non_null_count = int(stats[f"nn{i}"])
-    sample = run(f"SELECT {', '.join(f'`{c.name}`' for c in cols)} FROM {fq} LIMIT 200")
+    sample = run(f"SELECT /* ontology-studio */ {', '.join(f'`{c.name}`' for c in cols)} FROM {fq} LIMIT 200")
     for c in cols:
         c.samples = sample[c.name].dropna().drop_duplicates().head(5).tolist()
     enum_cols = [c for c in cols if c.distinct_count and c.distinct_count <= enum_max
                  and re.search(r"STRING|CHAR", c.sql_type)]
     if enum_cols:
         sel = ", ".join(f"array_sort(collect_set(`{c.name}`)) AS `e{i}`" for i, c in enumerate(enum_cols))
-        row = run(f"SELECT {sel} FROM {fq}").iloc[0]
+        row = run(f"SELECT /* ontology-studio */ {sel} FROM {fq}").iloc[0]
         for i, c in enumerate(enum_cols):
             vals = list(row[f"e{i}"]) if row[f"e{i}"] is not None else []
             if 0 < len(vals) <= enum_max:

@@ -87,7 +87,7 @@ def test_sql_to_dax():
     dax, _ = pb.sql_to_dax(onto, "OrderDetail", "SUM(UnitPrice * Quantity * (1 - Discount))")
     assert dax == ("SUMX('Order Detail', 'Order Detail'[Unit Price] * 'Order Detail'[Quantity] * "
                    "(1 - 'Order Detail'[Discount]))")
-    assert pb.sql_to_dax(onto, "Order", "COUNT(DISTINCT CustomerID)")[0] == "DISTINCTCOUNT('Order'[Customer ID])"
+    assert pb.sql_to_dax(onto, "Order", "COUNT(DISTINCT CustomerID)")[0] == "DISTINCTCOUNTNOBLANK('Order'[Customer ID])"
     assert pb.sql_to_dax(onto, "Order", "COUNT(*)")[0] == "COUNTROWS('Order')"
     assert pb.sql_to_dax(onto, "Order", "SUM(Freight) / COUNT(1)")[0] == "DIVIDE(SUM('Order'[Freight]), COUNTROWS('Order'))"
     dax, _ = pb.sql_to_dax(onto, "OrderDetail", "SUM(CASE WHEN Product.Discontinued = 1 THEN Quantity ELSE 0 END)")
@@ -111,7 +111,8 @@ def test_power_query_and_starter_kit():
     assert '{[Name = "silver", Kind = "Schema"]}' in m and '{"CustomerID", "Customer ID"}' in m
     assert '{"Freight", Currency.Type}' in m
     m2 = pb.power_query_m(onto, "Order", incremental=True)
-    assert "RangeStart" in m2 and "[OrderDate] >= RangeStart" in m2
+    assert "[Order Date] >= Date.From(RangeStart)" in m2 and m2.index("Typed =") < m2.index("Window =")
+    assert m2.rstrip().endswith("Window")
     kit = zipfile.ZipFile(io.BytesIO(pb.starter_kit(onto)))
     names = set(kit.namelist())
     assert {"data_dictionary.md", "columns.csv", "relationships.csv", "measures.dax", "date_table.dax",

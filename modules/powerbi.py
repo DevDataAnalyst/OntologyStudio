@@ -663,7 +663,7 @@ class _Dax:
             if isinstance(a, exp.Distinct):
                 e = a.expressions
                 if len(e) == 1 and isinstance(e[0], exp.Column):
-                    return f"DISTINCTCOUNT({self._dc(e[0])})"
+                    return f"DISTINCTCOUNTNOBLANK({self._dc(e[0])})"  # SQL ignores NULLs
                 raise Untranslatable("COUNT(DISTINCT expression)")
             if isinstance(a, exp.Column) and self.look.get((a.table or "").lower(), self.base) == self.base:
                 return f"COUNT({self.col(a, True)})"
@@ -868,18 +868,22 @@ def power_query_m(onto: dict, cid: str, host: str = "<workspace-host>", http_pat
         f"    Kept = Table.SelectColumns(Data, {{{keep}}}),",
     ]
     last = "Kept"
-    if incremental and card["main_date"]:
-        d = card["main_date"]
-        steps.append(f"    // incremental refresh: create DateTime parameters RangeStart and RangeEnd first")
-        steps.append(f"    Window = Table.SelectRows({last}, each [{d}] >= RangeStart and [{d}] < RangeEnd),")
-        last = "Window"
     if ren:
         steps.append(f"    Renamed = Table.RenameColumns({last}, {{{ren}}}),")
         last = "Renamed"
     steps.append(f"    Typed = Table.TransformColumnTypes({last}, {{{typ}}})")
+    last = "Typed"
+    if incremental and card["main_date"]:            # filter after typing: text dates can't compare to DateTime
+        d = next((r["Column"].strip() for r in rows if r["Source column"] == card["main_date"]), card["main_date"])
+        dtype = next((r["Power BI type"] for r in rows if r["Source column"] == card["main_date"]), "Date")
+        lo, hi = ("Date.From(RangeStart)", "Date.From(RangeEnd)") if dtype == "Date" else ("RangeStart", "RangeEnd")
+        steps[-1] += ","
+        steps.append("    // incremental refresh: create DateTime parameters RangeStart and RangeEnd first")
+        steps.append(f"    Window = Table.SelectRows(Typed, each [{d}] >= {lo} and [{d}] < {hi})")
+        last = "Window"
     head = (f"// {card['table']}: {card['grain']}\n// Source: {card['source']}  ·  storage: {card['storage_mode']}\n"
             f"// Query name in Power BI: {card['table']}\n")
-    return head + "let\n" + "\n".join(steps) + "\nin\n    Typed\n"
+    return head + "let\n" + "\n".join(steps) + f"\nin\n    {last}\n"
 
 
 # --------------------------------------------------------------------------- #

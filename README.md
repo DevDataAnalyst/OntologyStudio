@@ -358,6 +358,22 @@ ossie/validator.py + ossie/convert.py       Apache Ossie checks, import and expo
 
 To ship a change, repeat steps 4 and 5.
 
+### Or deploy straight from GitHub
+
+Databricks can read the code from this repository instead of a workspace folder, so steps 1, 4 and 5 go away.
+
+1. Open the app, click the arrow next to **Deploy** and pick **From Git** (or set the repository under **App settings**). Repository `https://github.com/DevDataAnalyst/OntologyStudio` (or your fork), provider **GitHub**, Git reference `main`, reference type **Branch**.
+2. **Leave Source code path empty.** `app.yaml` sits at the repository root, and the field only takes a folder inside the repository. A file such as `main/app.py` fails with *"No command to run and no Python file found"*, and a GitHub URL fails with *"Sparse checkout pattern must a valid folder path"*.
+3. Click **Deploy**. Databricks deploys the latest commit on `main`.
+
+The same deploy from the CLI, once the app's Git repository is set:
+
+```bash
+databricks apps deploy ontology-studio --json '{"git_source": {"branch": "main"}}'
+```
+
+Push your changes, then deploy again to pick them up. Databricks' **Auto deploy on push events** only works with a private repository that has the Databricks GitHub app installed; it doesn't support public repositories.
+
 ### Permissions users need
 
 | To | Grant |

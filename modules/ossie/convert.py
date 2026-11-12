@@ -461,7 +461,7 @@ def _class_from_dataset(ds: dict, cid: str) -> dict:
     if uks:
         entry["unique_keys"] = uks
     entry["provenance"] = sx.get("provenance", "ossie")
-    for k in ("instance_count", "identifier_inferred"):
+    for k in ("instance_count", "identifier_inferred", "table_meta", "column_profile"):
         if k in sx:
             entry[k] = sx[k]
     if sx.get("role") in ("fact", "dimension", "entity", "bridge"):
@@ -745,7 +745,7 @@ def from_ontology(onto: dict, include_studio: bool = True, include_layout: bool 
         if include_studio:
             sx = {k: c.get(k) for k in ("role", "instance_count", "provenance", "identifier_inferred", "source_kind")
                   if c.get(k) is not None}
-            sx.update({k: c[k] for k in ("domains", "certification") if c.get(k)})
+            sx.update({k: c[k] for k in ("domains", "certification", "table_meta", "column_profile") if c.get(k)})
             if sx:
                 exts.append({"vendor_name": STUDIO_VENDOR, "data": _jsonable(sx)})
         if exts:

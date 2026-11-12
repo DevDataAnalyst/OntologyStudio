@@ -281,6 +281,20 @@ def _build(schema: DatabaseSchema, opts: BuildOptions) -> dict:
             entry["provenance"] = "schema+comment" if t.comment else "schema"
         if getattr(t, "pk_inferred", False):
             entry["identifier_inferred"] = True
+        meta = {k: getattr(t, k) for k in ("table_type", "owner", "created", "last_altered", "storage_format",
+                                           "size_bytes") if getattr(t, k, None) not in (None, "")}
+        if meta:
+            entry["table_meta"] = meta
+        prof = {}
+        fk_target = {c.lower(): f"{fk.ref_table}.{(fk.ref_columns or [''])[i] if i < len(fk.ref_columns or []) else ''}"
+                     for fk in t.foreign_keys for i, c in enumerate(fk.columns)}
+        for c in t.columns:                 # every column, FK columns included: the data dictionary needs them
+            d = {"sql_type": c.sql_type or None, "nullable": c.nullable,
+                 "primary_key": c.primary_key or None, "foreign_key": fk_target.get(c.name.lower()),
+                 "distinct": c.distinct_count, "non_null": c.non_null_count,
+                 "min": c.min_value, "max": c.max_value, "comment": c.comment}
+            prof[c.name] = {k: v for k, v in d.items() if v is not None}
+        entry["column_profile"] = prof
         entry["data_properties"] = data_props
         classes[cls] = entry
 

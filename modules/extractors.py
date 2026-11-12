@@ -76,6 +76,11 @@ def _introspect_sqlite(conn: sqlite3.Connection, name: str, source_type: str,
                         c.distinct_count = n
                         c.non_null_count = conn.execute(
                             f"SELECT COUNT({_q(c.name)}) FROM {_q(tname)}").fetchone()[0]
+                        if n and not re.search(r"BLOB|BINARY", c.sql_type or "", re.I) and (
+                                re.search(r"INT|REAL|NUM|DEC|FLOAT|DOUBLE|MONEY|DATE|TIME", c.sql_type or "", re.I)
+                                or re.search(r"date|time", c.name, re.I)):
+                            c.min_value, c.max_value = conn.execute(
+                                f"SELECT MIN({_q(c.name)}), MAX({_q(c.name)}) FROM {_q(tname)}").fetchone()
                         if n and not re.search(r"BLOB|BINARY", c.sql_type or ""):
                             c.samples = [
                                 r[0] for r in conn.execute(

@@ -182,9 +182,11 @@ def warehouse_cost(run, warehouse_id: str, days: int = 30):
         "AND start_time >= current_timestamp() - make_dt_interval(:d) "
         "GROUP BY executed_by ORDER BY seconds DESC", {"w": warehouse_id, "d": int(days)})
     import pandas as pd
-    for df, cols in ((daily, ("dbus", "usd")), (users, ("queries", "seconds"))):
+    for df, cols in ((daily, ("dbus", "usd")), (users, ("seconds",))):
         for c in cols:
             df[c] = pd.to_numeric(df[c], errors="coerce").astype(float)
+    if len(users):
+        users["queries"] = pd.to_numeric(users["queries"], errors="coerce").fillna(0).astype(int)
     total = float(daily["usd"].fillna(0).sum()) if len(daily) else 0.0
     secs = float(users["seconds"].fillna(0).sum()) if len(users) else 0.0
     if len(users):

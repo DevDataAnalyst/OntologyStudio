@@ -129,6 +129,15 @@ def save_trace(run, trace: dict) -> str | None:
         return f"Trace not saved to {TELEMETRY_TABLE}: {str(e)[:200]}"
 
 
+def tokens_today_stored(run, user: str) -> int:
+    """Tokens the user spent today according to TELEMETRY_TABLE (all sessions)."""
+    if not table_enabled():
+        return 0
+    df = run(f"SELECT COALESCE(SUM(prompt_tokens + completion_tokens), 0) AS t FROM {_bq(TELEMETRY_TABLE)} "
+             "WHERE `user` = :u AND `ts` >= current_date()", {"u": user})
+    return int(float(df.iloc[0, 0] or 0)) if len(df) else 0
+
+
 def load_traces(run, days: int = 30, limit: int = 5000) -> list[dict]:
     if not table_enabled():
         return []

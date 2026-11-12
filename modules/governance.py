@@ -199,20 +199,21 @@ def suggest_domains(onto: dict, overwrite: bool = False, max_per_class: int = 2)
 
 
 def inherit_metric_domains(onto: dict, overwrite: bool = False) -> None:
-    """Metrics and rules without domains take the domains of their base class(es)."""
+    """Metrics and rules without domains take the domains of their base class(es). Inherited domains
+    (marked `domains_inherited`) follow the class when it moves; explicitly assigned ones are kept."""
     classes = onto.get("classes", {})
     for m in onto.get("metrics", []):
-        if overwrite or not m.get("domains"):
+        if overwrite or not m.get("domains") or m.get("domains_inherited"):
             doms = classes.get(m.get("base_class"), {}).get("domains") or []
-            if doms:
-                m["domains"] = list(doms)
+            if doms or m.get("domains_inherited"):
+                m["domains"], m["domains_inherited"] = list(doms), True
     for r in onto.get("rules", []):
-        if overwrite or not r.get("domains"):
+        if overwrite or not r.get("domains") or r.get("domains_inherited"):
             doms = []
             for cid in r.get("applies_to") or []:
                 doms += [d for d in classes.get(cid, {}).get("domains") or [] if d not in doms]
-            if doms:
-                r["domains"] = doms
+            if doms or r.get("domains_inherited"):
+                r["domains"], r["domains_inherited"] = doms, True
 
 
 def set_class_domains(onto: dict, cid: str, domains: list[str]) -> None:
@@ -323,6 +324,10 @@ def certify(onto: dict, kind: str, key: str, status: str, owner: str | None = No
                 if d not in domain_names(onto):
                     upsert_domain(onto, d)
             a["domains"] = list(dict.fromkeys(domains))
+            if kind in ("metric", "rule") and a.get("domains_inherited"):
+                base = find_asset(onto, "class", a.get("base_class") or "") or {}
+                if kind == "rule" or a["domains"] != (base.get("domains") or []):
+                    a.pop("domains_inherited", None)     # explicitly assigned now
 
 
 def governance_stats(onto: dict) -> dict:

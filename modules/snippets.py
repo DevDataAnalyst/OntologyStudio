@@ -368,37 +368,58 @@ def score(snips: list[dict], trusted: dict[str, float] | None = None,
     return snips
 
 
-def merge_into(onto: dict, new: list[dict], replace_source: bool = False) -> dict:
-    """Merge mined snippets into onto['snippets'], keeping review decisions (status, promoted_to)
-    of snippets already there. Evidence is summed for snippets seen before unless replace_source.
+EVIDENCE_KEYS = ("uses", "users", "sources", "names", "assets", "comments", "first_seen", "last_seen")
+
+
+def _totals(s: dict) -> None:
+    """Snippet totals = sum of its evidence over ingestions (each ingestion counted once)."""
+    ev = list((s.get("evidence") or {}).values())
+    s["uses"] = sum(e.get("uses", 0) for e in ev)
+    for k in ("users", "sources", "names"):
+        c = Counter()
+        for e in ev:
+            c.update(e.get(k) or {})
+        s[k] = dict(c.most_common())
+    s["assets"] = sorted({a for e in ev for a in e.get("assets") or []})[:20]
+    s["comments"] = list(dict.fromkeys(c for e in ev for c in e.get("comments") or []))[:3]
+    s["first_seen"] = min((e["first_seen"] for e in ev if e.get("first_seen")), default=None)
+    s["last_seen"] = max((e["last_seen"] for e in ev if e.get("last_seen")), default=None)
+    s["name"] = next(iter(s["names"]), None) if s["names"] else s.get("name")
+
+
+def merge_into(onto: dict, new: list[dict], ingest: str = "default") -> dict:
+    """Merge mined snippets into onto['snippets']. Evidence is kept per ingestion key (e.g.
+    "query_history", "file:<sha1>", "ask:<trace id>"): re-learning from the same source replaces its
+    evidence instead of counting it twice. Review decisions (status, promoted_to) are kept.
     Domains come from the snippet's classes. Returns counts."""
     cur = {s["id"]: s for s in onto.setdefault("snippets", [])}
     added = updated = 0
+    for s in cur.values():                       # the new run of this source replaces the old one
+        if s.get("evidence") is None:            # snippets saved before evidence tracking
+            s["evidence"] = {"legacy": {k: s.get(k) for k in EVIDENCE_KEYS}}
+        s["evidence"].pop(ingest, None)
     for s in new:
+        ev = {k: s.get(k) for k in EVIDENCE_KEYS}
         old = cur.get(s["id"])
         if old is None:
-            s["status"] = "learned"
+            s = {k: v for k, v in s.items() if k not in EVIDENCE_KEYS}
+            s.update({"status": "learned", "evidence": {ingest: ev}})
             cur[s["id"]] = s
             added += 1
-            continue
-        if not replace_source:
-            s["uses"] += old.get("uses", 0)
-            for k in ("users", "sources", "names"):
-                merged = Counter(old.get(k) or {})
-                merged.update(s.get(k) or {})
-                s[k] = dict(merged.most_common())
-            s["comments"] = list(dict.fromkeys((old.get("comments") or []) + s["comments"]))[:3]
-            s["assets"] = sorted(set(old.get("assets") or []) | set(s["assets"]))[:20]
-            s["first_seen"] = min(filter(None, [old.get("first_seen"), s["first_seen"]]), default=None)
-            s["last_seen"] = max(filter(None, [old.get("last_seen"), s["last_seen"]]), default=None)
-        for k in ("status", "promoted_to", "dismissed_reason"):
-            if old.get(k):
-                s[k] = old[k]
-        cur[s["id"]] = s
-        updated += 1
+        else:
+            old["evidence"][ingest] = ev
+            for k in ("bare", "classes", "columns"):
+                old[k] = s.get(k, old.get(k))
+            updated += 1
+    for sid in [k for k, s in cur.items() if not s["evidence"]]:
+        if cur[sid].get("status") == "learned":    # no evidence left and never reviewed
+            cur.pop(sid)
+        else:
+            cur[sid]["evidence"] = {"legacy": {"uses": 0}}
     snips = list(cur.values())
     classes = onto.get("classes", {})
     for s in snips:
+        _totals(s)
         doms = []
         for cid in s.get("classes") or []:
             doms += [d for d in classes.get(cid, {}).get("domains") or [] if d not in doms]

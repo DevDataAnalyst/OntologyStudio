@@ -172,3 +172,34 @@ def test_budget_and_cost():
     assert tm.over_budget([t], "ana", 500_000) and not tm.over_budget([t], "bob", 500_000)
     assert sn.classify_source('{"dashboard_id": "abc"}') == ("dashboard", "abc")
     assert sn.classify_source(None, "Databricks SQL Editor")[0] == "sql_editor"
+
+
+def test_relearning_the_same_source_does_not_double_count():
+    onto = learned(northwind())
+    uses = {s["id"]: s["uses"] for s in onto["snippets"]}
+    recs = sn.records_from_file("northwind_query_log.csv",
+                                (ROOT / "samples" / "query_logs" / "northwind_query_log.csv").read_bytes())
+    sn.merge_into(onto, sn.mine(recs, onto, dialect="sqlite"))          # same ingest key again
+    assert {s["id"]: s["uses"] for s in onto["snippets"]} == uses
+    sn.merge_into(onto, sn.mine(recs[:5], onto, dialect="sqlite"), ingest="file:other")
+    assert sum(s["uses"] for s in onto["snippets"]) > sum(uses.values())
+
+
+def test_inherited_domains_follow_the_class_but_explicit_ones_stay():
+    onto = northwind()
+    gv.suggest_domains(onto)
+    m = next(x for x in onto["metrics"] if x["base_class"] == "Order")
+    gv.set_class_domains(onto, "Order", ["Finance"])
+    gv.inherit_metric_domains(onto)
+    assert m["domains"] == ["Finance"]
+    gv.certify(onto, "metric", m["name"], "draft", domains=["Sales"])
+    gv.set_class_domains(onto, "Order", ["Logistics"])
+    gv.inherit_metric_domains(onto)
+    assert m["domains"] == ["Sales"]
+
+
+def test_deprecated_tables_never_reach_the_model():
+    onto = northwind()
+    gv.certify(onto, "class", "Shipper", "deprecated")
+    ctx = build_context("", onto)
+    assert "Shippers" not in ctx

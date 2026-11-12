@@ -35,14 +35,21 @@ def ontology_context(onto: dict, snippets: list[dict] | None = None, max_page_ch
                                      "rules", "metrics")}
     for k in ("suggested_relationships", "lineage", "layout"):
         keep.pop(k, None)
+    retired = {cid for cid, c in (keep["classes"] or {}).items()
+               if (c.get("certification") or {}).get("status") == "deprecated"}
+    if retired:                                         # deprecated tables never reach the model
+        keep["classes"] = {cid: c for cid, c in keep["classes"].items() if cid not in retired}
+        keep["object_properties"] = {pid: p for pid, p in (keep["object_properties"] or {}).items()
+                                     if p.get("domain") not in retired and p.get("range") not in retired}
+        keep["metrics"] = [m for m in keep.get("metrics") or [] if m.get("base_class") not in retired]
+        keep["rules"] = [r for r in keep.get("rules") or [] if not set(r.get("applies_to") or []) & retired]
+        keep["value_meanings"] = [v for v in keep.get("value_meanings") or [] if v.get("class") not in retired]
     for c in (keep["classes"] or {}).values():          # trim noise the model doesn't need
         c.pop("instance_count", None)
         c.pop("source_columns", None)
         c.pop("ossie", None)                            # Apache Ossie round-trip details
         c.pop("domains", None)
-        cert = c.pop("certification", None) or {}
-        if cert.get("status") == "deprecated":
-            c["deprecated"] = True
+        c.pop("certification", None)
         for p in c.get("data_properties", {}).values():
             for k in ("label", "cardinality", "sql_type", "provenance", "ossie"):
                 p.pop(k, None)

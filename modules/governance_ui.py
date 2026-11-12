@@ -298,14 +298,14 @@ def _snippets(onto, runner, uc_runner, on_databricks):
         srcs = (["Query history (Unity Catalog)"] if runner.get("kind") == "uc" and on_databricks else []) + \
             ["Query log file (.sql / .csv)", "Sample: Northwind query log"]
         src = st.radio("Source", srcs, horizontal=True, key="snip_src")
-        recs, warn = None, []
+        recs, warn, ingest = None, [], "default"
         if src.startswith("Query history"):
             days = st.slider("Window (days)", 7, 365, 90, key="snip_days")
             if st.button("🧠 Learn", type="primary", key="learn_uc"):
                 fqns = [c["source_fqn"] for c in onto["classes"].values() if c.get("source_fqn")]
                 with st.spinner("Reading system.query.history…"):
                     res = sn.read_query_history(uc_runner(), fqns, days)
-                recs, warn = res["records"], res["warnings"]
+                recs, warn, ingest = res["records"], res["warnings"], "query_history"
         elif src.startswith("Query log"):
             f = st.file_uploader("Queries", type=["sql", "csv", "txt"], key="snip_file",
                                  help="CSV columns: statement_text, executed_by, source (dashboard / notebook / genie "
@@ -313,6 +313,7 @@ def _snippets(onto, runner, uc_runner, on_databricks):
             if f is not None and st.button("🧠 Learn", type="primary", key="learn_file"):
                 try:
                     recs = sn.records_from_file(f.name, f.getvalue())
+                    ingest = "file:" + __import__("hashlib").sha1(f.getvalue()).hexdigest()[:12]
                 except Exception as e:  # noqa: BLE001
                     st.error(str(e))
         else:
@@ -321,7 +322,7 @@ def _snippets(onto, runner, uc_runner, on_databricks):
             if st.button("🧠 Learn from the sample", type="primary", key="learn_sample"):
                 import pathlib
                 p = pathlib.Path(__file__).resolve().parents[1] / "samples" / "query_logs" / "northwind_query_log.csv"
-                recs = sn.records_from_file(p.name, p.read_bytes())
+                recs, ingest = sn.records_from_file(p.name, p.read_bytes()), "file:northwind-sample"
         for w in warn:
             st.warning(w)
         if recs is not None:
@@ -329,7 +330,7 @@ def _snippets(onto, runner, uc_runner, on_databricks):
             mined = sn.mine(recs, onto, dialect=dialect if dialect != "auto" else "databricks")
             if not mined and dialect != "databricks":
                 mined = sn.mine(recs, onto, dialect="databricks")
-            res = sn.merge_into(onto, mined)
+            res = sn.merge_into(onto, mined, ingest=ingest)
             _commit(onto, f"{len(recs)} queries → {res['added']} new, {res['updated']} updated snippets")
         trusted = st.text_input("Trusted authors (comma separated, +0.3 author authority)",
                                 _csv(list((onto.get("trusted_authors") or {}).keys())), key="trusted")
@@ -643,7 +644,13 @@ def ask_tab(onto: dict, runner: dict, uc_runner, on_databricks: bool):
                   if scope_dom != "All domains" else ""))
     q = st.text_input("Question", placeholder="e.g. Net revenue by category last year", key="ask_q")
     budget = int(ss.get("token_budget", tm.DEFAULT_DAILY_TOKEN_BUDGET) or 0)
-    blocked = tm.over_budget(traces(), user, budget)
+    used = tm.tokens_today(traces(), user)
+    if budget and on_databricks and tm.table_enabled():     # include earlier sessions' traces
+        try:
+            used = max(used, tm.tokens_today_stored(uc_runner(), user))
+        except Exception:  # noqa: BLE001
+            pass
+    blocked = bool(budget) and used >= budget
     if blocked:
         st.error(f"You have used your daily budget of {budget:,} tokens. An admin can raise it in Monitor.")
     if st.button("Ask", type="primary", disabled=not (q and on_databricks) or blocked):
@@ -722,7 +729,7 @@ def _feedback(onto, t, value, note, uc_runner, on_databricks):
     if value == "up" and t.get("sql") and t["mode"] == "ontology":
         dialect = (ss.get("runner") or {}).get("dialect") or "databricks"
         mined = sn.mine([sn.ask_record(t["question"], t["sql"], t["user"])], onto, dialect=dialect)
-        sn.merge_into(onto, mined)
+        sn.merge_into(onto, mined, ingest=f"ask:{t['id']}")
     if on_databricks and tm.table_enabled():
         tm.save_trace(uc_runner(), t)
     _commit(onto, "Feedback saved")

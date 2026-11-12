@@ -55,6 +55,10 @@ _IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 # --------------------------------------------------------------------------- #
 # small helpers
 # --------------------------------------------------------------------------- #
+GOVERNANCE_KEYS = ("domains", "status", "owner", "certified_by", "certified_at", "learned_from")
+MODEL_GOVERNANCE_KEYS = ("domains", "pages", "snippets", "trusted_authors", "review_dismissed")
+
+
 def _list(v) -> list:
     return v if isinstance(v, list) else []
 
@@ -300,6 +304,9 @@ def to_ontology(doc: dict, file_name: str = "", base_iri: str = "http://example.
             st["nonportable_extensions"] = _foreign_exts(m)
         entry = {"name": nm, "description": m.get("description") or "", "base_class": base,
                  "sql": sql or "", "provenance": _studio(m).get("provenance", "ossie"), "ossie": st}
+        for k in GOVERNANCE_KEYS:                       # domains / certification saved by the studio
+            if _studio(m).get(k) is not None:
+                entry[k] = _jsonable(_studio(m)[k])
         if _synonyms(m):
             entry["synonyms"] = _synonyms(m)
         metrics.append(entry)
@@ -369,6 +376,7 @@ def to_ontology(doc: dict, file_name: str = "", base_iri: str = "http://example.
         "value_meanings": _jsonable(_list(studio.get("value_meanings"))),
         "rules": _jsonable(_list(studio.get("rules"))),
         "metrics": metrics,
+        **{k: _jsonable(studio[k]) for k in MODEL_GOVERNANCE_KEYS if studio.get(k)},
         "suggested_relationships": [],
         "lineage": {"tables": [], "columns": []},
         "ossie": model_stash,
@@ -404,6 +412,9 @@ def _class_from_dataset(ds: dict, cid: str) -> dict:
     syn = _synonyms(ds)
     if syn:
         entry["synonyms"] = syn
+    for k in ("domains", "certification"):
+        if sx.get(k):
+            entry[k] = _jsonable(sx[k])
     pk = [str(x) for x in _list(ds.get("primary_key"))]
     pk_fold = {x.casefold() for x in pk}
     props: dict = {}
@@ -691,7 +702,8 @@ def from_ontology(onto: dict, include_studio: bool = True, include_layout: bool 
         if out is None:
             continue
         if include_studio:
-            sx = {"base_class": m.get("base_class"), "provenance": m.get("provenance")}
+            sx = {"base_class": m.get("base_class"), "provenance": m.get("provenance"),
+                  **{k: m.get(k) for k in GOVERNANCE_KEYS}}
             out.setdefault("nonportable_extensions", []).append(
                 {"vendor_name": STUDIO_VENDOR, "data": _jsonable({k: v for k, v in sx.items() if v})})
         if scope == "dataset":
@@ -733,6 +745,7 @@ def from_ontology(onto: dict, include_studio: bool = True, include_layout: bool 
         if include_studio:
             sx = {k: c.get(k) for k in ("role", "instance_count", "provenance", "identifier_inferred", "source_kind")
                   if c.get(k) is not None}
+            sx.update({k: c[k] for k in ("domains", "certification") if c.get(k)})
             if sx:
                 exts.append({"vendor_name": STUDIO_VENDOR, "data": _jsonable(sx)})
         if exts:
@@ -759,6 +772,9 @@ def from_ontology(onto: dict, include_studio: bool = True, include_layout: bool 
             sx["rules"] = onto["rules"]
         if include_layout and onto.get("layout"):
             sx["layout"] = onto["layout"]
+        for k in MODEL_GOVERNANCE_KEYS:                 # domains, pages, learned snippets, review state
+            if onto.get(k):
+                sx[k] = onto[k]
         exts.append({"vendor_name": STUDIO_VENDOR, "data": _jsonable(sx)})
     if exts:
         doc["nonportable_extensions"] = exts

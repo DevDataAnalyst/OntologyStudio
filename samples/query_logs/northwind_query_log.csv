@@ -1,0 +1,254 @@
+start_time,executed_by,source,source_id,statement_text
+2026-09-01 09:53:00,intern.joe,sql_editor,,"SELECT p.ProductName, SUM(od.UnitPrice * od.Quantity) AS revenue
+FROM ""Order Details"" od JOIN Products p ON od.ProductID = p.ProductID
+GROUP BY p.ProductName"
+2026-09-03 15:22:00,ana.ruiz,genie,genie_sales,"-- Sales credited to the employee who took the order
+SELECT e.LastName, COUNT(DISTINCT o.OrderID) AS orders_taken
+FROM Orders o JOIN Employees e ON o.EmployeeID = e.EmployeeID
+WHERE o.OrderDate >= '1997-01-01'
+GROUP BY e.LastName"
+2026-09-04 09:27:00,chung.lee,dashboard,dash_sales_exec,"-- Net revenue = price x quantity after discount (finance-approved definition)
+SELECT c.CategoryName, SUM(od.UnitPrice * od.Quantity * (1 - od.Discount)) AS net_revenue
+FROM ""Order Details"" od JOIN Products p ON od.ProductID = p.ProductID
+JOIN Categories c ON p.CategoryID = c.CategoryID
+GROUP BY c.CategoryName"
+2026-09-05 12:41:00,chung.lee,dashboard,dash_sales_team,"-- Sales credited to the employee who took the order
+SELECT e.LastName, COUNT(DISTINCT o.OrderID) AS orders_taken
+FROM Orders o JOIN Employees e ON o.EmployeeID = e.EmployeeID
+WHERE o.OrderDate >= '1997-01-01'
+GROUP BY e.LastName"
+2026-09-05 17:07:00,chung.lee,dashboard,dash_sales_exec,"-- Net revenue = price x quantity after discount (finance-approved definition)
+SELECT c.CategoryName, SUM(od.UnitPrice * od.Quantity * (1 - od.Discount)) AS net_revenue
+FROM ""Order Details"" od JOIN Products p ON od.ProductID = p.ProductID
+JOIN Categories c ON p.CategoryID = c.CategoryID
+GROUP BY c.CategoryName"
+2026-09-06 09:32:00,ana.ruiz,dashboard,dash_customers,"SELECT cu.Country, cu.CompanyName, SUM(od.UnitPrice * od.Quantity * (1 - od.Discount)) AS net_revenue
+FROM Orders o JOIN Customers cu ON o.CustomerID = cu.CustomerID
+JOIN ""Order Details"" od ON od.OrderID = o.OrderID
+GROUP BY cu.Country, cu.CompanyName"
+2026-09-06 17:03:00,ana.ruiz,dashboard,dash_logistics,"-- Late = shipped after the required date
+SELECT o.ShipCountry, COUNT(*) AS late_orders
+FROM Orders o
+WHERE o.ShippedDate > o.RequiredDate
+GROUP BY o.ShipCountry"
+2026-09-07 12:30:00,intern.joe,sql_editor,,"SELECT p.ProductName, SUM(od.UnitPrice * od.Quantity) AS revenue
+FROM ""Order Details"" od JOIN Products p ON od.ProductID = p.ProductID
+GROUP BY p.ProductName"
+2026-09-07 16:27:00,chung.lee,dashboard,dash_sales_exec,"-- Net revenue = price x quantity after discount (finance-approved definition)
+SELECT c.CategoryName, SUM(od.UnitPrice * od.Quantity * (1 - od.Discount)) AS net_revenue
+FROM ""Order Details"" od JOIN Products p ON od.ProductID = p.ProductID
+JOIN Categories c ON p.CategoryID = c.CategoryID
+GROUP BY c.CategoryName"
+2026-09-08 16:45:00,ana.ruiz,dashboard,dash_logistics,"-- Late = shipped after the required date
+SELECT o.ShipCountry, COUNT(*) AS late_orders
+FROM Orders o
+WHERE o.ShippedDate > o.RequiredDate
+GROUP BY o.ShipCountry"
+2026-09-08 17:36:00,ana.ruiz,dashboard,dash_logistics,"-- Late = shipped after the required date
+SELECT o.ShipCountry, COUNT(*) AS late_orders
+FROM Orders o
+WHERE o.ShippedDate > o.RequiredDate
+GROUP BY o.ShipCountry"
+2026-09-09 17:19:00,sam.patel,notebook,nb_category_deepdive,"-- Net revenue = price x quantity after discount (finance-approved definition)
+SELECT c.CategoryName, SUM(od.UnitPrice * od.Quantity * (1 - od.Discount)) AS net_revenue
+FROM ""Order Details"" od JOIN Products p ON od.ProductID = p.ProductID
+JOIN Categories c ON p.CategoryID = c.CategoryID
+GROUP BY c.CategoryName"
+2026-09-10 14:55:00,chung.lee,dashboard,dash_sales_exec,"-- Average order value: net revenue per distinct order
+SELECT SUM(od.UnitPrice * od.Quantity * (1 - od.Discount)) / COUNT(DISTINCT od.OrderID) AS avg_order_value
+FROM ""Order Details"" od"
+2026-09-11 09:11:00,ana.ruiz,genie,genie_sales,"-- Average order value: net revenue per distinct order
+SELECT SUM(od.UnitPrice * od.Quantity * (1 - od.Discount)) / COUNT(DISTINCT od.OrderID) AS avg_order_value
+FROM ""Order Details"" od"
+2026-09-11 11:42:00,ana.ruiz,genie,genie_sales,"-- Average order value: net revenue per distinct order
+SELECT SUM(od.UnitPrice * od.Quantity * (1 - od.Discount)) / COUNT(DISTINCT od.OrderID) AS avg_order_value
+FROM ""Order Details"" od"
+2026-09-12 15:25:00,sam.patel,notebook,nb_inventory,"SELECT p.ProductName, p.UnitsInStock
+FROM Products p
+WHERE p.Discontinued = 0 AND p.UnitsInStock < p.ReorderLevel"
+2026-09-12 17:07:00,mo.khan,job,job_reorder_alert,"SELECT p.ProductName, p.UnitsInStock
+FROM Products p
+WHERE p.Discontinued = 0 AND p.UnitsInStock < p.ReorderLevel"
+2026-09-13 11:05:00,mo.khan,sql_editor,,"-- Late = shipped after the required date
+SELECT o.ShipCountry, COUNT(*) AS late_orders
+FROM Orders o
+WHERE o.ShippedDate > o.RequiredDate
+GROUP BY o.ShipCountry"
+2026-09-16 08:35:00,ana.ruiz,dashboard,dash_sales_exec,"-- Net revenue = price x quantity after discount (finance-approved definition)
+SELECT c.CategoryName, SUM(od.UnitPrice * od.Quantity * (1 - od.Discount)) AS net_revenue
+FROM ""Order Details"" od JOIN Products p ON od.ProductID = p.ProductID
+JOIN Categories c ON p.CategoryID = c.CategoryID
+GROUP BY c.CategoryName"
+2026-09-16 18:40:00,ana.ruiz,dashboard,dash_sales_exec,"-- Net revenue = price x quantity after discount (finance-approved definition)
+SELECT c.CategoryName, SUM(od.UnitPrice * od.Quantity * (1 - od.Discount)) AS net_revenue
+FROM ""Order Details"" od JOIN Products p ON od.ProductID = p.ProductID
+JOIN Categories c ON p.CategoryID = c.CategoryID
+GROUP BY c.CategoryName"
+2026-09-21 11:50:00,mo.khan,sql_editor,,"-- Late = shipped after the required date
+SELECT o.ShipCountry, COUNT(*) AS late_orders
+FROM Orders o
+WHERE o.ShippedDate > o.RequiredDate
+GROUP BY o.ShipCountry"
+2026-09-22 10:25:00,chung.lee,dashboard,dash_sales_exec,"-- Net revenue = price x quantity after discount (finance-approved definition)
+SELECT c.CategoryName, SUM(od.UnitPrice * od.Quantity * (1 - od.Discount)) AS net_revenue
+FROM ""Order Details"" od JOIN Products p ON od.ProductID = p.ProductID
+JOIN Categories c ON p.CategoryID = c.CategoryID
+GROUP BY c.CategoryName"
+2026-09-23 10:59:00,sam.patel,notebook,nb_churn,"SELECT cu.Country, cu.CompanyName, SUM(od.UnitPrice * od.Quantity * (1 - od.Discount)) AS net_revenue
+FROM Orders o JOIN Customers cu ON o.CustomerID = cu.CustomerID
+JOIN ""Order Details"" od ON od.OrderID = o.OrderID
+GROUP BY cu.Country, cu.CompanyName"
+2026-09-25 17:03:00,chung.lee,dashboard,dash_sales_exec,"-- Net revenue = price x quantity after discount (finance-approved definition)
+SELECT c.CategoryName, SUM(od.UnitPrice * od.Quantity * (1 - od.Discount)) AS net_revenue
+FROM ""Order Details"" od JOIN Products p ON od.ProductID = p.ProductID
+JOIN Categories c ON p.CategoryID = c.CategoryID
+GROUP BY c.CategoryName"
+2026-09-26 18:22:00,ana.ruiz,genie,genie_sales,"-- Sales credited to the employee who took the order
+SELECT e.LastName, COUNT(DISTINCT o.OrderID) AS orders_taken
+FROM Orders o JOIN Employees e ON o.EmployeeID = e.EmployeeID
+WHERE o.OrderDate >= '1997-01-01'
+GROUP BY e.LastName"
+2026-09-27 15:05:00,mo.khan,job,job_reorder_alert,"SELECT p.ProductName, p.UnitsInStock
+FROM Products p
+WHERE p.Discontinued = 0 AND p.UnitsInStock < p.ReorderLevel"
+2026-09-28 09:15:00,chung.lee,dashboard,dash_sales_exec,"-- Net revenue = price x quantity after discount (finance-approved definition)
+SELECT c.CategoryName, SUM(od.UnitPrice * od.Quantity * (1 - od.Discount)) AS net_revenue
+FROM ""Order Details"" od JOIN Products p ON od.ProductID = p.ProductID
+JOIN Categories c ON p.CategoryID = c.CategoryID
+GROUP BY c.CategoryName"
+2026-09-28 10:34:00,sam.patel,notebook,nb_category_deepdive,"-- Net revenue = price x quantity after discount (finance-approved definition)
+SELECT c.CategoryName, SUM(od.UnitPrice * od.Quantity * (1 - od.Discount)) AS net_revenue
+FROM ""Order Details"" od JOIN Products p ON od.ProductID = p.ProductID
+JOIN Categories c ON p.CategoryID = c.CategoryID
+GROUP BY c.CategoryName"
+2026-09-28 10:48:00,sam.patel,notebook,nb_churn,"SELECT cu.Country, cu.CompanyName, SUM(od.UnitPrice * od.Quantity * (1 - od.Discount)) AS net_revenue
+FROM Orders o JOIN Customers cu ON o.CustomerID = cu.CustomerID
+JOIN ""Order Details"" od ON od.OrderID = o.OrderID
+GROUP BY cu.Country, cu.CompanyName"
+2026-09-28 13:43:00,chung.lee,dashboard,dash_sales_exec,"-- Average order value: net revenue per distinct order
+SELECT SUM(od.UnitPrice * od.Quantity * (1 - od.Discount)) / COUNT(DISTINCT od.OrderID) AS avg_order_value
+FROM ""Order Details"" od"
+2026-09-30 12:38:00,ana.ruiz,dashboard,dash_customers,"SELECT cu.Country, cu.CompanyName, SUM(od.UnitPrice * od.Quantity * (1 - od.Discount)) AS net_revenue
+FROM Orders o JOIN Customers cu ON o.CustomerID = cu.CustomerID
+JOIN ""Order Details"" od ON od.OrderID = o.OrderID
+GROUP BY cu.Country, cu.CompanyName"
+2026-09-30 12:45:00,chung.lee,dashboard,dash_sales_team,"-- Sales credited to the employee who took the order
+SELECT e.LastName, COUNT(DISTINCT o.OrderID) AS orders_taken
+FROM Orders o JOIN Employees e ON o.EmployeeID = e.EmployeeID
+WHERE o.OrderDate >= '1997-01-01'
+GROUP BY e.LastName"
+2026-10-03 08:13:00,mo.khan,job,job_reorder_alert,"SELECT p.ProductName, p.UnitsInStock
+FROM Products p
+WHERE p.Discontinued = 0 AND p.UnitsInStock < p.ReorderLevel"
+2026-10-03 13:46:00,ana.ruiz,dashboard,dash_customers,"SELECT cu.Country, cu.CompanyName, SUM(od.UnitPrice * od.Quantity * (1 - od.Discount)) AS net_revenue
+FROM Orders o JOIN Customers cu ON o.CustomerID = cu.CustomerID
+JOIN ""Order Details"" od ON od.OrderID = o.OrderID
+GROUP BY cu.Country, cu.CompanyName"
+2026-10-03 14:02:00,sam.patel,notebook,nb_churn,"SELECT cu.Country, cu.CompanyName, SUM(od.UnitPrice * od.Quantity * (1 - od.Discount)) AS net_revenue
+FROM Orders o JOIN Customers cu ON o.CustomerID = cu.CustomerID
+JOIN ""Order Details"" od ON od.OrderID = o.OrderID
+GROUP BY cu.Country, cu.CompanyName"
+2026-10-03 17:51:00,mo.khan,notebook,nb_freight,"SELECT s.CompanyName AS shipper, AVG(o.Freight) AS avg_freight, SUM(o.Freight) AS total_freight
+FROM Orders o JOIN Shippers s ON o.ShipVia = s.ShipperID
+GROUP BY s.CompanyName"
+2026-10-07 12:45:00,chung.lee,dashboard,dash_sales_exec,"-- Average order value: net revenue per distinct order
+SELECT SUM(od.UnitPrice * od.Quantity * (1 - od.Discount)) / COUNT(DISTINCT od.OrderID) AS avg_order_value
+FROM ""Order Details"" od"
+2026-10-07 12:56:00,chung.lee,dashboard,dash_sales_exec,"-- Average order value: net revenue per distinct order
+SELECT SUM(od.UnitPrice * od.Quantity * (1 - od.Discount)) / COUNT(DISTINCT od.OrderID) AS avg_order_value
+FROM ""Order Details"" od"
+2026-10-07 17:50:00,mo.khan,sql_editor,,"SELECT s.CompanyName AS shipper, AVG(o.Freight) AS avg_freight, SUM(o.Freight) AS total_freight
+FROM Orders o JOIN Shippers s ON o.ShipVia = s.ShipperID
+GROUP BY s.CompanyName"
+2026-10-07 18:11:00,ana.ruiz,dashboard,dash_logistics,"-- Late = shipped after the required date
+SELECT o.ShipCountry, COUNT(*) AS late_orders
+FROM Orders o
+WHERE o.ShippedDate > o.RequiredDate
+GROUP BY o.ShipCountry"
+2026-10-08 12:33:00,ana.ruiz,dashboard,dash_customers,"SELECT cu.Country, cu.CompanyName, SUM(od.UnitPrice * od.Quantity * (1 - od.Discount)) AS net_revenue
+FROM Orders o JOIN Customers cu ON o.CustomerID = cu.CustomerID
+JOIN ""Order Details"" od ON od.OrderID = o.OrderID
+GROUP BY cu.Country, cu.CompanyName"
+2026-10-08 18:52:00,chung.lee,dashboard,dash_sales_team,"-- Sales credited to the employee who took the order
+SELECT e.LastName, COUNT(DISTINCT o.OrderID) AS orders_taken
+FROM Orders o JOIN Employees e ON o.EmployeeID = e.EmployeeID
+WHERE o.OrderDate >= '1997-01-01'
+GROUP BY e.LastName"
+2026-10-09 08:36:00,ana.ruiz,dashboard,dash_sales_exec,"-- Net revenue = price x quantity after discount (finance-approved definition)
+SELECT c.CategoryName, SUM(od.UnitPrice * od.Quantity * (1 - od.Discount)) AS net_revenue
+FROM ""Order Details"" od JOIN Products p ON od.ProductID = p.ProductID
+JOIN Categories c ON p.CategoryID = c.CategoryID
+GROUP BY c.CategoryName"
+2026-10-09 14:03:00,ana.ruiz,dashboard,dash_sales_exec,"-- Net revenue = price x quantity after discount (finance-approved definition)
+SELECT c.CategoryName, SUM(od.UnitPrice * od.Quantity * (1 - od.Discount)) AS net_revenue
+FROM ""Order Details"" od JOIN Products p ON od.ProductID = p.ProductID
+JOIN Categories c ON p.CategoryID = c.CategoryID
+GROUP BY c.CategoryName"
+2026-10-09 15:23:00,chung.lee,genie,genie_ops,"-- Late = shipped after the required date
+SELECT o.ShipCountry, COUNT(*) AS late_orders
+FROM Orders o
+WHERE o.ShippedDate > o.RequiredDate
+GROUP BY o.ShipCountry"
+2026-10-11 11:31:00,ana.ruiz,dashboard,dash_logistics,"-- Late = shipped after the required date
+SELECT o.ShipCountry, COUNT(*) AS late_orders
+FROM Orders o
+WHERE o.ShippedDate > o.RequiredDate
+GROUP BY o.ShipCountry"
+2026-10-12 11:23:00,ana.ruiz,dashboard,dash_logistics,"-- Late = shipped after the required date
+SELECT o.ShipCountry, COUNT(*) AS late_orders
+FROM Orders o
+WHERE o.ShippedDate > o.RequiredDate
+GROUP BY o.ShipCountry"
+2026-10-13 08:04:00,chung.lee,dashboard,dash_sales_exec,"-- Net revenue = price x quantity after discount (finance-approved definition)
+SELECT c.CategoryName, SUM(od.UnitPrice * od.Quantity * (1 - od.Discount)) AS net_revenue
+FROM ""Order Details"" od JOIN Products p ON od.ProductID = p.ProductID
+JOIN Categories c ON p.CategoryID = c.CategoryID
+GROUP BY c.CategoryName"
+2026-10-14 09:48:00,mo.khan,sql_editor,,"SELECT s.CompanyName AS shipper, AVG(o.Freight) AS avg_freight, SUM(o.Freight) AS total_freight
+FROM Orders o JOIN Shippers s ON o.ShipVia = s.ShipperID
+GROUP BY s.CompanyName"
+2026-10-15 16:27:00,chung.lee,genie,genie_ops,"-- Late = shipped after the required date
+SELECT o.ShipCountry, COUNT(*) AS late_orders
+FROM Orders o
+WHERE o.ShippedDate > o.RequiredDate
+GROUP BY o.ShipCountry"
+2026-10-16 13:38:00,mo.khan,notebook,nb_freight,"SELECT s.CompanyName AS shipper, AVG(o.Freight) AS avg_freight, SUM(o.Freight) AS total_freight
+FROM Orders o JOIN Shippers s ON o.ShipVia = s.ShipperID
+GROUP BY s.CompanyName"
+2026-10-16 18:04:00,chung.lee,dashboard,dash_sales_team,"-- Sales credited to the employee who took the order
+SELECT e.LastName, COUNT(DISTINCT o.OrderID) AS orders_taken
+FROM Orders o JOIN Employees e ON o.EmployeeID = e.EmployeeID
+WHERE o.OrderDate >= '1997-01-01'
+GROUP BY e.LastName"
+2026-10-19 11:25:00,mo.khan,job,job_reorder_alert,"SELECT p.ProductName, p.UnitsInStock
+FROM Products p
+WHERE p.Discontinued = 0 AND p.UnitsInStock < p.ReorderLevel"
+2026-10-21 12:08:00,mo.khan,job,job_reorder_alert,"SELECT p.ProductName, p.UnitsInStock
+FROM Products p
+WHERE p.Discontinued = 0 AND p.UnitsInStock < p.ReorderLevel"
+2026-10-21 13:29:00,chung.lee,genie,genie_ops,"-- Late = shipped after the required date
+SELECT o.ShipCountry, COUNT(*) AS late_orders
+FROM Orders o
+WHERE o.ShippedDate > o.RequiredDate
+GROUP BY o.ShipCountry"
+2026-10-24 16:06:00,chung.lee,dashboard,dash_sales_exec,"-- Net revenue = price x quantity after discount (finance-approved definition)
+SELECT c.CategoryName, SUM(od.UnitPrice * od.Quantity * (1 - od.Discount)) AS net_revenue
+FROM ""Order Details"" od JOIN Products p ON od.ProductID = p.ProductID
+JOIN Categories c ON p.CategoryID = c.CategoryID
+GROUP BY c.CategoryName"
+2026-10-26 10:18:00,ana.ruiz,dashboard,dash_sales_exec,"-- Net revenue = price x quantity after discount (finance-approved definition)
+SELECT c.CategoryName, SUM(od.UnitPrice * od.Quantity * (1 - od.Discount)) AS net_revenue
+FROM ""Order Details"" od JOIN Products p ON od.ProductID = p.ProductID
+JOIN Categories c ON p.CategoryID = c.CategoryID
+GROUP BY c.CategoryName"
+2026-10-28 13:21:00,mo.khan,sql_editor,,"SELECT s.CompanyName AS shipper, AVG(o.Freight) AS avg_freight, SUM(o.Freight) AS total_freight
+FROM Orders o JOIN Shippers s ON o.ShipVia = s.ShipperID
+GROUP BY s.CompanyName"
+2026-10-28 14:14:00,chung.lee,dashboard,dash_sales_exec,"-- Average order value: net revenue per distinct order
+SELECT SUM(od.UnitPrice * od.Quantity * (1 - od.Discount)) / COUNT(DISTINCT od.OrderID) AS avg_order_value
+FROM ""Order Details"" od"
+2026-10-30 16:13:00,chung.lee,dashboard,dash_sales_exec,"-- Net revenue = price x quantity after discount (finance-approved definition)
+SELECT c.CategoryName, SUM(od.UnitPrice * od.Quantity * (1 - od.Discount)) AS net_revenue
+FROM ""Order Details"" od JOIN Products p ON od.ProductID = p.ProductID
+JOIN Categories c ON p.CategoryID = c.CategoryID
+GROUP BY c.CategoryName"

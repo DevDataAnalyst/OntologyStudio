@@ -200,6 +200,10 @@ def rename_class(onto: dict, old: str, new: str) -> str:
         for side in ("source", "target"):
             if e.get(side) == old:
                 e[side] = new
+    for sn in onto.get("snippets", []):                  # learned snippets keep their text, re-point classes
+        sn["classes"] = [new if x == old else x for x in sn.get("classes") or []]
+    for pg in onto.get("pages", []):
+        pg["links"] = [f"class:{new}" if x == f"class:{old}" else x for x in pg.get("links") or []]
     layout = onto.get("layout", {})
     if old in layout:
         layout[new] = layout.pop(old)
@@ -253,9 +257,12 @@ def update_property(onto: dict, cid: str, pid: str, *, semantic_role=None, aggre
 def upsert_metric(onto: dict, name: str, base_class: str, sql: str, description: str = "",
                   synonyms: list[str] | None = None) -> None:
     name = re.sub(r"\W+", "_", name.strip()).strip("_").lower()
-    metrics = [m for m in onto.setdefault("metrics", []) if m["name"] != name]
+    old = next((m for m in onto.setdefault("metrics", []) if m["name"] == name), {})
+    metrics = [m for m in onto["metrics"] if m["name"] != name]
+    keep = {k: old[k] for k in ("domains", "owner") if old.get(k)}   # governance survives an edit
     metrics.append({"name": name, "description": description, "base_class": base_class,
-                    "sql": sql, "synonyms": synonyms or [], "provenance": "manual"})
+                    "sql": sql, "synonyms": synonyms or [], "provenance": "manual", **keep,
+                    "status": "draft"})
     onto["metrics"] = metrics
     refresh_index(onto)
 

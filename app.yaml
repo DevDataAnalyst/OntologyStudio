@@ -18,3 +18,6 @@ env:
     value: ""
   - name: STREAMLIT_SERVER_MAX_UPLOAD_SIZE
     value: "500"
+  # Delta table (catalog.schema.table) for Ask traces and feedback (optional; empty = session only)
+  - name: TELEMETRY_TABLE
+    value: ""

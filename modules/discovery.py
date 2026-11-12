@@ -162,7 +162,7 @@ def verify_overlap(run_sql, ds: DatabaseSchema, cands: dict, table_ref, quote,
         if not A or not B or A.is_view or B.is_view:
             continue
         qa, qb = quote(cand["from_cols"][0]), quote(cand["to_cols"][0])
-        sql = (f"SELECT COUNT(*) AS n, SUM(CASE WHEN b.v IS NOT NULL THEN 1 ELSE 0 END) AS m FROM "
+        sql = (f"SELECT /* ontology-studio */ COUNT(*) AS n, SUM(CASE WHEN b.v IS NOT NULL THEN 1 ELSE 0 END) AS m FROM "
                f"(SELECT DISTINCT {qa} AS v FROM {table_ref(A)} WHERE {qa} IS NOT NULL LIMIT {sample}) a "
                f"LEFT JOIN (SELECT DISTINCT {qb} AS v FROM {table_ref(B)}) b ON a.v = b.v")
         try:

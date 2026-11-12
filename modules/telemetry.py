@@ -168,8 +168,8 @@ def warehouse_cost(run, warehouse_id: str, days: int = 30):
     """(daily DataFrame, per-user DataFrame). Daily: DBUs and list-price USD for the warehouse.
     Per user: share of query time on that warehouse, applied to the period's cost."""
     daily = run(
-        "SELECT u.usage_date, SUM(u.usage_quantity) AS dbus, "
-        "SUM(u.usage_quantity * p.pricing.default) AS usd "
+        "SELECT u.usage_date, CAST(SUM(u.usage_quantity) AS DOUBLE) AS dbus, "
+        "CAST(SUM(u.usage_quantity * p.pricing.default) AS DOUBLE) AS usd "
         "FROM system.billing.usage u LEFT JOIN system.billing.list_prices p "
         "ON u.sku_name = p.sku_name AND u.cloud = p.cloud AND u.usage_unit = p.usage_unit "
         "AND u.usage_start_time >= p.price_start_time "
@@ -177,10 +177,14 @@ def warehouse_cost(run, warehouse_id: str, days: int = 30):
         "WHERE u.usage_metadata.warehouse_id = :w AND u.usage_date >= date_sub(current_date(), :d) "
         "GROUP BY u.usage_date ORDER BY u.usage_date", {"w": warehouse_id, "d": int(days)})
     users = run(
-        "SELECT executed_by AS user, COUNT(*) AS queries, SUM(total_duration_ms) / 1000.0 AS seconds "
+        "SELECT executed_by AS user, COUNT(*) AS queries, CAST(SUM(total_duration_ms) / 1000.0 AS DOUBLE) AS seconds "
         "FROM system.query.history WHERE compute.warehouse_id = :w "
         "AND start_time >= current_timestamp() - make_dt_interval(:d) "
         "GROUP BY executed_by ORDER BY seconds DESC", {"w": warehouse_id, "d": int(days)})
+    import pandas as pd
+    for df, cols in ((daily, ("dbus", "usd")), (users, ("queries", "seconds"))):
+        for c in cols:
+            df[c] = pd.to_numeric(df[c], errors="coerce").astype(float)
     total = float(daily["usd"].fillna(0).sum()) if len(daily) else 0.0
     secs = float(users["seconds"].fillna(0).sum()) if len(users) else 0.0
     if len(users):

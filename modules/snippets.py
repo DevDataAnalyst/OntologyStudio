@@ -169,6 +169,18 @@ def _parse_ts(ts) -> datetime | None:
     return None
 
 
+APP_MARKER = "ontology-studio"
+_APP_SIGNATURES = re.compile(
+    r"AS\s+`?(__n|d\d+|nn\d+|e\d+)`?\s*(,|FROM)"                      # profiling (older app versions)
+    r"|SUM\(CASE WHEN b\.v IS NOT NULL THEN 1 ELSE 0 END\)"              # join value-overlap checks
+    r"|information_schema\.|system\.(query|access|billing)\.", re.I)
+
+
+def is_app_query(text: str) -> bool:
+    """The studio's own profiling / discovery / metadata SQL: not knowledge about the business."""
+    return APP_MARKER in text or bool(_APP_SIGNATURES.search(text))
+
+
 def mine(records: list[dict], onto: dict, dialect: str = "databricks") -> list[dict]:
     """Parse query records into aggregated snippets (without scores)."""
     import sqlglot
@@ -212,6 +224,8 @@ def mine(records: list[dict], onto: dict, dialect: str = "databricks") -> list[d
     for rec in records:
         text = str(rec.get("text") or "")
         if not text.strip():
+            continue
+        if is_app_query(text):
             continue
         comment = (_comments(text) or [None])[0]
         try:
@@ -444,7 +458,7 @@ def experts(onto: dict, cid: str | None = None, top: int = 5) -> list[dict]:
             pts[u] += n * s.get("authority", 0)
             uses[u] += n
             kinds[u].update(s.get("classes") or [])
-    return [{"person": u, "score": round(p, 2), "queries": uses[u], "works_on": ", ".join(sorted(kinds[u])[:6])}
+    return [{"person": u, "score": round(p, 2), "snippet_uses": uses[u], "works_on": ", ".join(sorted(kinds[u])[:6])}
             for u, p in pts.most_common(top)]
 
 

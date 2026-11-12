@@ -26,7 +26,7 @@ STOP = set("a an and are as at by for from how in is it last me month of on or p
 
 def _norm_name(n: str | None) -> str:
     n = re.sub(r"[^a-z0-9]+", "_", str(n or "").lower()).strip("_")
-    for pre in ("total_", "sum_", "net_", "gross_"):    # same concept; avg_ / count_ are different measures
+    for pre in ("total_", "sum_"):      # same measure; avg_ / count_ / net_ / gross_ are different ones
         if n.startswith(pre):
             n = n[len(pre):]
     return n
@@ -98,11 +98,19 @@ def build_queue(onto: dict, traces: list[dict] | None = None, min_authority: flo
             defs[_norm_name(m["name"])].append((f"metric {m['name']}", str(m.get("sql")), 1.0))
             def_domains[_norm_name(m["name"])] += m.get("domains") or []
     for s in onto.get("snippets", []):
+        if s.get("uses", 0) < 2 and s.get("authority", 0) < min_authority:
+            continue                                    # one-off calculations are not definitions
         if s["kind"] == "expression" and s.get("name") and s.get("status") not in ("dismissed", "promoted"):
             defs[_norm_name(s["name"])].append((f"snippet {s['name']}", s.get("bare") or s["text"],
                                                 s.get("authority", 0)))
             def_domains[_norm_name(s["name"])] += s.get("domains") or []
+    for name in list(defs):           # a bare name is ambiguous when net_/gross_ variants define it differently
+        for pre in ("net_", "gross_"):
+            if name.startswith(pre) and name[len(pre):] in defs:
+                defs[name[len(pre):]] += defs[name]
+                def_domains[name[len(pre):]] += def_domains[name]
     for name, ds in defs.items():
+        ds = list(dict.fromkeys(ds))
         formulas = {re.sub(r"[\s`\"]+", "", f.lower()) for _, f, _ in ds}
         if name and len(formulas) > 1:
             ds = sorted(ds, key=lambda x: -x[2])

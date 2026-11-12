@@ -617,7 +617,7 @@ def monitor_tab(uc_runner, on_databricks: bool):
 # Ask (scoped, traced, with feedback)
 # =========================================================================== #
 def ask_tab(onto: dict, runner: dict, uc_runner, on_databricks: bool):
-    from .ask import build_context, clean_sql, is_read_only, run_on_sqlite
+    from .ask import answer, answer_prompt, run_on_sqlite
     gv.ensure(onto)
     user = current_user()
     st.markdown("Ask a business question; the Foundation Model writes SQL **from the ontology** "
@@ -634,9 +634,9 @@ def ask_tab(onto: dict, runner: dict, uc_runner, on_databricks: bool):
     compare = c3.checkbox("Compare with schema-only", value=True, key="ask_compare")
     scoped = gv.scope(onto, None if scope_dom == "All domains" else scope_dom)
     snips = sn.top_for_context(scoped) if use_snips else []
-    full_tokens = tm.estimate_tokens(build_context("", onto, "ontology", runner.get("dialect") or "sqlite",
+    full_tokens = tm.estimate_tokens(answer_prompt("", onto, "ontology", runner.get("dialect") or "databricks",
                                                    snippets=sn.top_for_context(onto) if use_snips else []))
-    ctx_tokens = tm.estimate_tokens(build_context("", scoped, "ontology", runner.get("dialect") or "sqlite",
+    ctx_tokens = tm.estimate_tokens(answer_prompt("", scoped, "ontology", runner.get("dialect") or "databricks",
                                                   snippets=snips))
     st.caption(f"Context ≈ {ctx_tokens:,} tokens · {len(scoped['classes'])} tables, "
                f"{len(scoped.get('metrics', []))} metrics, {len(scoped.get('pages', []))} pages, {len(snips)} snippets"
@@ -661,29 +661,33 @@ def ask_tab(onto: dict, runner: dict, uc_runner, on_databricks: bool):
             ctx_onto = dict(scoped, _snippets_in_context=snips if mode == "ontology" else [])
             t["assets"] = tm.assets_used(ctx_onto) if mode == "ontology" else {
                 "classes": sorted(scoped["classes"])}
-            system = build_context(q, scoped, mode, runner.get("dialect") or "sqlite",
-                                   snippets=snips if mode == "ontology" else None)
-            t["prompt_tokens"] = tm.estimate_tokens(system) + tm.estimate_tokens(q)
-            res = None
-            try:
-                t0 = time.time()
-                out = chat(system, q, max_tokens=1200)
-                t["llm_ms"] = int((time.time() - t0) * 1000)
-                t["completion_tokens"] = tm.estimate_tokens(out)
-                t["sql"] = clean_sql(out)
-                t["assets"]["sql_classes"] = tm.sql_classes(t["sql"], onto, runner.get("dialect") or "databricks")
-                if not is_read_only(t["sql"]):
-                    t["status"], t["error"] = "refused", "Not a single read-only query — not executed."
-                elif runner.get("kind") in ("sqlite", "uc"):
-                    t0 = time.time()
-                    res = (run_on_sqlite(t["sql"], db_bytes=open(runner["path"], "rb").read())
-                           if runner["kind"] == "sqlite" else uc_runner()(t["sql"]))
-                    t["sql_ms"] = int((time.time() - t0) * 1000)
-                    t["rows"], t["status"] = len(res), "ok"
-                else:
-                    t["status"] = "ok"
-            except Exception as e:  # noqa: BLE001
-                t["status"], t["error"] = "error", str(e)[:500]
+            dialect = runner.get("dialect") or "databricks"
+            if dialect == "auto":
+                dialect = "databricks"
+            execute = None
+            if runner.get("kind") == "sqlite":
+                db = open(runner["path"], "rb").read()
+                execute = lambda sql, db=db: run_on_sqlite(sql, db_bytes=db)  # noqa: E731
+            elif runner.get("kind") == "uc":
+                execute = uc_runner()
+            with st.spinner("Thinking, writing SQL" + (" and checking it on the data…" if execute else "…")):
+                try:
+                    a = answer(q, scoped, mode, dialect, execute=execute,
+                               snippets=snips if mode == "ontology" else None, chat_fn=chat)
+                except Exception as e:  # noqa: BLE001
+                    a = {"status": "error", "error": f"SQL generation failed: {e}", "sql": None, "result": None,
+                         "attempts": [], "prompt_tokens": 0, "completion_tokens": 0, "llm_ms": 0, "sql_ms": 0}
+            res = a.get("result")
+            for k in ("sql", "status", "error", "prompt_tokens", "completion_tokens", "llm_ms"):
+                t[k] = a.get(k)
+            t["sql_ms"] = a.get("sql_ms") or None
+            t["rows"] = None if res is None else len(res)
+            t["reasoning"], t["assumptions"] = a.get("reasoning"), a.get("assumptions") or []
+            t["attempts"] = [{k: v for k, v in x.items()} for x in a.get("attempts", [])]
+            if t.get("sql"):
+                t["assets"]["sql_classes"] = tm.sql_classes(t["sql"], onto, dialect)
+            if execute is None and t["status"] == "ok":
+                t["rows"] = None
             t["cost_usd"] = tm.price(t, ss.get("price_in", tm.DEFAULT_PRICE_IN),
                                      ss.get("price_out", tm.DEFAULT_PRICE_OUT))
             ss.setdefault("traces", []).insert(0, t)
@@ -701,6 +705,16 @@ def ask_tab(onto: dict, runner: dict, uc_runner, on_databricks: bool):
             st.markdown("**With ontology**" if t["mode"] == "ontology" else "**Baseline (schema only)**")
             if t.get("sql"):
                 st.code(t["sql"], language="sql", wrap_lines=True)
+            fixes = sum(1 for x in t.get("attempts") or [] if x.get("error"))
+            if t.get("reasoning") or t.get("assumptions") or fixes:
+                with st.expander("How it answered" + (f" · self-corrected {fixes}×" if fixes else "")):
+                    if t.get("reasoning"):
+                        st.markdown(t["reasoning"].replace("*", "\\*").replace("_", "\\_"))
+                    for x in t.get("assumptions") or []:
+                        st.caption("Assumption: " + x)
+                    for i, x in enumerate(t.get("attempts") or [], 1):
+                        if x.get("error"):
+                            st.caption(f"Attempt {i}: the query {x['error'][:300]}")
             if t["status"] == "error":
                 st.error(t["error"])
             elif t["status"] == "refused":

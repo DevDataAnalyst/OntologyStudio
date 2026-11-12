@@ -218,7 +218,14 @@ In the **Metric views** tab you can:
 
 Type a business question. The Foundation Model writes SQL **from the ontology** (classes, synonyms, joins, code meanings, rules and metrics). With **Compare with schema-only** on, it also writes a **baseline** query from the bare table and column names, so you can see both SQL statements and both result sets side by side.
 
-Generated SQL only runs if it is a single read-only `SELECT` or `WITH` statement. It runs on Unity Catalog as you, or on the SQLite file or script you uploaded. The Ask tab needs the model endpoint, so it works on Databricks only.
+How Ask works out an answer:
+
+1. **Focus.** It matches the question's words against class, column and metric names, labels, synonyms and page titles, and puts the best matches (tables, the joins between them, metrics with their SQL, certified first) at the top of the prompt.
+2. **Plan and write.** The model answers with JSON: a short reasoning, the assumptions it made, and one query. The prompt tells it to reuse metric and snippet definitions instead of inventing formulas, join only along declared relationships, respect the grain ("for each month in 1997" means one row per month, filtered to 1997, in order), return readable labels, and use the dialect's date functions.
+3. **Check.** The query must parse (sqlglot, in the source's dialect) and be a single read-only `SELECT` / `WITH`.
+4. **Run and self-correct.** It runs on Unity Catalog as you, or on the uploaded SQLite file. If it fails, the error goes back to the model to fix its own query (up to three attempts in total); an empty result gets one retry. **How it answered** shows the reasoning, assumptions and every corrected attempt.
+
+Profiled sample values (Decimal, dates, bytes from Unity Catalog) are converted before they go into the prompt. The Ask tab needs the model endpoint, so it works on Databricks only.
 
 ### 6. Apache Ossie: validation, import and export
 
@@ -550,6 +557,7 @@ modules/telemetry.py            Ask traces, feedback, token cost, budgets, wareh
 modules/governance_ui.py        Domains, Knowledge, Review queue, Ask and Monitor tabs
 tests/test_ossie.py             Ossie checks and round trip (python tests/test_ossie.py)
 tests/test_governance.py        Domains, snippets, review queue, governance round trip through Ossie
+tests/test_ask.py               Ask engine: Decimal-safe prompts, focus, JSON answers, self-correction
 samples/                        Sample databases, scripts, docs and their generated outputs
 ```
 

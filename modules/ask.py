@@ -74,7 +74,34 @@ def ontology_context(onto: dict, snippets: list[dict] | None = None, max_page_ch
         keep["pages"] = pages
     if snippets:
         keep["learned_snippets"] = snippets
-    return yaml.safe_dump(keep, sort_keys=False, width=200, allow_unicode=True)
+    return yaml.safe_dump(plain(keep), sort_keys=False, width=200, allow_unicode=True)
+
+
+def plain(obj):
+    """Values YAML/JSON can represent: profiled samples from Unity Catalog arrive as Decimal,
+    datetime, date or bytes, which yaml.safe_dump cannot write."""
+    import datetime as _dt
+    from decimal import Decimal
+    if isinstance(obj, dict):
+        return {str(k): plain(v) for k, v in obj.items() if v is not None}
+    if isinstance(obj, (list, tuple, set)):
+        return [plain(v) for v in obj]
+    if isinstance(obj, bool) or obj is None or isinstance(obj, (int, str)):
+        return obj
+    if isinstance(obj, float):
+        return obj if obj == obj else None
+    if isinstance(obj, Decimal):
+        return int(obj) if obj == obj.to_integral_value() else float(obj)
+    if isinstance(obj, (_dt.datetime, _dt.date, _dt.time)):
+        return obj.isoformat()
+    if isinstance(obj, (bytes, bytearray, memoryview)):
+        return "<binary>"
+    if hasattr(obj, "item"):                            # numpy scalars
+        try:
+            return plain(obj.item())
+        except Exception:  # noqa: BLE001
+            pass
+    return str(obj)
 
 
 def baseline_context(onto: dict) -> str:
@@ -155,3 +182,216 @@ def run_on_sqlite(sql: str, db_bytes: bytes | None = None, script: str | None = 
         return pd.read_sql_query(sql, conn)
     finally:
         conn.close()
+
+
+# --------------------------------------------------------------------------- #
+# Answering engine: focus, plan, generate, validate, run, self-correct
+# --------------------------------------------------------------------------- #
+ANSWER_PROMPT = """You are a senior analytics engineer. You write ONE {dialect} query that answers a business \
+question over the data model below.
+
+Answer with ONLY a JSON object, no markdown fences:
+{{"reasoning": "2-4 short sentences: the tables, joins, metric definitions, filters and grain you chose",
+ "assumptions": ["how you read anything ambiguous"],
+ "sql": "one read-only SELECT or WITH query"}}
+
+How to write the query:
+- Map business words to tables, columns and metrics through names, labels, synonyms, pages and value meanings.
+- When a metric (above all a certified one) or a learned snippet defines the measure asked for (e.g. "net revenue"),
+  reuse its SQL expression exactly instead of inventing a new formula. Pages explain business meaning: follow them.
+- Join only along the declared relationships (`join` from -> to). Never invent tables or columns; use the exact names.
+- Grain: "for each month / by month / per month" means one row per month (GROUP BY the month), ordered
+  chronologically; "in 1997" is a filter on the year. Return a readable period label (e.g. 1997-01) and, for
+  entities, their names, not only ids.
+- Name output columns in snake_case business terms; round money to 2 decimals; ORDER BY something meaningful.
+- Lists of rows (no aggregation) end with LIMIT 200. No SELECT *.
+- Apply business rules only when they are relevant to the question.
+- Dates: {date_hints}
+{qualify}
+{context_intro}"""
+
+DATE_HINTS = {
+    "databricks": "use year(col), month(col), date_trunc('MONTH', col) and date_format(col, 'yyyy-MM'); "
+                  "if a date column is a STRING, wrap it in to_date(col) or to_timestamp(col).",
+    "sqlite": "dates are TEXT like '1997-07-04 00:00:00'; use strftime('%Y', col), strftime('%Y-%m', col) "
+              "or substr(col, 1, 7); compare with strings such as col >= '1997-01-01'.",
+    "postgres": "use date_trunc('month', col), extract(year from col), to_char(col, 'YYYY-MM').",
+    "mysql": "use YEAR(col), MONTH(col), DATE_FORMAT(col, '%Y-%m').",
+    "tsql": "use YEAR(col), MONTH(col), FORMAT(col, 'yyyy-MM').",
+    "snowflake": "use DATE_TRUNC('MONTH', col), YEAR(col), TO_CHAR(col, 'YYYY-MM').",
+    "bigquery": "use DATE_TRUNC(col, MONTH), EXTRACT(YEAR FROM col), FORMAT_DATE('%Y-%m', col).",
+}
+FIX_PROMPT = """Your previous query for this question {problem}
+
+Previous query:
+{sql}
+
+Fix it. Check table and column names against the model, quoting, date handling and filters (use the sample
+values to match case and format). Answer with the same JSON object (reasoning, assumptions, sql)."""
+SQLGLOT_DIALECT = {"databricks": "databricks", "sqlite": "sqlite", "mysql": "mysql", "postgres": "postgres",
+                   "tsql": "tsql", "oracle": "oracle", "snowflake": "snowflake", "bigquery": "bigquery",
+                   "redshift": "redshift", "duckdb": "duckdb", "teradata": "teradata"}
+
+
+def _words(text: str) -> set[str]:
+    s = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", str(text or ""))
+    out = set()
+    for w in re.findall(r"[a-z0-9]+", s.lower()):
+        if len(w) > 2:
+            out.add(w)
+            out.add(w[:-1] if w.endswith("s") else w)
+    return out
+
+
+def focus(question: str, onto: dict, top: int = 8) -> dict:
+    """What in the ontology the question most likely needs: matched classes, columns and metrics
+    (by names, labels, synonyms, descriptions, page titles), so the model looks there first."""
+    q = _words(question)
+    if not q:
+        return {}
+    cls_score: dict[str, float] = {}
+    cols: list[str] = []
+    for cid, c in onto.get("classes", {}).items():
+        sc = 3 * len(q & _words(f"{cid} {c.get('label', '')} {c.get('source_table', '')}"))
+        sc += 2 * len(q & _words(" ".join(c.get("synonyms") or [])))
+        for pid, p in c.get("data_properties", {}).items():
+            hit = len(q & _words(f"{pid} {p.get('label', '')} {p.get('source_column', '')} "
+                                 + " ".join(p.get("synonyms") or [])))
+            if hit:
+                sc += hit
+                cols.append(f"{cid}.{p.get('source_column') or pid}")
+        if sc:
+            cls_score[cid] = sc
+    mets = []
+    for m in onto.get("metrics", []):
+        if m.get("status") == "deprecated":
+            continue
+        hit = len(q & _words(f"{m['name']} {m.get('description', '')} " + " ".join(m.get("synonyms") or [])))
+        if hit:
+            mets.append((hit + (1 if m.get("status") == "certified" else 0), m))
+            cls_score[m.get("base_class")] = cls_score.get(m.get("base_class"), 0) + 2 * hit
+    mets.sort(key=lambda x: -x[0])
+    pages = [p["title"] for p in onto.get("pages", [])
+             if p.get("status") != "deprecated" and q & _words(p.get("title", "") + " " + " ".join(p.get("synonyms") or []))]
+    classes = [c for c, _ in sorted(cls_score.items(), key=lambda x: -x[1]) if c in onto.get("classes", {})][:top]
+    # the join path between the focused classes (one hop), so the model sees how to connect them
+    joins = []
+    for pid, p in onto.get("object_properties", {}).items():
+        j = p.get("join") or {}
+        if j and p.get("cardinality") != "one-to-many" and (p.get("domain") in classes or p.get("range") in classes):
+            if p.get("domain") in classes and p.get("range") in classes:
+                joins.append(f"{p['domain']} -> {p['range']}: " + ", ".join(
+                    f"{a} = {b}" for a, b in zip(j.get("from", []), j.get("to", []))))
+    out = {"classes": classes, "columns": cols[:20],
+           "metrics": [{"name": m["name"], "sql": m.get("sql"), "base_class": m.get("base_class"),
+                        **({"certified": True} if m.get("status") == "certified" else {})} for _, m in mets[:6]],
+           "joins": joins[:12], "pages": pages[:5]}
+    return {k: v for k, v in out.items() if v}
+
+
+def answer_prompt(question: str, onto: dict, mode: str = "ontology", dialect: str = "sqlite",
+                  snippets: list[dict] | None = None) -> str:
+    """System prompt for the answering engine (ontology or schema-only baseline)."""
+    if mode == "ontology":
+        ctx = ("DATA MODEL (ontology). learned_snippets show how colleagues query the data; they name columns "
+               "as Class.column — translate to the class's table. Higher authority = more trusted.\n"
+               + ontology_context(onto, snippets))
+        f = focus(question, onto)
+        if f:
+            ctx = ("MOST RELEVANT FOR THIS QUESTION (start here):\n"
+                   + yaml.safe_dump(plain(f), sort_keys=False, width=200, allow_unicode=True) + "\n" + ctx)
+    else:
+        ctx = "TABLES:\n" + baseline_context(onto)
+    qualify = ""
+    if any(c.get("source_fqn") for c in onto["classes"].values()):
+        qualify = ("- Table names: use each class's `source_fqn` (catalog.schema.table) in FROM/JOIN; `join` entries "
+                   "use short table names, so map them to the matching source_fqn.")
+    return ANSWER_PROMPT.format(dialect="Databricks SQL" if dialect == "databricks" else dialect,
+                                date_hints=DATE_HINTS.get(dialect, DATE_HINTS["databricks"]),
+                                qualify=qualify, context_intro=ctx)
+
+
+def parse_answer(text: str) -> dict:
+    """{"sql", "reasoning", "assumptions"} from the model's reply; plain SQL replies still work."""
+    import json
+    t = re.sub(r"^```(?:json|sql)?|```$", "", text.strip(), flags=re.M | re.I).strip()
+    start, end = t.find("{"), t.rfind("}")
+    if start != -1 and end > start:
+        try:
+            d = json.loads(t[start:end + 1])
+            if isinstance(d, dict) and d.get("sql"):
+                a = d.get("assumptions") or []
+                return {"sql": clean_sql(str(d["sql"])), "reasoning": str(d.get("reasoning") or ""),
+                        "assumptions": [str(x) for x in (a if isinstance(a, list) else [a])]}
+        except Exception:  # noqa: BLE001
+            m = re.search(r'"sql"\s*:\s*"((?:[^"\\]|\\.)*)"', t, re.S)
+            if m:
+                return {"sql": clean_sql(json.loads(f'"{m.group(1)}"')), "reasoning": "", "assumptions": []}
+    m = re.search(r"\b(WITH|SELECT)\b.*", t, re.S | re.I)
+    return {"sql": clean_sql(m.group(0) if m else t), "reasoning": "", "assumptions": []}
+
+
+def check_sql(sql: str, dialect: str) -> str | None:
+    """Static checks before anything runs. Returns a problem description or None."""
+    if not is_read_only(sql):
+        return "is not a single read-only SELECT/WITH statement."
+    try:
+        import logging
+
+        import sqlglot
+        logging.getLogger("sqlglot").setLevel(logging.CRITICAL)
+        trees = [t for t in sqlglot.parse(sql, read=SQLGLOT_DIALECT.get(dialect, "databricks")) if t is not None]
+        if len(trees) != 1:
+            return "must be exactly one statement."
+    except Exception as e:  # noqa: BLE001
+        return f"does not parse: {str(e)[:300]}"
+    return None
+
+
+def answer(question: str, onto: dict, mode: str = "ontology", dialect: str = "sqlite",
+           execute=None, snippets: list[dict] | None = None, max_attempts: int = 3, chat_fn=None) -> dict:
+    """Generate SQL, check it, run it with `execute(sql) -> DataFrame` (None = don't run) and, when it fails
+    or returns nothing, show the model the error and let it fix its own query (up to max_attempts).
+    Returns sql, reasoning, assumptions, result, status, error, attempts and token / time counters."""
+    import time as _t
+    chat_fn = chat_fn or chat
+    system = answer_prompt(question, onto, mode, dialect, snippets)
+    out = {"sql": None, "reasoning": "", "assumptions": [], "result": None, "status": "error", "error": None,
+           "attempts": [], "prompt_tokens": 0, "completion_tokens": 0, "llm_ms": 0, "sql_ms": 0}
+    user, empty_retry_used, best = question, False, None
+    for _ in range(max_attempts):
+        t0 = _t.time()
+        reply = chat_fn(system, user, max_tokens=1500)
+        out["llm_ms"] += int((_t.time() - t0) * 1000)
+        out["prompt_tokens"] += (len(system) + len(user)) // 4
+        out["completion_tokens"] += max(1, len(reply) // 4)
+        a = parse_answer(reply)
+        out.update(sql=a["sql"], reasoning=a["reasoning"], assumptions=a["assumptions"])
+        attempt = {"sql": a["sql"], "error": None, "rows": None}
+        out["attempts"].append(attempt)
+        problem = check_sql(a["sql"], dialect)
+        if problem is None and execute is not None:
+            try:
+                t0 = _t.time()
+                res = execute(a["sql"])
+                out["sql_ms"] += int((_t.time() - t0) * 1000)
+                attempt["rows"] = len(res)
+                out["result"] = res
+                best = {k: out[k] for k in ("sql", "reasoning", "assumptions", "result")}
+                if len(res) == 0 and not empty_retry_used:
+                    empty_retry_used = True
+                    problem = ("ran but returned 0 rows. If that is not plausible, check filters, date formats "
+                               "and value spelling/case against the samples.")
+            except Exception as e:  # noqa: BLE001
+                problem = f"failed when it ran: {str(e)[:600]}"
+        if problem is None:
+            out.update(status="ok", error=None)
+            return out
+        attempt["error"] = problem
+        out.update(status="refused" if problem.startswith("is not a single") else "error",
+                   error=f"The query {problem}", result=None)
+        user = (f"Question: {question}\n\n"
+                + FIX_PROMPT.format(problem=problem, sql=a["sql"]))
+    if best is not None:                        # an earlier query ran (e.g. returned 0 rows): keep it
+        out.update(best, status="ok", error=None)
+    return out

@@ -38,6 +38,10 @@ The **Ontology YAML** tab shows the whole ontology, with validation notes at the
 
 ![Ontology YAML tab with validation notes and the generated YAML](docs/images/ontology-yaml.png)
 
+### 2b. Edit the model in plain forms (YAML form editor)
+
+The **✏️ YAML form editor** tab lets business users change an Apache Ossie semantic model without touching YAML. Start from the current studio model, an uploaded Ossie YAML/JSON file, or an empty model, then work through six steps: **Model info → Datasets → Fields → Relationships → Metrics → Review & submit**. Each step is a form with **Save & continue**; renaming a dataset or field updates the keys and relationships that use it, and anything the form does not show (dialect variants, vendor extensions) is kept as is. The last step validates the whole model with the same checks as the Apache Ossie tab, shows a before/after diff, and lets you download the YAML or JSON or submit it to load it into the studio. The editor is also on the start page, before anything is loaded.
+
 ### 3. Generate metric views
 
 The **Metric views** tab builds one metric view per fact, with joins nested for snowflake schemas. Download it, or deploy it to Unity Catalog.

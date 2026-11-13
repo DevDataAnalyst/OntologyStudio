@@ -7,6 +7,8 @@ Ontology Studio — Databricks App (Streamlit)
                fact/dimension and measure/dimension classification, base metrics
 3. Edit      : interactive D3.js network diagram — drag, connect, repoint, delete, accept/reject
                suggestions; inspector for classes, columns, metrics and joins
+   Form editor: a guided, step-by-step form for business users to edit an Apache Ossie YAML
+               (model info, datasets, fields, relationships, metrics, review & submit)
 4. Export    : ontology YAML, Apache Ossie YAML and Databricks metric view YAML (download or deploy
                to Unity Catalog)
 """
@@ -23,7 +25,7 @@ import pandas as pd
 import streamlit as st
 import yaml
 
-from modules import discovery, governance as gv, governance_ui as gui, ontology_edit as ed, ossie, ossie_ui
+from modules import discovery, governance as gv, governance_ui as gui, ontology_edit as ed, ossie, ossie_form, ossie_ui
 from modules import semantics, store
 from modules import metric_views as mv
 from modules.extractors import from_sql_script, from_sqlite_file, is_sqlite_bytes
@@ -57,6 +59,51 @@ def is_dark() -> bool:
         return st.context.theme.type == "dark"
     except Exception:  # noqa: BLE001
         return False
+
+
+TAB_PALETTE = {  # strip, active tab + panel, hover, separator, border, muted text, text
+    False: ("#dee1e6", "#ffffff", "#eceef1", "#a9adb3", "#d3d6db", "#3c4043", "#1f1f1f"),
+    True: ("#1b1e24", "#0e1117", "#262a32", "#4a4f58", "#30343c", "#b5b9c0", "#f1f3f4"),
+}
+
+
+def tab_css(dark: bool) -> str:
+    """Chromium-style tab strip for every st.tabs: separate rounded tabs on a grey bar; the active tab
+    joins the panel below it with the curved 'flares' Chrome draws at its bottom corners."""
+    strip, active, hover, sep, border, muted, txt = TAB_PALETTE[dark]
+    tl, tab = '.stTabs [role="tablist"]', '.stTabs [role="tab"]'   # react-aria (1.5x+) and baseweb DOMs
+    return f"""<style>
+{tl} {{
+  gap: 0; background: {strip}; padding: 7px 14px 0 14px; border-radius: 12px 12px 0 0;
+  border: 1px solid {border}; border-bottom: none; box-shadow: none; overflow-x: auto; overflow-y: hidden;
+  scrollbar-width: thin; }}
+.stTabs [data-baseweb="tab-border"], .stTabs [data-baseweb="tab-highlight"],
+.stTabs .react-aria-SelectionIndicator {{ display: none !important; }}
+{tab} {{
+  position: relative; height: 38px; margin: 0; padding: 0 15px; flex: 0 0 auto; display: flex;
+  align-items: center; background: transparent; border: none; border-radius: 10px 10px 0 0; color: {muted};
+  transition: background .12s ease; }}
+{tab} p {{ font-size: .9rem; white-space: nowrap; margin: 0; }}
+{tab}:not(:first-of-type)::before {{
+  content: ""; position: absolute; left: 0; top: 11px; bottom: 11px; width: 1px; background: {sep}; }}
+{tab}:hover {{ background: {hover}; color: {txt}; }}
+{tab}[aria-selected="true"] {{
+  background: {active}; color: {txt}; z-index: 1; box-shadow: 0 -1px 3px rgba(0,0,0,.10); }}
+{tab}[aria-selected="true"] p {{ font-weight: 650; }}
+{tab}[aria-selected="true"]::before, {tab}[aria-selected="true"] + [role="tab"]::before,
+{tab}:hover::before, {tab}:hover + [role="tab"]::before {{ opacity: 0; }}
+{tab}[aria-selected="true"]::after {{
+  content: ""; position: absolute; bottom: 0; left: -10px; right: -10px; height: 10px; pointer-events: none;
+  background:
+    radial-gradient(circle at 0 0, transparent 9.5px, {active} 10px) left bottom / 10px 10px no-repeat,
+    radial-gradient(circle at 100% 0, transparent 9.5px, {active} 10px) right bottom / 10px 10px no-repeat; }}
+.stTabs [role="tabpanel"] {{
+  background: {active}; border: 1px solid {border}; border-top: none; border-radius: 0 0 12px 12px;
+  padding: 18px 18px 14px 18px; margin-top: 0; }}
+</style>"""
+
+
+st.markdown(tab_css(is_dark()), unsafe_allow_html=True)
 
 
 def commit(msg: str | None = None, rerun: bool = True):
@@ -329,6 +376,17 @@ def load_ossie(rep: ossie.Report, model_index: int) -> dict:
     return refresh_index(new)
 
 
+def submit_form_model(doc: dict, file_name: str) -> None:
+    """The form editor's Submit: load its (validated) Ossie model as the studio ontology."""
+    new = ossie.to_ontology(doc, file_name, base_iri=base_iri, prefix=prefix)
+    three_part = all(str(c.get("source_fqn") or "").count(".") == 2 for c in new["classes"].values())
+    ss.runner = {"kind": "uc" if ON_DATABRICKS and three_part else None, "dialect": "databricks"}
+    ss.ossie_loaded = {"key": None, "file": file_name, "notes": ["Loaded from the YAML form editor."]}
+    ss.onto = refresh_index(new)
+    ss.selection, ss.last_nonce, ss.graph_msg = {"kind": None}, None, f"Loaded {file_name} from the form editor"
+    ss.graph_key += 1
+
+
 if go:
     if source == "Saved version":
         token = None
@@ -357,14 +415,19 @@ if onto is None:
         ossie_ui.report_view(ss.ossie_report, key="landing")
         st.stop()
     st.title("Ontology Studio")
-    st.markdown(
+    land_start, land_form = st.tabs(["🏠 Get started", "✏️ YAML form editor"])
+    with land_form:
+        ossie_form.editor_tab(None, submit_form_model)
+    land_start.markdown(
         "Connect to Unity Catalog tables (or upload a SQLite / `.sql` file), then **Analyze & build**. "
         "You get a network of classes and relationships you can edit, plus exports as ontology "
         "YAML, Apache Ossie YAML and Databricks metric views.\n\n"
         "Have an **Apache Ossie** semantic model already? Choose **Ossie YAML** in the sidebar: the file is "
         f"checked against the official specification (current version `{ossie.CURRENT_VERSION}`; older "
         "`0.2.0.dev0` and `0.1.1` files are checked against their own version and can be upgraded) and can "
-        "then be loaded into the same editor.")
+        "then be loaded into the same editor.\n\n"
+        "Business users can also open the **✏️ YAML form editor** tab to edit an Ossie YAML step by step "
+        "through simple forms, then download it or load it here.")
     st.stop()
 
 # =========================================================================== #
@@ -386,10 +449,16 @@ m[6].metric("Domains", len(onto.get("domains", [])))
 for w in onto.get("warnings", [])[:8]:
     st.warning(w)
 
-(tab_net, tab_home, tab_yaml, tab_ossie, tab_mv, tab_sem, tab_know, tab_review, tab_tables, tab_ask,
+(tab_net, tab_home, tab_form, tab_yaml, tab_ossie, tab_mv, tab_sem, tab_know, tab_review, tab_tables, tab_ask,
  tab_mon) = st.tabs(
-    ["🕸️ Network", "🏠 Domains", "Ontology YAML", "Apache Ossie", "Metric views", "Semantic layer",
-     "📚 Knowledge", "✅ Review queue", "Tables", "Ask (Text-to-SQL)", "📈 Monitor"])
+    ["🕸️ Network", "🏠 Domains", "✏️ YAML form editor", "🧾 Ontology YAML", "🧩 Apache Ossie", "📐 Metric views",
+     "🧠 Semantic layer", "📚 Knowledge", "✅ Review queue", "🗂️ Tables", "💬 Ask (Text-to-SQL)", "📈 Monitor"])
+
+# =========================================================================== #
+# YAML form editor (guided, step-by-step Ossie editing for business users)
+# =========================================================================== #
+with tab_form:
+    ossie_form.editor_tab(onto, submit_form_model)
 
 # =========================================================================== #
 # Network + inspector

@@ -479,6 +479,19 @@ A missing grant only switches off that signal. The app shows a warning and carri
 
 The app knows it is on Databricks when the Apps runtime sets `DATABRICKS_APP_NAME` (or `DATABRICKS_HOST`). Without them, the Unity Catalog source, lineage, query history, LLM enrichment and the Ask tab are switched off.
 
+### Light and dark themes
+
+[`.streamlit/config.toml`](.streamlit/config.toml) defines two themes, taken from the examples in Streamlit's [theming guide](https://docs.streamlit.io/develop/concepts/configuration/theming):
+
+| Mode | Section | Look |
+|---|---|---|
+| Light | `[theme.light]` | Anthropic-inspired: warm off-white paper (`#fdfdf8`), clay accent (`#cb785c`), Space Grotesk with Space Mono for code |
+| Dark | `[theme.dark]` | Spotify-inspired: charcoal surfaces (`#2a2a2a` / `#121212`), green accent (`#1ed760`), Poppins |
+
+The app follows the browser's light or dark setting, and users can pick **System**, **Light** or **Dark** from the ⋮ menu at the top right. The fonts are bundled in [`static/`](static/) (SIL Open Font License) and served with `enableStaticServing`, so nothing loads from a font CDN.
+
+The app's own HTML follows the active theme too: the Chromium-style tab strip and the YAML form editor's step cards read their colours from `config.toml` ([`modules/theme.py`](modules/theme.py)), and the network diagram takes its canvas, card, text, accent colours and font from the theme Streamlit sends it. Streamlit doesn't rerun the script when someone switches theme, so a hidden helper ([`components/theme_watcher/`](components/theme_watcher/)) notices the switch and reruns once. To restyle the app, edit the colours in `config.toml`; nothing else needs to change.
+
 ---
 
 ## Run locally
@@ -539,6 +552,10 @@ app.yaml                        Databricks Apps start command and environment
 cli.py                          The same engine from the command line
 requirements.txt                Python dependencies
 components/ontology_graph/      Editable network diagram (D3.js, bundled)
+components/theme_watcher/       Hidden helper that reruns the app when the user switches light/dark
+.streamlit/config.toml          Light ([theme.light]) and dark ([theme.dark]) themes
+static/                         Theme fonts (Space Grotesk, Space Mono, Poppins; OFL)
+modules/theme.py                Active theme and its colours for the app's own CSS and the diagram
 modules/db_connection.py        On-behalf-of-user SQL warehouse connection
 modules/uc.py                   Unity Catalog browse, extract (up to 100 objects), profile, lineage, query-history joins
 modules/extractors.py           SQLite and SQL-script extractors

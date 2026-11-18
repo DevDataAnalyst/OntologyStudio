@@ -363,11 +363,15 @@ def relationship_sentence(r: dict) -> str:
 # =========================================================================== #
 # Streamlit view
 # =========================================================================== #
-CSS = """
+def _css() -> str:
+    """Step card styling in the active light/dark theme's accent colour (see modules/theme.py)."""
+    from . import theme
+    accent = theme.colors()["primaryColor"]
+    return f"""
 <style>
-.fe-card{border:1px solid rgba(128,128,128,.28);border-left:5px solid #1f6feb;border-radius:10px;
-  padding:10px 16px;margin:6px 0 12px 0;background:rgba(31,111,235,.05)}
-.fe-card b{font-size:1.05rem}
+.fe-card{{border:1px solid rgba(128,128,128,.28);border-left:5px solid {accent};border-radius:10px;
+  padding:10px 16px;margin:6px 0 12px 0;background:color-mix(in srgb, {accent} 7%, transparent)}}
+.fe-card b{{font-size:1.05rem}}
 </style>
 """
 
@@ -464,7 +468,7 @@ def _start_panel(onto: dict | None) -> None:
 def editor_tab(onto: dict | None, on_submit: Callable[[dict, str], None] | None) -> None:
     """The guided editor. on_submit(doc, file_name) loads the finished model into the studio."""
     s = _ss()
-    st.markdown(CSS, unsafe_allow_html=True)
+    st.markdown(_css(), unsafe_allow_html=True)
     head_l, head_r = st.columns([4, 1.2])
     head_l.markdown("#### ✏️ YAML form editor")
     head_l.caption("Edit an Apache Ossie semantic model step by step, no YAML knowledge needed. "

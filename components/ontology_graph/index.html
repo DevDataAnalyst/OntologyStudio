@@ -5,18 +5,12 @@
 <title>Ontology network</title>
 <script src="./d3.v7.min.js"></script>
 <style>
-  /* Theme fonts from the app's ./static folder (Streamlit static serving), downloaded only when used. */
-  @font-face { font-family:"SpaceGrotesk"; src:url("../../app/static/SpaceGrotesk-VariableFont_wght.ttf"); font-weight:300 700; }
-  @font-face { font-family:"Poppins"; src:url("../../app/static/Poppins-Regular.ttf"); font-weight:400; }
-  @font-face { font-family:"Poppins"; src:url("../../app/static/Poppins-Medium.ttf"); font-weight:500; }
-  @font-face { font-family:"Poppins"; src:url("../../app/static/Poppins-SemiBold.ttf"); font-weight:600; }
-  @font-face { font-family:"Poppins"; src:url("../../app/static/Poppins-Bold.ttf"); font-weight:700; }
   :root { --bg:#ffffff; --fg:#1f2430; --muted:#6b7280; --line:#d6dae1; --panel:#f6f7f9; --accent:#2563eb;
           --chip:#eef2ff; }
   .dark { --bg:#0e1117; --fg:#e6e8eb; --muted:#9aa3ae; --line:#2c323c; --panel:#161a22; --accent:#60a5fa;
           --chip:#1e2433; }
   html, body { margin:0; padding:0; background:var(--bg); color:var(--fg);
-               font-family:var(--font,"Source Sans Pro","Segoe UI",Helvetica,Arial,sans-serif); font-size:13px; }
+               font-family:var(--font,Arial,Helvetica,sans-serif); font-size:13px; }
   #wrap { display:flex; flex-direction:column; border:1px solid var(--line); border-radius:12px; overflow:hidden;
           background:var(--bg); }
   #wrap:fullscreen { border-radius:0; }
@@ -164,7 +158,7 @@
              grid: "#1a1f29", accent: "#60a5fa", sel: "#f87171", hit: "#facc15", sug: "#fb923c", lin: "#34d399",
              label: "#161a22", labelLine: "#2c323c", shadow: "rgba(0,0,0,0.55)", connect: "#4ade80" }
   };
-  const BASE_FONT = '"Source Sans Pro","Segoe UI",Helvetica,Arial,sans-serif';
+  const BASE_FONT = 'Arial,Helvetica,sans-serif';   // the whole app uses Arial (see .streamlit/config.toml)
   let FONT = BASE_FONT;
 
   // ------------------------------------------------------------------ theme (Streamlit sends the active theme
@@ -205,7 +199,7 @@
       chip: mix(bg, accent, dark ? 0.22 : 0.14),
       onAccent: lum(accent) > 0.45 ? "#000000" : "#ffffff"
     });
-    p.font = (t.font ? t.font + "," : "") + BASE_FONT;
+    p.font = BASE_FONT;
     return p;
   }
   function applyChromeVars(p) {      // toolbar, legend, tooltip, minimap frame (HTML around the SVG)

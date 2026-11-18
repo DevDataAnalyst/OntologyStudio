@@ -26,9 +26,9 @@ _KEY = "_theme_base"
 # Used when an option is not set in config.toml (Streamlit's own defaults).
 _DEFAULTS = {
     "light": {"primaryColor": "#ff4b4b", "backgroundColor": "#ffffff", "secondaryBackgroundColor": "#f0f2f6",
-              "textColor": "#31333f", "borderColor": "#d5d7de", "font": "Source Sans"},
+              "textColor": "#31333f", "borderColor": "#d5d7de", "font": "Arial, Helvetica, sans-serif"},
     "dark": {"primaryColor": "#ff4b4b", "backgroundColor": "#0e1117", "secondaryBackgroundColor": "#262730",
-             "textColor": "#fafafa", "borderColor": "#3d4049", "font": "Source Sans"},
+             "textColor": "#fafafa", "borderColor": "#3d4049", "font": "Arial, Helvetica, sans-serif"},
 }
 
 

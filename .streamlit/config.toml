@@ -2,67 +2,20 @@
 #
 # Two themes from the Streamlit theming guide
 # (https://docs.streamlit.io/develop/concepts/configuration/theming):
-#   [theme.light]  "Anthropic-inspired" light theme: warm off-white paper, clay accent, Space Grotesk
-#   [theme.dark]   "Spotify-inspired" dark theme: charcoal surfaces, green accent, Poppins
+#   [theme.light]  "Anthropic-inspired" light theme: warm off-white paper, clay accent
+#   [theme.dark]   "Spotify-inspired" dark theme: charcoal surfaces, green accent
 # Because both sections are defined, users can switch between them in the app menu
 # (Settings -> Theme: Light / Dark / Use system setting).
 #
-# Fonts are self-hosted from ./static (SIL Open Font License, see static/OFL-*.txt) so the app
-# does not depend on an external font CDN.
-
-[server]
-enableStaticServing = true
-
-# ---------------------------------------------------------------- font files (shared by both themes)
-[[theme.fontFaces]]
-family = "SpaceGrotesk"
-url = "app/static/SpaceGrotesk-VariableFont_wght.ttf"
-
-[[theme.fontFaces]]
-family = "SpaceMono"
-url = "app/static/SpaceMono-Regular.ttf"
-style = "normal"
-weight = 400
-
-[[theme.fontFaces]]
-family = "SpaceMono"
-url = "app/static/SpaceMono-Bold.ttf"
-style = "normal"
-weight = 700
-
-[[theme.fontFaces]]
-family = "Poppins"
-url = "app/static/Poppins-Regular.ttf"
-style = "normal"
-weight = 400
-
-[[theme.fontFaces]]
-family = "Poppins"
-url = "app/static/Poppins-Italic.ttf"
-style = "italic"
-weight = 400
-
-[[theme.fontFaces]]
-family = "Poppins"
-url = "app/static/Poppins-Medium.ttf"
-style = "normal"
-weight = 500
-
-[[theme.fontFaces]]
-family = "Poppins"
-url = "app/static/Poppins-SemiBold.ttf"
-style = "normal"
-weight = 600
-
-[[theme.fontFaces]]
-family = "Poppins"
-url = "app/static/Poppins-Bold.ttf"
-style = "normal"
-weight = 700
+# Every font in the UI (body, headings, code) is Arial, in both themes; the colours and shapes
+# follow the two examples above.
 
 # ---------------------------------------------------------------- options shared by both themes
 [theme]
 showSidebarBorder = true
+font = "Arial, Helvetica, sans-serif"
+headingFont = "Arial, Helvetica, sans-serif"
+codeFont = "Arial, Helvetica, sans-serif"
 
 # ---------------------------------------------------------------- light: Anthropic-inspired
 [theme.light]
@@ -75,11 +28,12 @@ borderColor = "#d3d2ca"
 showWidgetBorder = true
 baseRadius = "0.75rem"
 buttonRadius = "full"
-font = "SpaceGrotesk"
+font = "Arial, Helvetica, sans-serif"
+headingFont = "Arial, Helvetica, sans-serif"
 headingFontWeights = [600, 500, 500, 500, 500, 500]
 headingFontSizes = ["3rem", "2rem"]
-codeFont = "SpaceMono"
-codeFontSize = ".75rem"
+codeFont = "Arial, Helvetica, sans-serif"
+codeFontSize = ".8rem"
 codeBackgroundColor = "#ecebe4"
 chartCategoricalColors = ["#0ea5e9", "#059669", "#fbbf24", "#cb785c", "#8b5cf6", "#64748b"]
 
@@ -101,9 +55,10 @@ borderColor = "#7c7c7c"
 showWidgetBorder = true
 baseRadius = "0.3rem"
 buttonRadius = "full"
-font = "Poppins"
-codeFont = "SpaceMono"
-codeFontSize = ".75rem"
+font = "Arial, Helvetica, sans-serif"
+headingFont = "Arial, Helvetica, sans-serif"
+codeFont = "Arial, Helvetica, sans-serif"
+codeFontSize = ".8rem"
 headingFontWeights = [600, 500, 500, 500, 500, 500]
 headingFontSizes = ["3rem", "2.5rem", "2.25rem", "2rem", "1.5rem"]
 chartCategoricalColors = ["#ffc862", "#2d46b9", "#b49bc8", "#1ed760", "#f573a0", "#7c7c7c"]

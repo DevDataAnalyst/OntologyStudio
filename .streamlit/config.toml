@@ -1,0 +1,115 @@
+# Ontology Studio theme
+#
+# Two themes from the Streamlit theming guide
+# (https://docs.streamlit.io/develop/concepts/configuration/theming):
+#   [theme.light]  "Anthropic-inspired" light theme: warm off-white paper, clay accent, Space Grotesk
+#   [theme.dark]   "Spotify-inspired" dark theme: charcoal surfaces, green accent, Poppins
+# Because both sections are defined, users can switch between them in the app menu
+# (Settings -> Theme: Light / Dark / Use system setting).
+#
+# Fonts are self-hosted from ./static (SIL Open Font License, see static/OFL-*.txt) so the app
+# does not depend on an external font CDN.
+
+[server]
+enableStaticServing = true
+
+# ---------------------------------------------------------------- font files (shared by both themes)
+[[theme.fontFaces]]
+family = "SpaceGrotesk"
+url = "app/static/SpaceGrotesk-VariableFont_wght.ttf"
+
+[[theme.fontFaces]]
+family = "SpaceMono"
+url = "app/static/SpaceMono-Regular.ttf"
+style = "normal"
+weight = 400
+
+[[theme.fontFaces]]
+family = "SpaceMono"
+url = "app/static/SpaceMono-Bold.ttf"
+style = "normal"
+weight = 700
+
+[[theme.fontFaces]]
+family = "Poppins"
+url = "app/static/Poppins-Regular.ttf"
+style = "normal"
+weight = 400
+
+[[theme.fontFaces]]
+family = "Poppins"
+url = "app/static/Poppins-Italic.ttf"
+style = "italic"
+weight = 400
+
+[[theme.fontFaces]]
+family = "Poppins"
+url = "app/static/Poppins-Medium.ttf"
+style = "normal"
+weight = 500
+
+[[theme.fontFaces]]
+family = "Poppins"
+url = "app/static/Poppins-SemiBold.ttf"
+style = "normal"
+weight = 600
+
+[[theme.fontFaces]]
+family = "Poppins"
+url = "app/static/Poppins-Bold.ttf"
+style = "normal"
+weight = 700
+
+# ---------------------------------------------------------------- options shared by both themes
+[theme]
+showSidebarBorder = true
+
+# ---------------------------------------------------------------- light: Anthropic-inspired
+[theme.light]
+primaryColor = "#cb785c"
+backgroundColor = "#fdfdf8"
+secondaryBackgroundColor = "#ecebe3"
+textColor = "#3d3a2a"
+linkColor = "#3d3a2a"
+borderColor = "#d3d2ca"
+showWidgetBorder = true
+baseRadius = "0.75rem"
+buttonRadius = "full"
+font = "SpaceGrotesk"
+headingFontWeights = [600, 500, 500, 500, 500, 500]
+headingFontSizes = ["3rem", "2rem"]
+codeFont = "SpaceMono"
+codeFontSize = ".75rem"
+codeBackgroundColor = "#ecebe4"
+chartCategoricalColors = ["#0ea5e9", "#059669", "#fbbf24", "#cb785c", "#8b5cf6", "#64748b"]
+
+[theme.light.sidebar]
+backgroundColor = "#f0f0ec"
+secondaryBackgroundColor = "#ecebe3"
+headingFontSizes = ["1.6rem", "1.4rem", "1.2rem"]
+dataframeHeaderBackgroundColor = "#e4e4e0"
+
+# ---------------------------------------------------------------- dark: Spotify-inspired
+[theme.dark]
+primaryColor = "#1ed760"
+backgroundColor = "#2a2a2a"
+secondaryBackgroundColor = "#121212"
+codeBackgroundColor = "#121212"
+textColor = "#ffffff"
+linkColor = "#1ed760"
+borderColor = "#7c7c7c"
+showWidgetBorder = true
+baseRadius = "0.3rem"
+buttonRadius = "full"
+font = "Poppins"
+codeFont = "SpaceMono"
+codeFontSize = ".75rem"
+headingFontWeights = [600, 500, 500, 500, 500, 500]
+headingFontSizes = ["3rem", "2.5rem", "2.25rem", "2rem", "1.5rem"]
+chartCategoricalColors = ["#ffc862", "#2d46b9", "#b49bc8", "#1ed760", "#f573a0", "#7c7c7c"]
+
+[theme.dark.sidebar]
+backgroundColor = "#121212"
+secondaryBackgroundColor = "#000000"
+codeBackgroundColor = "#2a2a2a"
+borderColor = "#696969"

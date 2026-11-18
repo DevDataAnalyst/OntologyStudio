@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8" /><title>Theme watcher</title></head>
+<body style="margin:0">
+<script>
+// Invisible helper. Streamlit sends the active theme with every render message, including right after the
+// user switches Light/Dark in the app menu. When it differs from the theme Python last drew with, report it
+// back so the app reruns and re-emits its theme-dependent CSS (st.context.theme lags behind a switch).
+(function () {
+  "use strict";
+  function post(type, data) {
+    window.parent.postMessage(Object.assign({ isStreamlitMessage: true, type: type }, data || {}), "*");
+  }
+  let sent = null;
+  window.addEventListener("message", function (ev) {
+    if (!ev.data || ev.data.type !== "streamlit:render") return;
+    const t = ev.data.theme || {};
+    const base = t.base === "dark" ? "dark" : t.base === "light" ? "light" : null;
+    const known = (ev.data.args || {}).known || null;
+    if (!base || base === known || base === sent) return;
+    sent = base;
+    post("streamlit:setComponentValue", { value: base, dataType: "json" });
+  });
+  post("streamlit:componentReady", { apiVersion: 1 });
+  post("streamlit:setFrameHeight", { height: 0 });
+})();
+</script>
+</body>
+</html>

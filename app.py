@@ -26,7 +26,7 @@ import streamlit as st
 import yaml
 
 from modules import discovery, governance as gv, governance_ui as gui, ontology_edit as ed, ossie, ossie_form, ossie_ui
-from modules import semantics, store
+from modules import semantics, store, theme
 from modules import metric_views as mv
 from modules.extractors import from_sql_script, from_sqlite_file, is_sqlite_bytes
 from modules.graph_component import handle_event, network
@@ -54,23 +54,16 @@ ss.setdefault("graph_key", 0)
 ss.setdefault("uc_cache", {})
 
 
-def is_dark() -> bool:
-    try:
-        return st.context.theme.type == "dark"
-    except Exception:  # noqa: BLE001
-        return False
-
-
-TAB_PALETTE = {  # strip, active tab + panel, hover, separator, border, muted text, text
-    False: ("#dee1e6", "#ffffff", "#eceef1", "#a9adb3", "#d3d6db", "#3c4043", "#1f1f1f"),
-    True: ("#1b1e24", "#0e1117", "#262a32", "#4a4f58", "#30343c", "#b5b9c0", "#f1f3f4"),
-}
-
-
-def tab_css(dark: bool) -> str:
-    """Chromium-style tab strip for every st.tabs: separate rounded tabs on a grey bar; the active tab
-    joins the panel below it with the curved 'flares' Chrome draws at its bottom corners."""
-    strip, active, hover, sep, border, muted, txt = TAB_PALETTE[dark]
+def tab_css(c: dict) -> str:
+    """Chromium-style tab strip for every st.tabs: separate rounded tabs on a bar; the active tab joins the
+    panel below it with the curved 'flares' Chrome draws at its bottom corners. Colours come from the active
+    light/dark theme in .streamlit/config.toml (see modules/theme.py)."""
+    bg, txt = c["backgroundColor"], c["textColor"]
+    strip, active = c["secondaryBackgroundColor"], bg
+    hover = f"color-mix(in srgb, {txt} 7%, {strip})"
+    sep = f"color-mix(in srgb, {txt} 28%, {strip})"
+    border = f"color-mix(in srgb, {c['borderColor']} 70%, {bg})"
+    muted = f"color-mix(in srgb, {txt} 72%, {bg})"
     tl, tab = '.stTabs [role="tablist"]', '.stTabs [role="tab"]'   # react-aria (1.5x+) and baseweb DOMs
     return f"""<style>
 {tl} {{
@@ -97,13 +90,15 @@ def tab_css(dark: bool) -> str:
   background:
     radial-gradient(circle at 0 0, transparent 9.5px, {active} 10px) left bottom / 10px 10px no-repeat,
     radial-gradient(circle at 100% 0, transparent 9.5px, {active} 10px) right bottom / 10px 10px no-repeat; }}
+.st-key-theme_watcher {{ display: none; }}
 .stTabs [role="tabpanel"] {{
   background: {active}; border: 1px solid {border}; border-top: none; border-radius: 0 0 12px 12px;
   padding: 18px 18px 14px 18px; margin-top: 0; }}
 </style>"""
 
 
-st.markdown(tab_css(is_dark()), unsafe_allow_html=True)
+st.markdown(tab_css(theme.colors()), unsafe_allow_html=True)
+theme.watch()
 
 
 def commit(msg: str | None = None, rerun: bool = True):
@@ -466,7 +461,7 @@ with tab_form:
 with tab_net:
     left, right = st.columns([2.6, 1.2], gap="medium")
     with left:
-        evt = network(onto, height=660, dark=is_dark(), message=ss.graph_msg, selected=ss.selection,
+        evt = network(onto, height=660, dark=theme.is_dark(), message=ss.graph_msg, selected=ss.selection,
                       key=f"graph_{ss.graph_key}")
         st.caption("Drag to arrange · scroll to zoom · double-click a class to focus · **＋ Connect**: drag from "
                    "the class holding the key to the class it points to · select a relationship to **Repoint** "

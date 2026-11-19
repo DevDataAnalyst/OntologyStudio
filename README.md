@@ -16,6 +16,16 @@ The workflow is **Connect → Analyze → Edit → Export**. An **Ask** tab then
 
 On top of the modeled ontology, the studio keeps it governed and learning: **domains** that narrow what Ask searches, **certified** metrics and tables, governed wiki **pages**, **learned snippets** mined from query history with an authority score, a **review queue** that proposes what to promote or certify, and a **monitor** with request traces, feedback, cost and per-user budgets. See [Govern and learn](#7-govern-and-learn-domains-certification-pages-learned-snippets).
 
+The app is organised around the **lifecycle of a semantic model**, in three sections picked at the top of the page:
+
+| Section | What it does |
+|---|---|
+| **① Update existing model** | Open an Apache Ossie model from the versioned Volume store, an upload, or pasted YAML. It is validated, opens in the same editors, and is saved back as a **new version** (with who, when and why). Compare any two versions, or restore an old one. |
+| **② Create new model** | The build flow: pick a **source type** (Databricks / Non-Databricks), Connect → Analyze → Edit → Export, then **publish** the Ossie YAML to the Volume store. |
+| **③ Deploy to Databricks** | Put a model into Unity Catalog **next to its tables**: the YAML goes into a volume in the tables' schema, and, if you tick them, descriptions become table/column comments, tables get `semantic_model` tags, and metric views and informational keys are created. Everything is previewed first and runs with your permissions. |
+
+See [Model lifecycle](#model-lifecycle-versions-and-deployment) for the details.
+
 No Databricks workspace handy? The same engine runs locally on a SQLite file or a `.sql` script, in the app or from a [command-line interface](#command-line-interface).
 
 <p align="center">
@@ -72,10 +82,13 @@ The **Ask (Text-to-SQL)** tab writes SQL for a business question from the ontolo
 
 ### 1. Connect
 
+First pick the **source type** in the sidebar. **Databricks** reads Unity Catalog. **Non-Databricks** takes files today; Snowflake, PostgreSQL and Informatica CDGC are listed as *coming soon* placeholders (see `modules/sources.py`, the registry new connectors plug into).
+
 - **Unity Catalog** (on Databricks): pick a catalog, one or more of its schemas, and up to 100 tables and views from those schemas. Declared foreign keys that point into another schema or catalog are resolved too.
 - **Upload a file**: a SQLite database (`.db`, `.sqlite`, `.sqlite3`) or a SQL script (`.sql`, `.ddl`, `.txt`). With the dialect on **auto**, a script first runs in an in-memory SQLite database, so dumps with `INSERT`s get profiled too. Otherwise, or if that fails, the DDL is parsed with [sqlglot](https://github.com/tobymao/sqlglot) in the dialect you pick: MySQL, Postgres, T-SQL, Oracle, Snowflake, Databricks, BigQuery, Redshift, DuckDB or Teradata.
-- **Ossie YAML**: an [Apache Ossie](https://github.com/apache/ossie) semantic model (`.yaml`, `.yml` or `.json`). It is validated first (see [Apache Ossie](#6-apache-ossie-validation-import-and-export)) and loads into the editor when it passes.
-- **Saved version**: reload an ontology you saved earlier to a Unity Catalog Volume (needs [`ONTOLOGY_STORE`](#configuration)).
+- **Ossie YAML** (section ①, *Upload*): an [Apache Ossie](https://github.com/apache/ossie) semantic model (`.yaml`, `.yml` or `.json`). It is validated first (see [Apache Ossie](#6-apache-ossie-validation-import-and-export)) and loads into the editor when it passes.
+- **Saved version** (section ①, *Volume store*): open any version saved to the Volume store (needs [`ONTOLOGY_STORE`](#configuration)).
+- **Paste** (section ①): paste an Ossie model or a studio ontology YAML. The **Ontology YAML** tab also accepts a pasted Ossie model: it is validated, then opened.
 
 ### 2. Analyze
 
@@ -216,7 +229,37 @@ In the **Metric views** tab you can:
 
 **Apache Ossie.** The **Apache Ossie** tab exports the ontology as an Ossie `0.3.0.dev0` document (YAML or JSON) and validates it before you download it. See [below](#6-apache-ossie-validation-import-and-export).
 
-**Versions.** With `ONTOLOGY_STORE` set, **💾 Save version to Volume** (in the Ontology YAML tab) writes `<ONTOLOGY_STORE>/<ontology name>/<UTC timestamp>.yaml` plus a `latest.yaml`. Reload any of them from **Saved version** in the sidebar.
+**Versions.** With `ONTOLOGY_STORE` set, **💾 Publish to the Volume store** (Apache Ossie tab) or **💾 Save as new version** (🕘 Versions tab) saves the model as Ossie YAML; **💾 Save version to Volume** in the Ontology YAML tab saves the studio ontology. See [Model lifecycle](#model-lifecycle-versions-and-deployment).
+
+## Model lifecycle: versions and deployment
+
+### Versioned store (`ONTOLOGY_STORE`)
+
+Set `ONTOLOGY_STORE` in [`app.yaml`](app.yaml) to a Volume path such as `/Volumes/main/ontology/store`. Every save is a new file; nothing is overwritten:
+
+```
+<ONTOLOGY_STORE>/<model>/versions/<UTC stamp>.ossie.yaml      Apache Ossie model
+<ONTOLOGY_STORE>/<model>/versions/<UTC stamp>.ontology.yaml   studio ontology (Ontology YAML tab)
+<ONTOLOGY_STORE>/<model>/latest.ossie.yaml                    newest Ossie version
+<ONTOLOGY_STORE>/<model>/history.jsonl                        who, when, note, sha256, spec version, error count
+```
+
+The **🕘 Versions** tab saves the open model (with a note), shows unsaved changes against the version you opened, lists the history, compares two versions as a diff, opens one, or **restores** one (copies it forward as the newest version). Saves from the older layout (`<model>/<stamp>.yaml`) are listed as *legacy*. For local runs, `ONTOLOGY_STORE` can be a plain folder.
+
+### Deploy to Databricks (section ③)
+
+Pick the model open in the studio, a saved version, or a pasted / uploaded Ossie file. The target defaults to the catalog and schema most of its datasets live in, so the model stays next to its tables and inherits their permissions:
+
+| Output | Default | Statement / file |
+|---|---|---|
+| Volume | on | `CREATE VOLUME IF NOT EXISTS <catalog>.<schema>.semantic_models` |
+| Model files | always | `/Volumes/<catalog>/<schema>/semantic_models/<model>/<stamp>.ossie.yaml`, `latest.ossie.yaml`, `deployments.json` (log of every deployment) |
+| Comments | on | `COMMENT ON TABLE …` and `ALTER TABLE … ALTER COLUMN … COMMENT …` from dataset and field descriptions |
+| Tags | on | `ALTER TABLE … SET TAGS ('semantic_model' = …, 'semantic_model_version' = …)` (views: `ALTER VIEW`) |
+| Metric views | off | `CREATE OR REPLACE VIEW … WITH METRICS LANGUAGE YAML`, one per fact |
+| Keys | off | informational `PRIMARY KEY` / `FOREIGN KEY … NOT ENFORCED` |
+
+The preview shows every file and SQL statement (downloadable as a script). Statements run one by one as the signed-in user; a failure is recorded and the rest continue. Datasets whose source is not a `catalog.schema.table` (for example from a Non-Databricks source) are covered by the YAML file only.
 
 ### 5. Ask: test the ontology
 
@@ -360,7 +403,8 @@ review.py      review queue, promotion, page drafts         telemetry.py traces,
 |---|---|---|
 | Browsing, profiling, discovery, lineage, query history, Ask queries, metric view deploys | **The signed-in user.** Databricks Apps forwards the user's token (`X-Forwarded-Access-Token`) and the app connects to the SQL warehouse with it. | The `sql` user authorization scope, and the user's own grants. |
 | LLM enrichment and Ask SQL generation | **The app's service principal** | `CAN_QUERY` on the serving endpoint (the `serving-endpoint` app resource). |
-| Saving and loading versions | **The user first**, then the app's service principal if the user's token can't reach the Volume | The `files.files` scope for the user, or `READ VOLUME` / `WRITE VOLUME` for the service principal. |
+| Deploying a model (section ③): SQL statements | **The signed-in user** | `USE CATALOG` / `USE SCHEMA`, `CREATE VOLUME`, `MODIFY` (comments), `APPLY TAG`, `CREATE TABLE` (metric views) as ticked. |
+| Saving and loading versions, deployed model files | **The user first**, then the app's service principal if the user's token can't reach the Volume | The `files.files` scope for the user, or `READ VOLUME` / `WRITE VOLUME` for the service principal. |
 
 ---
 
@@ -456,6 +500,7 @@ Push your changes, then deploy again to pick them up. Databricks' **Auto deploy 
 | Keep Ask traces in a table | `CREATE TABLE` on the schema of `TELEMETRY_TABLE` the first time, then `MODIFY` and `SELECT` on the table |
 | See warehouse cost | `SELECT` on `system.billing.usage` and `system.billing.list_prices` |
 | Deploy metric views | `CREATE TABLE` on the target schema |
+| Deploy a model (section ③) | `CREATE VOLUME` on the schema (or `WRITE VOLUME` on an existing `semantic_models` volume), plus `MODIFY` for comments, `APPLY TAG` for tags, `CREATE TABLE` for metric views |
 | Save versions with their own identity | `READ VOLUME` / `WRITE VOLUME` on the Volume (with the `files.files` scope) |
 
 A missing grant only switches off that signal. The app shows a warning and carries on.
@@ -471,7 +516,7 @@ A missing grant only switches off that signal. The app shows a warning and carri
 | `SQL_WAREHOUSE_ID` | `valueFrom: sql-warehouse` | Warehouse for every SQL statement. Required on Databricks. |
 | `FM_ENDPOINT_NAME` | `databricks-meta-llama-3-3-70b-instruct` | Serving endpoint for LLM enrichment and Ask. To use whatever endpoint you picked as the resource instead, replace its `value:` line with `valueFrom: serving-endpoint`. |
 | `TARGET_CATALOG` / `TARGET_SCHEMA` | `main` / `default` | Catalog and schema pre-selected in the picker. Optional. |
-| `ONTOLOGY_STORE` | empty (off) | A Volume path such as `/Volumes/main/ontology/store` to save and reload versions. Optional. |
+| `ONTOLOGY_STORE` | `/Volumes/main/ontology/store` | Volume path for the versioned model store (sections ① and ②). Empty switches versioning off. Grant the app's service principal `READ VOLUME` / `WRITE VOLUME` on it. |
 | `STREAMLIT_SERVER_MAX_UPLOAD_SIZE` | `500` | Upload limit in MB. |
 | `TELEMETRY_TABLE` | empty (off) | `catalog.schema.table` to keep Ask traces and feedback in a Delta table. Optional. |
 | `ASK_DAILY_TOKEN_BUDGET` | `0` (no cap) | Default daily token budget per user for Ask; editable in the Monitor tab. Optional. |
@@ -547,7 +592,7 @@ Value-overlap checks run when the input can be loaded into SQLite. Validation no
 ## Project layout
 
 ```
-app.py                          Streamlit UI: connect · analyze · network + inspector · exports · Ask
+app.py                          Streamlit UI: sections ①②③ · connect · analyze · network + inspector · exports · Ask
 app.yaml                        Databricks Apps start command and environment
 cli.py                          The same engine from the command line
 requirements.txt                Python dependencies
@@ -565,7 +610,10 @@ modules/semantics.py            Fact/dimension and measure/dimension classificat
 modules/ontology_edit.py        Edits: add, repoint and delete relationships, rename, roles, metrics
 modules/graph_component.py      Diagram ⇄ ontology bridge
 modules/metric_views.py         Databricks metric view YAML 1.1 and DDL
-modules/store.py                Versions in a Unity Catalog Volume
+modules/store.py                Versioned model store in a Unity Catalog Volume (history, diff, restore)
+modules/deploy.py               Section ③: plan and run a deployment next to the tables
+modules/lifecycle_ui.py         🕘 Versions tab, publish box and the Deploy page
+modules/sources.py              Source types (Databricks / Non-Databricks) and planned connectors
 modules/llm_enrich.py           Optional LLM semantic layer
 modules/ask.py                  Text-to-SQL test bench (ontology vs. baseline)
 modules/ossie/                  Apache Ossie validator, converter and bundled official schemas
@@ -577,6 +625,7 @@ modules/telemetry.py            Ask traces, feedback, token cost, budgets, wareh
 modules/governance_ui.py        Domains, Knowledge, Review queue, Ask and Monitor tabs
 tests/test_ossie.py             Ossie checks and round trip (python tests/test_ossie.py)
 tests/test_governance.py        Domains, snippets, review queue, governance round trip through Ossie
+tests/test_lifecycle.py         Versioned store, deployment plan, source registry
 tests/test_ask.py               Ask engine: Decimal-safe prompts, focus, JSON answers, self-correction
 samples/                        Sample databases, scripts, docs and their generated outputs
 ```

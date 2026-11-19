@@ -13,9 +13,10 @@ env:
     value: "main"
   - name: TARGET_SCHEMA
     value: "default"
-  # Unity Catalog Volume for saved ontology versions (optional), e.g. /Volumes/main/ontology/store
+  # Unity Catalog Volume for versioned semantic models (sections ① and ②). Empty = versioning off.
+  # Grant the app's service principal READ VOLUME and WRITE VOLUME on it.
   - name: ONTOLOGY_STORE
-    value: ""
+    value: "/Volumes/main/ontology/store"
   - name: STREAMLIT_SERVER_MAX_UPLOAD_SIZE
     value: "500"
   # Delta table (catalog.schema.table) for Ask traces and feedback (optional; empty = session only)

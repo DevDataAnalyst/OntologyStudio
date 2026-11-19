@@ -118,7 +118,7 @@ The **✏️ YAML form editor** tab lets business users change an Apache Ossie s
 
 ### 3. Generate metric views
 
-The **Metric views** tab builds one metric view per fact, with joins nested for snowflake schemas. Download it, or deploy it to Unity Catalog.
+The **Metric views** tab builds one metric view per fact, with joins nested for snowflake schemas. Download it, or deploy it to Unity Catalog. To make your own, switch to **➕ New metric view** (see [Guided metric view builder](#guided-metric-view-builder)).
 
 ![Metric views tab showing the YAML for the Order fact](docs/images/metric-views.png)
 
@@ -296,6 +296,19 @@ In the **Metric views** tab you can:
 - download one view as YAML,
 - download a zip with every view, its `CREATE OR REPLACE VIEW … WITH METRICS LANGUAGE YAML` statement, and the ontology,
 - or click **🚀 Deploy to Unity Catalog**. This runs the `CREATE` statement as you, so you need `CREATE TABLE` on the target schema. It is available when the source is Unity Catalog. The target defaults to `<fact's catalog>.<fact's schema>.<fact>_metrics`, and you can change it.
+
+#### Guided metric view builder
+
+**➕ New metric view** (in the Metric views tab) builds a metric view step by step. Every step is pre-filled and each suggestion says why it is there:
+
+| Step | What you get |
+|---|---|
+| ① Start from | Fact tables first, with how many metrics the model has for each. |
+| ② Joins | The many-to-one relationships of that table (key joins get `rely: at_most_one_match`). Untick one and its fields and measures leave the lists. |
+| ③ Fields | The generated view's fields, time columns first, with profiled values (`3 values: Store, Web, Catalog`) and how often colleagues' queries use the column. Month and year versions of date fields are offered unticked. |
+| ④ Measures | The model's metrics, ticked. Offered unticked: a row count, a distinct count per joined table, and the aggregates your team actually runs (learned query snippets, ranked by authority). Metrics a metric view can't hold (window functions, tables the view doesn't join) stay unticked with the reason. **Quick add** makes `SUM` / `AVG` / `MIN` / `MAX` / `COUNT DISTINCT` of a column, or a ratio of two measures (`MEASURE(a) / NULLIF(MEASURE(b), 0)`), without writing SQL; you can also type your own rows. |
+| ⑤ Filter | Conditions your team often filters on, or **Keep rows where** a column is one of its profiled values. |
+| ⑥ Name, check and save | Live checks (unique names, aggregating measures, joins in place, no tables outside the view) and the YAML. **💾 Add to the model** lists the view under **📄 Views** with a ★ and saves it with the model (it travels in the Apache Ossie export and versions); you can also download it or deploy it to Unity Catalog. |
 
 **Apache Ossie.** The **Apache Ossie** tab exports the ontology as an Ossie `0.3.0.dev0` document (YAML or JSON) and validates it before you download it. See [below](#6-apache-ossie-validation-import-and-export).
 
@@ -798,7 +811,8 @@ modules/ontology_builder.py     Relational → ontology mapping, YAML, validatio
 modules/semantics.py            Fact/dimension and measure/dimension classification, base metrics
 modules/ontology_edit.py        Edits: add, repoint and delete relationships, rename, roles, metrics
 modules/graph_component.py      Diagram ⇄ ontology bridge
-modules/metric_views.py         Databricks metric view YAML 1.1 and DDL
+modules/metric_views.py         Databricks metric view YAML 1.1 and DDL; suggestions and checks for the builder
+modules/mv_builder_ui.py        Metric views tab → ➕ New metric view (guided builder)
 modules/store.py                Versioned model store in a Unity Catalog Volume (history, diff, restore)
 modules/deploy.py               Section ③: plan and run a deployment next to the tables
 modules/lifecycle_ui.py         🕘 Versions tab, publish box and the Deploy page
@@ -815,7 +829,7 @@ modules/governance_ui.py        Domains, Knowledge, Review queue, Ask and Monito
 tests/test_ossie.py             Ossie checks and round trip (python tests/test_ossie.py)
 tests/test_ossie_form.py        YAML form editor
 tests/test_governance.py        Domains, snippets, review queue, governance round trip through Ossie
-tests/test_lifecycle.py         Versioned store, deployment plan, source registry
+tests/test_lifecycle.py         Versioned store, deployment plan, source registry, metric view builder
 tests/test_ask.py               Ask engine: Decimal-safe prompts, focus, JSON answers, self-correction
 samples/                        Sample databases, scripts, docs and their generated outputs
 docs/images/                    Screenshots and the network diagram used in this README

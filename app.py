@@ -37,6 +37,7 @@ from modules import discovery, governance as gv, governance_ui as gui, ontology_
 from modules import lifecycle_ui as lc, semantics, store, theme
 from modules import sources as src
 from modules import metric_views as mv
+from modules import mv_builder_ui as mvb
 from modules.extractors import from_sql_script, from_sqlite_file, is_sqlite_bytes
 from modules.graph_component import handle_event, network
 from modules.ontology_builder import (BuildOptions, attach_lineage, attach_suggestions,
@@ -919,29 +920,40 @@ with tab_ossie:
 # =========================================================================== #
 with tab_mv:
     facts = mv.fact_classes(onto)
-    if not facts:
+    custom = onto.get("metric_views") or {}
+    mv_mode = st.segmented_control("Metric views", ["📄 Views", "➕ New metric view"], default="📄 Views",
+                                   key="mv_mode", label_visibility="collapsed") or "📄 Views"
+    if mv_mode == "➕ New metric view":
+        mvb.builder(onto, commit,
+                    (lambda sql: uc_runner()(sql)) if ss.get("runner", {}).get("kind") == "uc" else None)
+    elif not facts and not custom:
         st.info("No fact classes found. Mark a class as **fact** in the inspector (or give it measure "
-                "columns) to generate a metric view.")
+                "columns) to generate a metric view, or build one in **➕ New metric view**.")
     else:
         views = {f: mv.to_yaml(mv.build_metric_view(onto, f)) for f in facts}
-        fsel = st.selectbox("Fact", facts, format_func=lambda f: f"{f} ({classes[f].get('source_table')})")
+        targets = {f: (".".join(classes[f]["source_fqn"].split(".")[:2]) + "." if classes[f].get("source_fqn")
+                       else "") + mv.view_name(onto, f) for f in facts}
+        for n, c in custom.items():                     # ★ = made in ➕ New metric view
+            views[f"★ {n}"], targets[f"★ {n}"] = mv.to_yaml(c["view"]), c.get("target") or n
+        opts, pick = list(views), ss.get("mv_view_pick")
+        fsel = st.selectbox("Metric view", opts, index=opts.index(pick) if pick in opts else 0,
+                            format_func=lambda f: f if f.startswith("★") else f"{f} ({classes[f].get('source_table')})")
+        ss.mv_view_pick = fsel     # widget state is wiped by an st.rerun() earlier in the run (e.g. Refresh list)
         st.code(views[fsel], language="yaml")
-        fq = classes[fsel].get("source_fqn")
-        default_target = (".".join(fq.split(".")[:2]) + "." if fq else "") + mv.view_name(onto, fsel)
-        target = st.text_input("Metric view name (catalog.schema.view)", default_target, key=f"mvt_{fsel}")
+        target = st.text_input("Metric view name (catalog.schema.view)", targets[fsel], key=f"mvt_{fsel}")
         ddl = mv.ddl(views[fsel], target)
         with st.expander("Deploy SQL"):
             st.code(ddl, language="sql")
         c1, c2, c3 = st.columns(3)
-        c1.download_button("⬇️ This metric view (.yaml)", views[fsel], file_name=f"{mv.view_name(onto, fsel)}.yaml",
+        c1.download_button("⬇️ This metric view (.yaml)", views[fsel],
+                           file_name=f"{targets[fsel].rpartition('.')[2]}.yaml",
                            mime="application/x-yaml", use_container_width=True)
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, "w") as z:
             for f, y in views.items():
-                z.writestr(f"{mv.view_name(onto, f)}.yaml", y)
-                tgt = (".".join(classes[f]["source_fqn"].split(".")[:2]) + "." if classes[f].get("source_fqn")
-                       else "") + mv.view_name(onto, f)
-                z.writestr(f"{mv.view_name(onto, f)}.sql", mv.ddl(y, tgt))
+                n = targets[f].rpartition(".")[2]
+                z.writestr(f"{n}.yaml", y)
+                z.writestr(f"{n}.sql", mv.ddl(y, targets[f]))
             z.writestr("ontology.yaml", yaml_text)
         c2.download_button("⬇️ All metric views + ontology (.zip)", buf.getvalue(),
                            file_name="metric_views.zip", mime="application/zip", use_container_width=True)
@@ -954,6 +966,9 @@ with tab_mv:
                 st.success(f"Created metric view {target}")
             except Exception as e:  # noqa: BLE001
                 st.error(f"Deploy failed: {e}")
+        if fsel.startswith("★") and st.button("🗑️ Remove this view from the model", key=f"mvrm_{fsel}"):
+            onto["metric_views"].pop(fsel[2:], None)
+            commit(f"Metric view {fsel[2:]} removed")
 
 # =========================================================================== #
 # Semantic layer

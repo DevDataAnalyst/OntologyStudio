@@ -134,3 +134,46 @@ def test_metric_view_follows_the_yaml_reference():
     assert all(len(x.get("synonyms", [])) <= 10 for x in view["fields"] + view["measures"])
     assert all(j.get("rely") == {"at_most_one_match": True} for j in view["joins"])   # declared keys
     assert not mv.is_aggregate("price * qty") and mv.is_aggregate("SUM(a) / COUNT(DISTINCT b)")
+
+
+def test_metric_view_builder_suggests_composes_and_checks():
+    from modules import metric_views as mv
+    doc = ossie.validate_text(SAMPLE.read_text(encoding="utf-8"), SAMPLE.name).document
+    onto = ossie.to_ontology(doc, SAMPLE.name)
+    onto["snippets"] = [
+        {"kind": "expression", "text": "SUM(store_sales.ss_net_profit * 2)", "name": "double_profit", "uses": 7,
+         "users": {"a": 5, "b": 2}, "authority": 0.8, "status": "learned"},
+        {"kind": "filter", "text": "store_sales.ss_quantity > 0", "uses": 3, "users": {"a": 3}, "status": "learned"},
+        {"kind": "expression", "text": "SUM(other.x)", "uses": 9, "status": "learned"}]   # table not in the view
+    s = mv.suggest(onto, "store_sales")
+    m = {x["name"]: x for x in s["measures"]}
+    assert m["double_profit"]["expr"] == "SUM(ss_net_profit * 2)" and not m["double_profit"]["pick"]
+    assert "used 7× by 2 people" in m["double_profit"]["why"] and not m["row_count"]["pick"]
+    assert m["customer_count"]["expr"] == "COUNT(DISTINCT ss_customer_sk)"         # one per joined table
+    assert not m["cumulative_sales"]["pick"] and "window" in m["cumulative_sales"]["why"]   # OVER (…)
+    assert [f["expr"] for f in s["filters"]] == ["ss_quantity > 0"] and "other" not in str(s["measures"])
+    # everything ticked = the generated view minus window measures, and it passes the checks
+    gen = mv.build_metric_view(onto, "store_sales")
+    full = mv.compose(s["base"], [j["name"] for j in s["joins"]], s["fields"], s["measures"])
+    assert {f["name"] for f in full["fields"]} == {f["name"] for f in gen["fields"]}
+    assert {x["name"] for x in full["measures"]} == {x["name"] for x in gen["measures"]
+                                                     if not mv.WINDOW.search(x["expr"])}
+    assert mv.check(full, s["base"]) == []
+    # untick a join: whatever still uses it is reported; drop those rows and it is fine again
+    j, keep = s["joins"][0]["name"], [x["name"] for x in s["joins"][1:]]
+    assert any(f"uses {j}" in p for p in mv.check(mv.compose(s["base"], keep, s["fields"], s["measures"]), s["base"]))
+    ok = mv.compose(s["base"], keep, [f for f in s["fields"] if j not in f["via"]],
+                    [x for x in s["measures"] if j not in x["via"]], "ss_quantity > 0")
+    assert mv.check(ok, s["base"]) == [] and ok["filter"] == "ss_quantity > 0"
+    # mistakes a user can make
+    rows = [{"pick": True, "name": "Net profit", "expr": "ss_net_profit"},           # not an aggregate
+            {"pick": True, "name": "ratio", "expr": "MEASURE(missing) / MEASURE(net_profit)"},
+            {"pick": True, "name": "NET_PROFIT", "expr": "SUM(ss_net_profit)"},      # same name, other case
+            {"pick": True, "name": "dso", "expr": "SUM(ar_invoices.amt) + COUNT_IF(note = 'U.S.')"}]
+    probs = " | ".join(mv.check(mv.compose(s["base"], [], [], rows), s["base"]))
+    assert "must aggregate" in probs and "MEASURE(missing)" in probs and "unique" in probs
+    assert "reads ar_invoices, a table this view doesn't join" in probs and "reads U" not in probs
+    # a saved view travels with the model through the Apache Ossie export
+    onto["metric_views"] = {"v": {"fact": "store_sales", "target": "c.s.v", "view": ok}}
+    back = ossie.to_ontology(ossie.from_ontology(onto)[0], "x.yaml")
+    assert back["metric_views"]["v"]["view"] == ok

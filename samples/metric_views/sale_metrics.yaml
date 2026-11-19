@@ -14,7 +14,7 @@ joins:
 - name: date_dim
   source: dim_date
   'on': source.order_date_key = date_dim.date_key
-dimensions:
+fields:
 - name: customer_name
   expr: customer.customer_name
   display_name: Customer Name

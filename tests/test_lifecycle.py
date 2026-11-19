@@ -122,3 +122,15 @@ def test_deploy_grants_the_app_access_to_its_volume():
     assert p.steps[-1].sql == ("GRANT READ VOLUME, WRITE VOLUME ON VOLUME `tpcds`.`public`.`semantic_models` "
                                "TO `3939594d-sp`")
     assert not [s for s in deploy.plan(doc, None, "tpcds", "public").steps if s.kind == "grant"]
+def test_metric_view_follows_the_yaml_reference():
+    from modules import metric_views as mv
+    doc = ossie.validate_text(SAMPLE.read_text(encoding="utf-8"), SAMPLE.name).document
+    onto = ossie.to_ontology(doc, SAMPLE.name)
+    view = mv.build_metric_view(onto, mv.fact_classes(onto)[0])
+    assert view["version"] == "1.1" and "fields" in view and "dimensions" not in view
+    names = [x["name"].lower() for x in view["fields"] + view["measures"]]
+    assert len(names) == len(set(names))
+    assert all(mv.is_aggregate(m["expr"]) for m in view["measures"])
+    assert all(len(x.get("synonyms", [])) <= 10 for x in view["fields"] + view["measures"])
+    assert all(j.get("rely") == {"at_most_one_match": True} for j in view["joins"])   # declared keys
+    assert not mv.is_aggregate("price * qty") and mv.is_aggregate("SUM(a) / COUNT(DISTINCT b)")

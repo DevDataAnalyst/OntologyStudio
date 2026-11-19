@@ -194,9 +194,11 @@ The file also carries `value_meanings`, `rules`, `metrics`, `suggested_relations
 
 **Databricks metric views** (YAML spec 1.1), one per fact:
 
-- many-to-one joins from the fact, nested for snowflake schemas (up to 3 levels deep),
-- dimensions from the fact and from every class it joins to,
-- measures from the ontology's metrics, plus an aggregate for each measure column that has no metric yet.
+- many-to-one joins from the fact, nested for snowflake schemas (up to 3 levels deep), with `rely: {at_most_one_match: true}` when a join lands on the joined table's declared key (never on an inferred one),
+- `fields` (the current name for `dimensions`, which Databricks still accepts) from the fact and from every class it joins to,
+- measures from the ontology's metrics, plus an aggregate for each measure column that has no metric yet. Metrics whose SQL doesn't aggregate are left out (the spec requires measures to aggregate) and listed in the view's comment.
+
+Names are unique across fields and measures (ignoring case), display names are capped at 255 characters and synonyms at 10, as the [metric view YAML reference](https://docs.databricks.com/aws/en/uc-semantics/metric-views/yaml-reference) requires.
 
 Trimmed from [`samples/metric_views/sale_metrics.yaml`](samples/metric_views/sale_metrics.yaml):
 
@@ -211,7 +213,7 @@ joins:
   - name: region
     source: dim_region
     'on': customer.region_code = region.region_code
-dimensions:
+fields:
 - name: region_name
   expr: customer.region.region_name
   display_name: Region Name

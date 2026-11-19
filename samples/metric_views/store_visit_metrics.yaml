@@ -8,7 +8,7 @@ joins:
   - name: region
     source: dim_region
     'on': customer.region_code = region.region_code
-dimensions:
+fields:
 - name: visited_on
   expr: visited_on
   display_name: Visited On

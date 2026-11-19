@@ -4,9 +4,15 @@ Export the ontology as Databricks metric views (YAML spec 1.1), one per fact cla
   source     : the fact table (three-part name for Unity Catalog sources)
   joins      : many-to-one relationships from the fact, nested for snowflake
                schemas (max depth 3)
-  dimensions : the fact's dimension/time columns + joined classes' dimension columns
+  fields     : the fact's dimension/time columns + joined classes' dimension columns
+               (`fields` is the current key; `dimensions` is its backward-compatible synonym)
   measures   : ontology metrics whose base_class is the fact (SQL translated to
                metric-view references), plus SUM/AVG of measures without one
+
+Follows https://docs.databricks.com/aws/en/uc-semantics/metric-views/yaml-reference :
+names unique across fields and measures ignoring case, display_name <= 255 chars,
+at most 10 synonyms of <= 255 chars, measures must aggregate, `rely.at_most_one_match`
+only on joins that land on the joined table's key.
 
 `ddl()` wraps a definition in CREATE OR REPLACE VIEW … WITH METRICS LANGUAGE YAML.
 """
@@ -17,6 +23,7 @@ import re
 import yaml
 
 MAX_DEPTH = 3
+MAX_TEXT, MAX_SYNONYMS = 255, 10
 RESERVED = {"date", "time", "timestamp", "order", "user", "group", "year", "month", "day", "select",
             "table", "from", "where", "join", "on", "by", "source", "case", "end", "interval", "values",
             "current", "all", "any", "as", "key", "location", "range", "row", "rows", "window"}
@@ -68,6 +75,52 @@ def _dim_expr(p: dict, pid: str, prefix: str) -> str:
         return f"{prefix}{_col(p, pid)}"
 
 
+def _synonyms(items) -> list[str]:
+    out, seen = [], set()
+    for x in items or []:
+        x = str(x).strip()[:MAX_TEXT]
+        if x and x.lower() not in seen:
+            seen.add(x.lower())
+            out.append(x)
+    return out[:MAX_SYNONYMS]
+
+
+def _display(text: str) -> str:
+    return str(text)[:MAX_TEXT]
+
+
+def is_aggregate(sql: str) -> bool:
+    """A measure expression must aggregate (SUM, COUNT, … or a ratio of aggregates)."""
+    try:
+        import sqlglot
+        from sqlglot import exp
+        tree = sqlglot.parse_one(sql, read="databricks")
+        return any(True for _ in tree.find_all(exp.AggFunc)) or bool(
+            re.search(r"\b(any_value|approx_count_distinct|percentile\w*|median|mode|count_if|"
+                      r"bool_and|bool_or|collect_\w+|stddev\w*|variance|var_\w+)\s*\(", sql, re.I))
+    except Exception:  # noqa: BLE001
+        return bool(re.search(r"\b(sum|count|avg|min|max|count_if|median|percentile\w*|stddev\w*|"
+                              r"variance|any_value|approx_count_distinct)\s*\(", sql, re.I))
+
+
+def _joins_on_key(onto: dict, p: dict) -> bool:
+    """True when the join columns are the joined table's identifier (so at most one row matches)."""
+    tgt = onto["classes"].get(p["range"], {})
+    if tgt.get("identifier_inferred"):          # a guessed key is no guarantee: wrong rely = wrong SUM/COUNT
+        return False
+    cols = {t.rpartition(".")[2].lower() for t in p["join"]["to"]}
+    ident = tgt.get("identifier")
+    keys = [ident] if isinstance(ident, str) else list(ident or [])
+    keys += [pid for pid, dp in tgt.get("data_properties", {}).items() if dp.get("identifier")] if not keys else []
+    key_cols = {str(tgt.get("data_properties", {}).get(k, {}).get("source_column", k)).lower() for k in keys}
+    if key_cols and cols == key_cols:
+        return True
+    for uk in tgt.get("unique_keys") or []:
+        if {str(c).lower() for c in uk} == cols:
+            return True
+    return False
+
+
 def fact_classes(onto: dict) -> list[str]:
     facts = [cid for cid, c in onto["classes"].items() if c.get("role") == "fact"]
     if facts:
@@ -99,9 +152,9 @@ def build_metric_view(onto: dict, fact: str, include_synonyms: bool = True) -> d
         if p:
             if p.get("description"):
                 d["comment"] = p["description"]
-            d["display_name"] = _title(p.get("label", name))
-            if include_synonyms and p.get("synonyms"):
-                d["synonyms"] = p["synonyms"][:10]
+            d["display_name"] = _display(_title(p.get("label", name)))
+            if include_synonyms and _synonyms(p.get("synonyms")):
+                d["synonyms"] = _synonyms(p.get("synonyms"))
         dims.append(d)
 
     def dims_of(cid: str, prefix: str, path_label: str):
@@ -137,6 +190,8 @@ def build_metric_view(onto: dict, fact: str, include_synonyms: bool = True) -> d
                 fcol, tcol = f.rpartition(".")[2], t.rpartition(".")[2]
                 conds.append(f"{parent_alias}.{fcol} = {alias}.{tcol}")
             j = {"name": alias, "source": _src(tc, tgt), "on": " AND ".join(conds)}
+            if p["cardinality"] in ("many-to-one", "one-to-one") and _joins_on_key(onto, p):
+                j["rely"] = {"at_most_one_match": True}
             full_path = f"{path}{alias}."
             dims_of(tgt, full_path, f"{alias}_")
             nested = joins_of(tgt, alias, full_path, depth + 1, seen | {tgt})
@@ -167,18 +222,24 @@ def build_metric_view(onto: dict, fact: str, include_synonyms: bool = True) -> d
             return f"{a}.{col}" if a and a != "source" else col if a == "source" else m.group(0)
         return re.sub(r"\b([A-Za-z_][\w]*)\.([A-Za-z_][\w]*)\b", sub, sql)
 
+    skipped = []
     for m in onto.get("metrics", []):
         if m.get("base_class") != fact or not m.get("sql"):
+            continue
+        if not is_aggregate(m["sql"]):
+            skipped.append(m["name"])          # a measure must aggregate; the spec rejects row-level exprs
             continue
         name = _snake(m["name"])
         if name in mnames or name in dim_names:
             name = f"{name}_measure"
+        if name in mnames:
+            continue
         mnames.add(name)
-        e = {"name": name, "expr": translate(m["sql"]), "display_name": _title(m["name"])}
+        e = {"name": name, "expr": translate(m["sql"]), "display_name": _display(_title(m["name"]))}
         if m.get("description"):
             e["comment"] = m["description"]
-        if include_synonyms and m.get("synonyms"):
-            e["synonyms"] = list(dict.fromkeys(m["synonyms"]))[:10]
+        if include_synonyms and _synonyms(m.get("synonyms")):
+            e["synonyms"] = _synonyms(m.get("synonyms"))
         measures.append(e)
     exprs = {x["expr"].replace(" ", "").lower() for x in measures}
     for pid, p in fc["data_properties"].items():
@@ -189,11 +250,11 @@ def build_metric_view(onto: dict, fact: str, include_synonyms: bool = True) -> d
         if expr.replace(" ", "").lower() in exprs:
             continue
         name = _snake(f"{agg.lower()}_{p.get('source_column', pid)}")
-        if name in mnames:
+        if name in mnames or name in dim_names:
             continue
         mnames.add(name)
         measures.append({"name": name, "expr": expr,
-                         "display_name": _title(f"{agg} {p.get('label', pid)}")})
+                         "display_name": _display(_title(f"{agg} {p.get('label', pid)}"))})
     if not measures:
         measures.append({"name": "row_count", "expr": "COUNT(1)", "display_name": "Row Count"})
 
@@ -204,8 +265,11 @@ def build_metric_view(onto: dict, fact: str, include_synonyms: bool = True) -> d
     if joins:
         mv["joins"] = joins
     if dims:
-        mv["dimensions"] = dims
+        mv["fields"] = dims
     mv["measures"] = measures
+    if skipped:
+        mv["comment"] = (mv.get("comment", "") + ("; " if mv.get("comment") else "")
+                         + "not aggregations, left out: " + ", ".join(skipped))[:1000]
     return mv
 
 

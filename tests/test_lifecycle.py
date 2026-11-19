@@ -112,3 +112,13 @@ def test_sql_warehouse_fallback_statements(monkeypatch):
     assert seen[0].endswith("INTO '/Volumes/c/s/v/m/latest.ossie.yaml' OVERWRITE")
     assert seen[1].startswith("GET '/Volumes/c/s/v/m/latest.ossie.yaml' TO ")
     assert seen[2] == "LIST '/Volumes/c/s/v/m/'"
+
+
+def test_deploy_grants_the_app_access_to_its_volume():
+    doc = ossie.validate_text(SAMPLE.read_text(encoding="utf-8"), SAMPLE.name).document
+    p = deploy.plan(doc, None, "tpcds", "public", comments=False, tags=False, grant_app="3939594d-sp")
+    kinds = [s.kind for s in p.steps]
+    assert kinds == ["volume", "grant", "grant", "grant"]
+    assert p.steps[-1].sql == ("GRANT READ VOLUME, WRITE VOLUME ON VOLUME `tpcds`.`public`.`semantic_models` "
+                               "TO `3939594d-sp`")
+    assert not [s for s in deploy.plan(doc, None, "tpcds", "public").steps if s.kind == "grant"]

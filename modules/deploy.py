@@ -9,6 +9,7 @@ A deployment is planned first (pure, no I/O: `plan()`), shown to the user, then 
                      latest.ossie.yaml      what consumers read
                      deployments.json       log of every deployment (who, when, what ran)
   SQL (optional)  CREATE VOLUME IF NOT EXISTS <catalog>.<schema>.<volume>
+                  GRANT USE CATALOG / USE SCHEMA / READ VOLUME, WRITE VOLUME … TO <app service principal>
                   COMMENT ON TABLE … / ALTER TABLE … ALTER COLUMN … COMMENT   (model descriptions)
                   ALTER TABLE … SET TAGS ('semantic_model' = …, 'semantic_model_version' = …)
                   CREATE OR REPLACE VIEW … WITH METRICS LANGUAGE YAML         (one per fact)
@@ -110,7 +111,7 @@ def _column_of(f: dict) -> str | None:
 def plan(doc: dict, onto: dict | None, catalog: str, schema: str, volume: str = "semantic_models",
          version: str | None = None, *, create_volume: bool = True, comments: bool = True, tags: bool = True,
          metric_views: bool = False, constraints: bool = False, overwrite_comments: bool = True,
-         model_name: str | None = None, yaml_text: str | None = None) -> Plan:
+         model_name: str | None = None, yaml_text: str | None = None, grant_app: str | None = None) -> Plan:
     from . import ossie
     model = store.slug(model_name or doc.get("name") or "model")
     version = version or store.stamp()
@@ -124,6 +125,13 @@ def plan(doc: dict, onto: dict | None, catalog: str, schema: str, volume: str = 
         p.steps.append(Step("volume", f"CREATE VOLUME IF NOT EXISTS {qn(f'{catalog}.{schema}.{volume}')}\n"
                                       f"COMMENT {lit('Semantic models (Apache Ossie YAML) deployed by Ontology Studio')}",
                             target=f"{catalog}.{schema}.{volume}"))
+    if grant_app:      # the app's service principal can then write the files when the viewer's token can't
+        sp = q(grant_app)
+        for sql_, tgt in ((f"GRANT USE CATALOG ON CATALOG {q(catalog)} TO {sp}", catalog),
+                          (f"GRANT USE SCHEMA ON SCHEMA {qn(f'{catalog}.{schema}')} TO {sp}", f"{catalog}.{schema}"),
+                          (f"GRANT READ VOLUME, WRITE VOLUME ON VOLUME {qn(f'{catalog}.{schema}.{volume}')} TO {sp}",
+                           f"{catalog}.{schema}.{volume}")):
+            p.steps.append(Step("grant", sql_, target=tgt))
     ds_uc = uc_datasets(doc)
     skipped = len(doc.get("datasets") or []) - len(ds_uc)
     if skipped and (comments or tags or constraints):
@@ -212,9 +220,9 @@ def execute(p: Plan, run, token: str | None, author: str = "", progress=None) ->
                     run(s.fallback)
                     s.status, s.message = "ok", "ran the fallback statement"
                 except Exception as e2:  # noqa: BLE001
-                    s.status, s.message = "failed", str(e2).splitlines()[0][:300]
+                    s.status, s.message = "failed", str(e2).splitlines()[0][:600]
             else:
-                s.status, s.message = "failed", str(e).splitlines()[0][:300]
+                s.status, s.message = "failed", str(e).splitlines()[0][:600]
         tick(f"{s.kind}: {s.target}")
         if s.kind == "volume" and s.status == "failed":
             p.notes.append("Could not create the volume; the files are written only if it already exists.")
@@ -225,7 +233,7 @@ def execute(p: Plan, run, token: str | None, author: str = "", progress=None) ->
             who = store.write_text(path, text, token)
             files_ok.append(path)
         except Exception as e:  # noqa: BLE001
-            file_errors.append(f"{path}: {str(e)[:300]}")
+            file_errors.append(f"{path}: {str(e)[:2000]}")
         tick(f"file: {path.rsplit('/', 1)[-1]}")
 
     log_path = f"{p.folder}/deployments.json"

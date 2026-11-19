@@ -8,6 +8,7 @@ Streamlit UI for the semantic-model lifecycle:
 from __future__ import annotations
 
 import hashlib
+import os
 from typing import Callable
 
 import pandas as pd
@@ -248,6 +249,11 @@ def deploy_page(onto: dict | None, token: str | None, runner: Callable | None, o
     comments = o1.checkbox("Descriptions → table & column comments", value=True, key="dp_o_com", disabled=not n_uc)
     tags = o2.checkbox("Tag tables with the model and version", value=True, key="dp_o_tag", disabled=not n_uc)
     mviews = o2.checkbox("Create metric views (one per fact)", value=False, key="dp_o_mv", disabled=not n_uc)
+    app_sp = os.getenv("DATABRICKS_CLIENT_ID", "")
+    grant = o3.checkbox("Let the app write the files", value=bool(app_sp), key="dp_o_grant", disabled=not app_sp,
+                        help="Grants the app's service principal USE CATALOG, USE SCHEMA and READ/WRITE VOLUME on "
+                             "this volume (as you), so the YAML can still be written when your sign-in has no file "
+                             "access (OAuth 'files' scope).")
     cons = o3.checkbox("Informational PK / FK constraints", value=False, key="dp_o_con", disabled=not n_uc,
                        help="NOT ENFORCED keys. Primary keys need NOT NULL columns; existing constraints fail.")
 
@@ -256,7 +262,8 @@ def deploy_page(onto: dict | None, token: str | None, runner: Callable | None, o
         return
     p = dp.plan(doc, model_onto, catalog.strip(), schema.strip(), volume.strip(), create_volume=create_volume,
                 comments=comments and n_uc > 0, tags=tags and n_uc > 0, metric_views=mviews and n_uc > 0,
-                constraints=cons and n_uc > 0, model_name=model, yaml_text=text)
+                constraints=cons and n_uc > 0, model_name=model, yaml_text=text,
+                grant_app=app_sp if grant and app_sp else None)
 
     st.subheader("Preview")
     counts = p.counts()
@@ -266,6 +273,9 @@ def deploy_page(onto: dict | None, token: str | None, runner: Callable | None, o
     m[2].metric("Tags", counts.get("tag", 0))
     m[3].metric("Metric views", counts.get("metric_view", 0))
     m[4].metric("Constraints", counts.get("constraint", 0))
+    if counts.get("grant"):
+        st.caption(f"• The app's service principal (`{app_sp}`) gets READ / WRITE VOLUME on "
+                   f"`{p.catalog}.{p.schema}.{p.volume}` (and USE on its catalog and schema).")
     st.markdown("**Files**\n" + "\n".join(f"- `{f}`" for f in [*p.files, f"{p.folder}/deployments.json"]))
     for n in p.notes:
         st.caption("• " + n)
@@ -292,8 +302,8 @@ def deploy_page(onto: dict | None, token: str | None, runner: Callable | None, o
             f"Deployed {res['model']} version {store.pretty_stamp(res['version'])} to `{res['target']}`"
             + ("" if res["ok"] else " with some failures (see below)") + ".")
         if res["file_errors"]:
-            for e in res["file_errors"]:
-                st.error(e)
+            st.error(f"{len(res['file_errors'])} file(s) could not be written. Details:")
+            st.code("\n\n".join(res["file_errors"]), language="text", wrap_lines=True)
         if res["steps"]:
             st.dataframe(pd.DataFrame(res["steps"]), hide_index=True, use_container_width=True)
 

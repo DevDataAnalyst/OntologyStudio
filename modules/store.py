@@ -199,7 +199,8 @@ def _try(token, fn, what: str, path: str | None = None):
         try:
             return fn(b)
         except Exception as e:  # noqa: BLE001
-            errors.append(f"{b.who}: {str(e)[:180]}")
+            msg = " ".join(str(e).split())
+            errors.append(f"{b.who}: {msg[:400]}")
     hint = ""
     if any("scope" in e.lower() for e in errors):
         hint = (" — Fix: add the `files.files` scope under the app's User authorization (then reopen the app "

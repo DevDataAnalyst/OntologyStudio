@@ -56,7 +56,8 @@ _IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 # small helpers
 # --------------------------------------------------------------------------- #
 GOVERNANCE_KEYS = ("domains", "status", "owner", "certified_by", "certified_at", "learned_from")
-MODEL_GOVERNANCE_KEYS = ("domains", "pages", "snippets", "trusted_authors", "review_dismissed")
+MODEL_GOVERNANCE_KEYS = ("domains", "pages", "snippets", "trusted_authors", "review_dismissed",
+                         "metric_views")                # views made in the guided builder
 
 
 def _list(v) -> list:

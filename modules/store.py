@@ -13,9 +13,10 @@ Layout (one folder per model):
 Saves from before this layout (<model>/<stamp>.yaml, studio ontologies) still appear in
 the history, marked "legacy".
 
-Writes are tried as the viewer first (their forwarded token, so Volume permissions are
-respected); if the token lacks the Files scope, the app's service principal is used. Grant
-it READ VOLUME / WRITE VOLUME on the Volume in that case.
+Files are read and written as the viewer first (their forwarded token, so Volume permissions
+are respected): through the Files API when the token has the `files.files` scope, else
+through the SQL warehouse (PUT / GET / LIST, needs only the `sql` scope). The app's service
+principal is the last fallback; grant it READ VOLUME / WRITE VOLUME on the Volume for that.
 
 For local development, ONTOLOGY_STORE may also be a plain directory (e.g. ./store).
 """
@@ -74,7 +75,8 @@ class _Local:
     def listdir(self, path: str) -> list[tuple[str, bool]]:
         if not os.path.isdir(path):
             return []
-        return [(os.path.join(path, n), os.path.isdir(os.path.join(path, n))) for n in sorted(os.listdir(path))]
+        base = path.rstrip("/\\")            # "/" keeps paths the same on Windows and in Volumes
+        return [(f"{base}/{n}", os.path.isdir(os.path.join(path, n))) for n in sorted(os.listdir(path))]
 
     def exists(self, path: str) -> bool:
         return os.path.exists(path)
@@ -106,6 +108,70 @@ class _Volume:
             return False
 
 
+class _SqlVolume:
+    """Volume files through the SQL warehouse (PUT / GET / LIST), as the viewer.
+
+    Needs only the `sql` user scope, so it works when the forwarded token lacks `files.files`."""
+    who = "you (via the SQL warehouse)"
+
+    def __init__(self, token: str):
+        self.token = token
+
+    @staticmethod
+    def _lit(path: str) -> str:
+        return "'" + path.replace("\\", "\\\\").replace("'", "\\'") + "'"
+
+    def _run(self, statement: str, staging_dir: str):
+        from databricks import sql
+        from databricks.sdk.core import Config
+        wh = os.getenv("SQL_WAREHOUSE_ID", "")
+        if not wh or wh.startswith("REPLACE"):
+            raise RuntimeError("SQL_WAREHOUSE_ID is not set")
+        with sql.connect(server_hostname=Config().host, http_path=f"/sql/1.0/warehouses/{wh}",
+                         access_token=self.token, staging_allowed_local_path=staging_dir) as conn:
+            with conn.cursor() as cur:
+                cur.execute(statement)
+                return cur.fetchall() if cur.description else []
+
+    def write(self, path: str, data: bytes) -> None:
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            local = os.path.join(d, "upload.bin")
+            with open(local, "wb") as f:
+                f.write(data)
+            self._run(f"PUT {self._lit(local)} INTO {self._lit(path)} OVERWRITE", d)
+
+    def read(self, path: str) -> bytes:
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            local = os.path.join(d, "download.bin")
+            self._run(f"GET {self._lit(path)} TO {self._lit(local)}", d)
+            with open(local, "rb") as f:
+                return f.read()
+
+    def listdir(self, path: str) -> list[tuple[str, bool]]:
+        import tempfile
+        try:
+            with tempfile.TemporaryDirectory() as d:
+                rows = self._run(f"LIST {self._lit(path.rstrip('/') + '/')}", d)
+        except Exception as e:  # noqa: BLE001
+            if "NOT_FOUND" in str(e).upper() or "does not exist" in str(e).lower():
+                return []
+            raise
+        out = []
+        for r in rows:
+            p = str(r[0])
+            out.append((p.rstrip("/"), p.endswith("/")))
+        return out
+
+    def exists(self, path: str) -> bool:
+        parent, name = path.rstrip("/").rsplit("/", 1)
+        try:
+            return any(p.rsplit("/", 1)[-1] == name for p, _ in self.listdir(parent))
+        except Exception:  # noqa: BLE001
+            return False
+
+
 def backends(token: str | None, path: str | None = None) -> list:
     """Clients to try in order, for a path under /Volumes (viewer first) or a local folder."""
     path = path or root()
@@ -119,6 +185,7 @@ def backends(token: str | None, path: str | None = None) -> list:
             out.append(_Volume("you", WorkspaceClient(host=Config().host, token=token, auth_type="pat")))
         except Exception:  # noqa: BLE001
             pass
+        out.append(_SqlVolume(token))          # works with the `sql` scope alone
     try:
         out.append(_Volume("app service principal", WorkspaceClient()))
     except Exception:  # noqa: BLE001
@@ -133,7 +200,12 @@ def _try(token, fn, what: str, path: str | None = None):
             return fn(b)
         except Exception as e:  # noqa: BLE001
             errors.append(f"{b.who}: {str(e)[:180]}")
-    raise RuntimeError(f"Could not {what} — " + (" | ".join(errors) or "no Databricks client available"))
+    hint = ""
+    if any("scope" in e.lower() for e in errors):
+        hint = (" — Fix: add the `files.files` scope under the app's User authorization (then reopen the app "
+                "and accept), or make sure you can use the SQL warehouse; the app's service principal also "
+                "needs READ VOLUME / WRITE VOLUME on the volume to act as the last fallback.")
+    raise RuntimeError(f"Could not {what} — " + (" | ".join(errors) or "no Databricks client available") + hint)
 
 
 def write_text(path: str, text: str, token: str | None) -> str:

@@ -85,3 +85,30 @@ def test_source_registry():
     non = sources.for_family(sources.NON_DATABRICKS)
     assert non[0].available and not all(s.available for s in non)
     assert sources.label("Snowflake").endswith("(coming soon)")
+
+
+def test_sql_warehouse_fallback_statements(monkeypatch):
+    """Without the files scope the viewer's token still reaches the volume through PUT / GET / LIST."""
+    seen, blob = [], {}
+
+    def fake_run(self, statement, staging_dir):
+        seen.append(statement)
+        import re as _re
+        if statement.startswith("PUT"):
+            local, target = _re.findall(r"'([^']*)'", statement)
+            blob[target] = open(local, "rb").read()
+        elif statement.startswith("GET"):
+            src, local = _re.findall(r"'([^']*)'", statement)
+            open(local, "wb").write(blob[src])
+        elif statement.startswith("LIST"):
+            return [("/Volumes/c/s/v/m/versions/", "versions/", 0, 0), ("/Volumes/c/s/v/m/latest.ossie.yaml", "x", 1, 0)]
+        return []
+    monkeypatch.setattr(store._SqlVolume, "_run", fake_run)
+    b = store._SqlVolume("tok")
+    b.write("/Volumes/c/s/v/m/latest.ossie.yaml", b"name: m\n")
+    assert b.read("/Volumes/c/s/v/m/latest.ossie.yaml") == b"name: m\n"
+    assert b.listdir("/Volumes/c/s/v/m") == [("/Volumes/c/s/v/m/versions", True),
+                                             ("/Volumes/c/s/v/m/latest.ossie.yaml", False)]
+    assert seen[0].endswith("INTO '/Volumes/c/s/v/m/latest.ossie.yaml' OVERWRITE")
+    assert seen[1].startswith("GET '/Volumes/c/s/v/m/latest.ossie.yaml' TO ")
+    assert seen[2] == "LIST '/Volumes/c/s/v/m/'"

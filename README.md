@@ -404,7 +404,7 @@ review.py      review queue, promotion, page drafts         telemetry.py traces,
 | Browsing, profiling, discovery, lineage, query history, Ask queries, metric view deploys | **The signed-in user.** Databricks Apps forwards the user's token (`X-Forwarded-Access-Token`) and the app connects to the SQL warehouse with it. | The `sql` user authorization scope, and the user's own grants. |
 | LLM enrichment and Ask SQL generation | **The app's service principal** | `CAN_QUERY` on the serving endpoint (the `serving-endpoint` app resource). |
 | Deploying a model (section ③): SQL statements | **The signed-in user** | `USE CATALOG` / `USE SCHEMA`, `CREATE VOLUME`, `MODIFY` (comments), `APPLY TAG`, `CREATE TABLE` (metric views) as ticked. |
-| Saving and loading versions, deployed model files | **The user first**, then the app's service principal if the user's token can't reach the Volume | The `files.files` scope for the user, or `READ VOLUME` / `WRITE VOLUME` for the service principal. |
+| Saving and loading versions, deployed model files | **The user first**: the Files API with the `files.files` scope, else the SQL warehouse (`PUT` / `GET` / `LIST`, `sql` scope only). The app's service principal is the last fallback. | The user's `READ VOLUME` / `WRITE VOLUME`; for the last fallback, the same grants for the service principal. |
 
 ---
 

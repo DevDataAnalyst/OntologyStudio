@@ -17,7 +17,8 @@ On top of the modeled ontology, the studio keeps it governed and learning: **dom
 No Databricks workspace handy? The same engine runs locally on a SQLite file or a `.sql` script, in the app or from a [command-line interface](#command-line-interface).
 
 <p align="center">
-  <img src="docs/images/overview.png" width="640" alt="Ontology Studio at a glance: Databricks catalog tables go into the Streamlit app, which analyzes relationships, metrics and dimensions into an editable network diagram, and the ontology is exported as YAML">
+ <img width="2480" height="16980" alt="ontology-studio-infographic" src="https://github.com/user-attachments/assets/73b62308-11ca-488d-a18e-be863da9e818" />
+
 </p>
 
 ## Contents

@@ -16,6 +16,7 @@ from .schema_model import Column, DatabaseSchema, ForeignKey, Table
 
 MAX_TABLES = 100
 _IDENT = re.compile(r"^[A-Za-z0-9_\-]+$")
+_RANGED = re.compile(r"INT|DECIMAL|DOUBLE|FLOAT|DATE|TIMESTAMP|NUMERIC|REAL", re.I)
 _COMPLEX = re.compile(r"ARRAY|MAP|STRUCT|VARIANT|BINARY|GEOMETRY|GEOGRAPHY", re.I)
 
 
@@ -79,8 +80,13 @@ def extract_objects(run, full_names: list[str], profile: bool = True, enum_max: 
         isc = f"{bq(cat)}.information_schema"
         marks, params = _in(names)
         params["s"] = sch
-        tdf = run(f"SELECT table_name, table_type, comment FROM {isc}.tables "
-                  f"WHERE table_schema = :s AND table_name IN ({marks})", params)
+        try:
+            tdf = run(f"SELECT table_name, table_type, comment, table_owner, CAST(created AS STRING) AS created, "
+                      f"CAST(last_altered AS STRING) AS last_altered, data_source_format FROM {isc}.tables "
+                      f"WHERE table_schema = :s AND table_name IN ({marks})", params)
+        except Exception:  # noqa: BLE001  (older information_schema without the extra columns)
+            tdf = run(f"SELECT table_name, table_type, comment FROM {isc}.tables "
+                      f"WHERE table_schema = :s AND table_name IN ({marks})", params)
         cdf = run(f"SELECT table_name, column_name, full_data_type, is_nullable, column_default, comment "
                   f"FROM {isc}.columns WHERE table_schema = :s AND table_name IN ({marks}) "
                   f"ORDER BY table_name, ordinal_position", params)
@@ -99,7 +105,11 @@ def extract_objects(run, full_names: list[str], profile: bool = True, enum_max: 
             short = r.table_name if len(schemas) == 1 and len(groups) == 1 else r.table_name
             tables[fq] = Table(name=short, full_name=fq, comment=r.comment or None,
                                table_type=str(r.table_type),
-                               is_view="VIEW" in str(r.table_type).upper())
+                               is_view="VIEW" in str(r.table_type).upper(),
+                               owner=getattr(r, "table_owner", None) or None,
+                               created=getattr(r, "created", None) or None,
+                               last_altered=getattr(r, "last_altered", None) or None,
+                               storage_format=getattr(r, "data_source_format", None) or None)
         for r in cdf.itertuples(index=False):
             if t := tables.get(f"{cat}.{sch}.{r.table_name}"):
                 t.columns.append(Column(name=r.column_name, sql_type=str(r.full_data_type).upper(),
@@ -183,16 +193,26 @@ def _profile_table(run, t: Table, enum_max: int) -> None:
     if not cols:
         t.row_count = int(run(f"SELECT /* ontology-studio */ COUNT(*) AS n FROM {fq}").iloc[0, 0])
         return
+    ranged = [i for i, c in enumerate(cols) if _RANGED.search(c.sql_type)]
     sel = ", ".join([f"COUNT(*) AS `__n`"]
                     + [f"approx_count_distinct(`{c.name}`) AS `d{i}`" for i, c in enumerate(cols)]
-                    + [f"COUNT(`{c.name}`) AS `nn{i}`" for i, c in enumerate(cols)])
+                    + [f"COUNT(`{c.name}`) AS `nn{i}`" for i, c in enumerate(cols)]
+                    + [f"CAST(MIN(`{cols[i].name}`) AS STRING) AS `mn{i}`, CAST(MAX(`{cols[i].name}`) AS STRING) AS `mx{i}`"
+                       for i in ranged])
     stats = run(f"SELECT /* ontology-studio */ {sel} FROM {fq}").iloc[0]
     t.row_count = int(stats["__n"])
+    try:                                    # Delta size and last change, for storage-mode advice
+        det = run(f"DESCRIBE DETAIL {fq}").iloc[0]
+        t.size_bytes = int(det["sizeInBytes"]) if det.get("sizeInBytes") is not None else None
+    except Exception:  # noqa: BLE001
+        pass
     if not t.row_count:
         return
     for i, c in enumerate(cols):
         c.distinct_count = int(stats[f"d{i}"])
         c.non_null_count = int(stats[f"nn{i}"])
+        if i in ranged:
+            c.min_value, c.max_value = stats[f"mn{i}"], stats[f"mx{i}"]
     sample = run(f"SELECT /* ontology-studio */ {', '.join(f'`{c.name}`' for c in cols)} FROM {fq} LIMIT 200")
     for c in cols:
         c.samples = sample[c.name].dropna().drop_duplicates().head(5).tolist()

@@ -24,6 +24,8 @@ class Column:
     distinct_count: int | None = None
     samples: list | None = None
     non_null_count: int | None = None
+    min_value: object | None = None       # numbers and dates only
+    max_value: object | None = None
 
 
 @dataclass
@@ -46,6 +48,11 @@ class Table:
     is_view: bool = False
     full_name: str | None = None      # catalog.schema.table for Unity Catalog sources
     table_type: str | None = None     # MANAGED, EXTERNAL, VIEW, METRIC_VIEW ...
+    owner: str | None = None          # Unity Catalog metadata (when the source has it)
+    created: str | None = None
+    last_altered: str | None = None
+    storage_format: str | None = None # DELTA, PARQUET ...
+    size_bytes: int | None = None
 
     def column(self, name: str) -> Column | None:
         lname = name.lower()

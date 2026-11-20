@@ -34,6 +34,7 @@ import streamlit as st
 import yaml
 
 from modules import discovery, governance as gv, governance_ui as gui, ontology_edit as ed, ossie, ossie_form, ossie_ui
+from modules.dictionary_ui import dictionary_tab
 from modules import lifecycle_ui as lc, semantics, store, theme
 from modules import sources as src
 from modules import metric_views as mv
@@ -596,11 +597,11 @@ wb.readiness_line(onto, ss.get("runner", {}))
 for w in onto.get("warnings", [])[:8]:
     st.warning(w)
 
-(tab_net, tab_home, tab_form, tab_yaml, tab_ossie, tab_ver, tab_mv, tab_sem, tab_know, tab_review, tab_tables,
- tab_ask, tab_mon) = st.tabs(
-    ["🕸️ Network", "🏠 Domains", "✏️ YAML form editor", "🧾 Ontology YAML", "🧩 Apache Ossie", "🕘 Versions",
-     "📐 Metric views", "🧠 Semantic layer", "📚 Knowledge", "✅ Review queue", "🗂️ Tables", "💬 Ask (Text-to-SQL)",
-     "📈 Monitor"])
+(tab_net, tab_home, tab_dict, tab_form, tab_yaml, tab_ossie, tab_ver, tab_mv, tab_sem, tab_know, tab_review,
+ tab_tables, tab_ask, tab_mon) = st.tabs(
+    ["🕸️ Network", "🏠 Domains", "📘 Data dictionary", "✏️ YAML form editor", "🧾 Ontology YAML",
+     "🧩 Apache Ossie", "🕘 Versions", "📐 Metric views", "🧠 Semantic layer", "📚 Knowledge", "✅ Review queue",
+     "🗂️ Tables", "💬 Ask (Text-to-SQL)", "📈 Monitor"])
 
 # =========================================================================== #
 # YAML form editor (guided, step-by-step Ossie editing for business users)
@@ -1084,6 +1085,8 @@ with tab_tables:
 # =========================================================================== #
 with tab_home:
     gui.home_tab(onto, ss.get("runner", {}), uc_runner, ON_DATABRICKS)
+with tab_dict:
+    dictionary_tab(onto, ss.get("runner", {}), uc_runner, ON_DATABRICKS)
 with tab_know:
     gui.knowledge_tab(onto, ss.get("runner", {}), uc_runner, ON_DATABRICKS)
 with tab_review:

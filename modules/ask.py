@@ -47,6 +47,8 @@ def ontology_context(onto: dict, snippets: list[dict] | None = None, max_page_ch
     for c in (keep["classes"] or {}).values():          # trim noise the model doesn't need
         c.pop("instance_count", None)
         c.pop("source_columns", None)
+        c.pop("column_profile", None)                   # data dictionary detail, not needed for SQL
+        c.pop("table_meta", None)
         c.pop("ossie", None)                            # Apache Ossie round-trip details
         c.pop("domains", None)
         c.pop("certification", None)

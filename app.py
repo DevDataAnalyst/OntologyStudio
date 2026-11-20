@@ -113,7 +113,7 @@ def tab_css(c: dict) -> str:
 st.markdown(tab_css(theme.colors()), unsafe_allow_html=True)
 theme.watch()
 
-SECTIONS = {"update": "① Update existing model", "create": "② Create new model", "deploy": "③ Deploy to Databricks"}
+SECTIONS = {"update": "① 📂 Update existing model", "create": "② ✨ Create new model", "deploy": "③ 🚀 Deploy to Databricks"}
 section = st.segmented_control(
     "Section", list(SECTIONS), format_func=SECTIONS.get, default="create", required=True, key="section",
     label_visibility="collapsed",

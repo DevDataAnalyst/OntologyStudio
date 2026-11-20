@@ -178,9 +178,9 @@ def _graph(onto: dict) -> dict[str, list[dict]]:
         g.setdefault(d, []).append({"pid": pid, "from": d, "to": r, "kind": "to-one", "join": j, "reverse": False})
         g.setdefault(r, []).append({"pid": pid, "from": r, "to": d, "join": j, "reverse": True,
                                     "kind": "to-one" if p.get("cardinality") == "one-to-one" else "to-many"})
-    order = {"to-one": 0, "many-to-many": 1, "to-many": 2}
-    for edges in g.values():
-        edges.sort(key=lambda e: order[e["kind"]])
+    order, ops = {"to-one": 0, "many-to-many": 1, "to-many": 2}, onto.get("object_properties", {})
+    for edges in g.values():                     # the default join of a pair wins over its other roles
+        edges.sort(key=lambda e: (order[e["kind"]], not ops[e["pid"]].get("default")))
     return g
 
 
@@ -282,7 +282,10 @@ def join_sql(onto: dict, start: str, hops: list[dict], dialect: str | None = "da
 
 def path_notes(onto: dict, hops: list[dict]) -> list[str]:
     """Fan-out and shared-parent warnings for a chain of joins, plus other roles for the same hop."""
-    notes, into = [], {}
+    notes, into, ops = [], {}, onto.get("object_properties", {})
+
+    def role(pid: str) -> str:
+        return f"{pid} ({ops[pid]['role']})" if ops.get(pid, {}).get("role") else pid
     for e in hops:
         if e["kind"] == "to-many":
             notes.append(f"{e['from']} → {e['to']} is one-to-many: each {e['from']} row repeats once per {e['to']} "
@@ -294,8 +297,9 @@ def path_notes(onto: dict, hops: list[dict]) -> list[str]:
             into[e["to"]] = e["from"]
         others = [o["pid"] for o in _graph(onto).get(e["from"], []) if o["to"] == e["to"] and o["pid"] != e["pid"]]
         if others:
-            notes.append(f"{e['from']} and {e['to']} have other joins too ({', '.join(others)}); "
-                         f"this path uses {e['pid']}.")
+            notes.append(f"{e['from']} and {e['to']} have other joins too ({', '.join(map(role, others))}); "
+                         f"this path uses {role(e['pid'])}"
+                         + (", the default." if ops.get(e["pid"], {}).get("default") else "."))
     return notes
 
 

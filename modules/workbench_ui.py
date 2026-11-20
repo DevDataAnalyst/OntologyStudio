@@ -117,7 +117,9 @@ def check_sql_view(onto: dict, runner: dict, uc_runner, user: str, commit) -> No
             ss.wb_report = {"sql": sql, **rep}
             st.error("Not saved: fix the errors below first.")
         else:
+            from . import snippets as sn
             an.save_example(onto, q, sql, by=user)
+            sn.merge_into(onto, sn.mine([sn.ask_record(q, sql, user)], onto, dialect=d), ingest=f"example:{q[:60]}")
             commit(f"Saved verified example “{q.strip()}”")
     rep = ss.get("wb_report")
     if rep and rep.get("sql") == sql:

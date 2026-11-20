@@ -124,7 +124,7 @@ def update_relationship(onto: dict, pid: str, from_cols: list[str] | None = None
     to_cols = to_cols or [x.rpartition(".")[2] for x in p["join"]["to"]]
     card = cardinality or p["cardinality"]
     domain, rng = p["domain"], p["range"]
-    keep = {k: v for k, v in p.items() if k in ("description", "synonyms")}
+    keep = {k: v for k, v in p.items() if k in ("description", "synonyms", "role", "default")}
     delete_relationship(onto, pid)
     return add_relationship(onto, domain, rng, from_cols, to_cols, card,
                             name=new_name or pid, **keep)
@@ -141,7 +141,7 @@ def repoint(onto: dict, pid: str, end: str, new_class: str) -> str:
     else:
         domain, from_cols, to_cols = new_class, None, [x.rpartition(".")[2] for x in p["join"]["to"]]
     card = p["cardinality"]
-    keep = {k: v for k, v in p.items() if k in ("description", "synonyms")}
+    keep = {k: v for k, v in p.items() if k in ("description", "synonyms", "role")}   # not default: new pair
     delete_relationship(onto, pid)
     if to_cols is None:
         _, to_cols = guess_join_columns(onto, domain, rng)

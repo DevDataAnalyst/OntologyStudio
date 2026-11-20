@@ -225,8 +225,8 @@ Classes go to the model in batches of 25, with up to 60,000 characters of your d
 
 **The inspector** (right panel) edits whatever you click:
 
-- **Class:** rename it, set its role (fact, dimension, entity or bridge), description and synonyms; set each column's role, aggregation and description; add, replace or delete metrics.
-- **Relationship:** name, cardinality and the join columns on both sides, or delete it.
+- **Class:** rename it, set its role (fact, dimension, entity or bridge), description, synonyms and a reviewer note; set each column's role, aggregation and description; add, replace or delete metrics. A new metric is run read-only on the data first and is not saved if the database rejects it. Changing the name or description of a certified class puts it back to draft.
+- **Relationship:** name, cardinality, the join columns on both sides, a **role** (billing vs delivery) and description, and whether it is the **default** join between its two classes, or delete it.
 - **Suggestion:** confidence and evidence, then accept or reject.
 - **Lineage edge:** event count, when it was last seen, and the column mappings.
 - **Nothing selected:** add a relationship from a form, accept every suggestion at 60% or more, reject them all, or re-run the classification.
@@ -235,8 +235,21 @@ Classes go to the model in batches of 25, with up to 60,000 characters of your d
 
 - **Apache Ossie:** the validation report of the uploaded file, the export of the current ontology, and a box to validate any pasted document. See [below](#6-apache-ossie-validation-import-and-export).
 - **Ontology YAML:** edit the YAML and click **Apply YAML edits** to redraw the diagram. Validation notes flag relationships that point at missing classes, inverses that don't point back, classes without an identifier, and coded values that still have no meaning.
-- **Semantic layer:** edit value meanings, and review metrics, business rules and the synonyms index.
-- **Tables:** classes, relationships and suggestions as plain tables.
+- **Semantic layer:** search the model (classes, columns, metrics, rules, pages, glossary, stored values) and open a **Term card** with a class's definition, columns and samples, unmapped columns, joins, metrics and pages; edit value meanings and the glossary; review metrics, business rules and the synonyms index.
+- **Tables:** classes (with unmapped and new columns), relationships and suggestions as plain tables, and **🔄 Re-scan the tables in Unity Catalog** (below).
+
+#### Modeling assistant: re-scan, worklist and relationship review
+
+- **Re-scan** (🗂️ Tables tab, models built from Unity Catalog): reads the model's tables again and lists new, dropped and retyped columns and tables that are gone. **Apply** adds the new columns, removes the dropped ones, updates types, row counts and profiles, and keeps descriptions, synonyms, roles, certification, joins and metrics; it names relationships that used a dropped column. **List tables** finds tables in the same schemas that the model does not have, with filters such as `SALES_*, HR.EMP*, !*_LOG`; **Add selected** reads them, adds them as classes and proposes their joins with the model (declared keys first, then name and value-overlap evidence) for review in the Network tab.
+- **🧭 Modeling worklist** (✅ Review queue tab): tables with new columns, no description, a description that does not say what one row is, or undescribed columns, most urgent first. **✨ Draft with the LLM** fills only what is empty for one table, with descriptions that state the grain ("One row per order line"); drafts stay drafts until a person certifies them.
+- **Relationship review** (same page): pairs of classes joined more than once, where you pick the **default** join; identifier columns with no relationship and the classes their values could point at (with a value check); and joins people run in Ask, 🧪 Check SQL or verified examples that the model does not have, each one click from becoming a relationship.
+- **Filters to save as rules**: named filters from short value lists (`dim_customer.segment = 'Retail'`), tested on the data before they are saved.
+- **🧹 Model checks** in the review queue: tables that do not say what one row is, multi-role joins without a default, unlinked identifier columns, measure columns without a metric, and metrics whose SQL fails the checker (including metrics that read a table no modeled join reaches).
+- **Change log** (🕘 Versions tab): every edit with who made it and when, saved with each version.
+
+Join paths, Ask and the SQL checker use the default join of a pair; the checker notes when a query uses another role.
+
+![Modeling worklist: tables to describe, relationships to review, filters to save as rules](docs/images/modeling-worklist.png)
 
 ### 4. Export
 
@@ -783,7 +796,7 @@ python -m pip install -r requirements.txt pytest
 python -m pytest tests -q
 ```
 
-44 tests, no workspace needed (Databricks calls are faked):
+49 tests, no workspace needed (Databricks calls are faked):
 
 | File | Covers |
 |---|---|
@@ -792,6 +805,7 @@ python -m pytest tests -q
 | `tests/test_governance.py` | Domains, certification, learned snippets, the review queue, governance through Ossie |
 | `tests/test_ask.py` | Ask: Decimal-safe prompts, focus, JSON answers, self-correction |
 | `tests/test_answering.py` | The SQL checker (guard, unknown names, joins, fan-out, values, scale, dry run, Unity Catalog names), join paths, the coverage check, verified examples and glossary through Ossie, Ask's repair loop, value lookups, readiness |
+| `tests/test_modeling.py` | Re-scan drift and table filters, roles and default joins (paths, checker, Ossie, edits), unlinked id columns, observed joins, filter rules tested on data, model checks, the change log, one-table LLM drafts and tolerant JSON parsing |
 | `tests/test_lifecycle.py` | The versioned store (save, history, diff, restore, legacy files), the SQL warehouse fallback statements, deployment plans and grants, execute with fallbacks, the source registry, the metric view spec (`fields`, `rely`, aggregate-only measures) |
 
 ## Troubleshooting
@@ -856,6 +870,8 @@ modules/ask.py                  Text-to-SQL test bench (ontology vs. baseline)
 modules/sqlcheck.py             SQL checker: guard, model names, joins, fan-out, value and scale probes; value lookups
 modules/answering.py            Join paths, coverage check, verified examples, glossary, readiness, prompt context
 modules/workbench_ui.py         Ask tab modes (Check SQL, Join path, Look up values, Verified examples), glossary, readiness
+modules/modeling.py             Re-scan drift, new tables, worklist, relationship review, filter rules, model checks, change log
+modules/modeling_ui.py          Re-scan box, Modeling worklist, search and Term card, change log
 modules/ossie/                  Apache Ossie validator, converter and bundled official schemas
 modules/ossie_ui.py             Validation report views
 modules/governance.py           Domains and subdomains, certification, pages, Unity Catalog tags, domain scoping
@@ -869,6 +885,7 @@ tests/test_governance.py        Domains, snippets, review queue, governance roun
 tests/test_lifecycle.py         Versioned store, deployment plan, source registry, metric view builder
 tests/test_ask.py               Ask engine: Decimal-safe prompts, focus, JSON answers, self-correction
 tests/test_answering.py         SQL checker, join paths, coverage check, verified examples, glossary, readiness
+tests/test_modeling.py          Re-scan, worklist, roles and default joins, relationship review, model checks, change log
 samples/                        Sample databases, scripts, docs and their generated outputs
 docs/images/                    Screenshots and the network diagram used in this README
 ```

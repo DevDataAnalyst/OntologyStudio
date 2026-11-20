@@ -39,6 +39,7 @@ from modules import sources as src
 from modules import metric_views as mv
 from modules import mv_builder_ui as mvb
 from modules import workbench_ui as wb
+from modules import modeling as md, modeling_ui as mu
 from modules.extractors import from_sql_script, from_sqlite_file, is_sqlite_bytes
 from modules.graph_component import handle_event, network
 from modules.ontology_builder import (BuildOptions, attach_lineage, attach_suggestions,
@@ -127,10 +128,11 @@ def user_token() -> str | None:
 
 
 def commit(msg: str | None = None, rerun: bool = True):
-    """Persist a mutation of ss.onto and redraw."""
+    """Persist a mutation of ss.onto, log it in the model's change log, and redraw."""
     refresh_index(ss.onto)
     if msg:
         ss.graph_msg = msg
+        md.log_change(ss.onto, msg, lc.current_user())
     if rerun:
         st.rerun()
 
@@ -628,6 +630,7 @@ with tab_net:
             ss.selection = sel
         if evt["type"] not in ("positions",):
             ss.graph_msg = msg
+            md.log_change(onto, msg, lc.current_user())
             st.rerun()
 
     with right:
@@ -650,9 +653,19 @@ with tab_net:
                 g1, g2 = st.columns(2)
                 cstatus = g1.selectbox("Status", gv.STATUSES, index=gv.STATUSES.index(cert.get("status", "draft")))
                 cowner = g2.text_input("Owner", cert.get("owner") or "")
+                cnote = st.text_input("Reviewer note", c.get("review_note") or "",
+                                      placeholder="What a reviewer should know or check")
                 if st.form_submit_button("Apply", type="primary"):
+                    redo = cert.get("status") == "certified" and cstatus == "certified" and (
+                        new_name != cid or desc.strip() != (c.get("description") or "").strip())
+                    if redo:                           # a certified definition that changed needs a new review
+                        cstatus = "draft"
                     ed.update_class(onto, cid, role=role, description=desc,
                                     synonyms=syn.split(",") if syn else [])
+                    if cnote.strip():
+                        c["review_note"] = cnote.strip()
+                    else:
+                        c.pop("review_note", None)
                     gv.certify(onto, "class", cid, cstatus, owner=cowner or None, by=gui.current_user(),
                                domains=[d for d in doms.split(",") if d.strip()])
                     if new_name != cid:
@@ -662,7 +675,8 @@ with tab_net:
                         except ValueError as e:
                             st.error(str(e))
                             st.stop()
-                    commit(f"Updated {new_name}")
+                    commit(f"Updated {new_name}" + (": its certified definition changed, so it is back to draft"
+                                                    if redo else ""))
             st.markdown("**Columns** — role & aggregation")
             rows = [{"property": pid, "column": p.get("source_column", pid), "type": p.get("range"),
                      "role": p.get("semantic_role", "dimension"), "aggregation": p.get("aggregation"),
@@ -688,13 +702,20 @@ with tab_net:
                     ed.delete_metric(onto, x["name"])
                     commit(f"Deleted metric {x['name']}")
             with st.form(f"addm_{cid}", clear_on_submit=True):
-                st.caption("Add / replace a metric (SQL over this class's columns)")
+                st.caption("Add / replace a metric (SQL over this class's columns). With live data it is run "
+                           "read-only first, and nothing is saved if the database rejects it.")
                 mn = st.text_input("Name", placeholder="gross_margin")
                 msql = st.text_input("SQL", placeholder="SUM(net_amount) - SUM(cost)")
                 mdesc = st.text_input("Description")
                 if st.form_submit_button("Save metric") and mn and msql:
-                    ed.upsert_metric(onto, mn, cid, msql, mdesc)
-                    commit(f"Saved metric {mn}")
+                    run_ = wb.make_run(ss.get("runner", {}), uc_runner)
+                    err = md.test_expression(run_, onto, cid, msql, "measure",
+                                             wb.dialect_of(ss.get("runner", {}))) if run_ else None
+                    if err:
+                        st.error(f"Not saved, the database rejected it: {err}")
+                    else:
+                        ed.upsert_metric(onto, mn, cid, msql, mdesc)
+                        commit(f"Saved metric {mn}" + ("" if run_ else " (not tested: no live data)"))
 
         # ---------------- relationship inspector ----------------
         elif sel.get("kind") == "edge" and sel.get("edge_kind") == "rel" and sel.get("pid") in ops:
@@ -706,6 +727,8 @@ with tab_net:
             dcols, rcols = ed.class_columns(onto, p["domain"]), ed.class_columns(onto, p["range"])
             cur_from = [x.rpartition(".")[2] for x in p["join"]["from"]]
             cur_to = [x.rpartition(".")[2] for x in p["join"]["to"]]
+            siblings = [q for q, x in ops.items() if x.get("join") and x.get("domain") == p["domain"]
+                        and x.get("range") == p["range"] and x.get("cardinality") in ("many-to-one", "one-to-one")]
             with st.form(f"rel_{pid}"):
                 name = st.text_input("Name", pid)
                 card = st.selectbox("Cardinality", CARDS, index=CARDS.index(p["cardinality"])
@@ -714,6 +737,13 @@ with tab_net:
                                        default=[x for x in cur_from if x in dcols])
                 tcols = st.multiselect(f"{p['range']} columns (referenced)", rcols,
                                        default=[x for x in cur_to if x in rcols])
+                rrole = st.text_input("Role", p.get("role") or "", placeholder="e.g. billing, delivery",
+                                      help="The business role when several columns join the same two classes.")
+                rdesc = st.text_input("Description", p.get("description") or "")
+                rdef = st.checkbox("Default join between these two classes", value=bool(p.get("default")),
+                                   disabled=len(siblings) < 2,
+                                   help="Used by Ask, join paths and the SQL checker when a question does not say "
+                                        "which role it means.")
                 c1, c2 = st.columns(2)
                 apply_ = c1.form_submit_button("Apply", type="primary")
                 delete_ = c2.form_submit_button("Delete")
@@ -722,6 +752,15 @@ with tab_net:
                     st.error("Pick the same number of columns on both sides.")
                 else:
                     new = ed.update_relationship(onto, pid, fcols, tcols, card, new_name=name)
+                    for k, v in (("role", rrole.strip()), ("description", rdesc.strip())):
+                        if v:
+                            ops[new][k] = v
+                        else:
+                            ops[new].pop(k, None)
+                    if len(siblings) > 1 and rdef:
+                        md.set_default(onto, new)
+                    elif not rdef:
+                        ops[new].pop("default", None)
                     ss.selection = {"kind": "edge", "edge_kind": "rel", "pid": new, "id": f"rel:{new}"}
                     commit(f"Updated {new}")
             if delete_:
@@ -849,6 +888,7 @@ with tab_yaml:
 # =========================================================================== #
 with tab_ver:
     lc.versions_tab(onto, user_token(), lambda text, path: open_text(text, path.rsplit("/", 1)[-1], path, force=True))
+    mu.changes_view(onto)
 
 with tab_ossie:
     st.markdown(f"[Apache Ossie](https://github.com/apache/ossie) is the vendor-neutral exchange format for "
@@ -976,6 +1016,7 @@ with tab_mv:
 # Semantic layer
 # =========================================================================== #
 with tab_sem:
+    mu.search_box(onto)
     st.markdown("**Value meanings** — what coded values stand for")
     vms = onto.get("value_meanings", [])
     if vms:
@@ -1014,13 +1055,18 @@ with tab_sem:
 # Tables
 # =========================================================================== #
 with tab_tables:
+    mu.rescan_box(onto, ss.get("runner", {}), uc_runner, commit)
     st.markdown("**Classes**")
     st.dataframe(pd.DataFrame([{"class": cid, "role": c.get("role"), "table": c.get("source_fqn")
                                 or c.get("source_table"), "rows": c.get("instance_count"),
                                 "identifier": ", ".join(c.get("identifier", [])),
                                 "pk inferred": c.get("identifier_inferred", False),
                                 "measures": sum(p.get("semantic_role") == "measure"
-                                                for p in c["data_properties"].values())}
+                                                for p in c["data_properties"].values()),
+                                "unmapped columns": len({x.lower() for x in c.get("source_columns") or []}
+                                                        - {str(p.get("source_column") or k).lower()
+                                                           for k, p in c["data_properties"].items()}),
+                                "new columns": ", ".join(c.get("new_columns") or [])}
                                for cid, c in classes.items()]), hide_index=True, width="stretch")
     st.markdown("**Relationships**")
     st.dataframe(pd.DataFrame([{"property": pid, "domain": p["domain"], "range": p["range"],
@@ -1041,7 +1087,7 @@ with tab_home:
 with tab_know:
     gui.knowledge_tab(onto, ss.get("runner", {}), uc_runner, ON_DATABRICKS)
 with tab_review:
-    gui.review_tab(onto, ON_DATABRICKS)
+    gui.review_tab(onto, ON_DATABRICKS, ss.get("runner", {}), uc_runner)
 with tab_ask:
     gui.ask_tab(onto, ss.get("runner", {}), uc_runner, ON_DATABRICKS)
 with tab_mon:

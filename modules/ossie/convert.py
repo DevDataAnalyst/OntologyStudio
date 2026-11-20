@@ -58,7 +58,8 @@ _IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 GOVERNANCE_KEYS = ("domains", "status", "owner", "certified_by", "certified_at", "learned_from")
 MODEL_GOVERNANCE_KEYS = ("domains", "pages", "snippets", "trusted_authors", "review_dismissed",
                          "metric_views",                # views made in the guided builder
-                         "glossary", "examples")        # glossary and verified question + SQL pairs
+                         "glossary", "examples",        # glossary and verified question + SQL pairs
+                         "changes")                     # change log
 
 
 def _list(v) -> list:
@@ -282,6 +283,7 @@ def to_ontology(doc: dict, file_name: str = "", base_iri: str = "http://example.
             fwd_prop["description"] = _ai(r)["instructions"]
         if isinstance(sx.get("confidence"), (int, float)):
             fwd_prop["confidence"] = sx["confidence"]
+        fwd_prop.update({k: sx[k] for k in ("role", "default") if sx.get(k)})     # roles of multi-role joins
         ops[fwd] = fwd_prop
         ops[inv] = {"label": label(inv), "domain": rng, "range": dom,
                     "cardinality": "one-to-one" if card == "one-to-one" else "one-to-many",
@@ -469,7 +471,7 @@ def _class_from_dataset(ds: dict, cid: str) -> dict:
     if uks:
         entry["unique_keys"] = uks
     entry["provenance"] = sx.get("provenance", "ossie")
-    for k in ("instance_count", "identifier_inferred"):
+    for k in ("instance_count", "identifier_inferred", "review_note", "new_columns"):
         if k in sx:
             entry[k] = sx[k]
     if sx.get("role") in ("fact", "dimension", "entity", "bridge"):
@@ -692,7 +694,7 @@ def from_ontology(onto: dict, include_studio: bool = True, include_layout: bool 
         exts = copy.deepcopy(_list(st.get("nonportable_extensions")))
         if include_studio:
             sx = {"cardinality": p.get("cardinality"), "inverse": p.get("inverse"),
-                  "provenance": p.get("provenance")}
+                  "provenance": p.get("provenance"), "role": p.get("role"), "default": p.get("default") or None}
             if p.get("confidence") is not None:
                 sx["confidence"] = p["confidence"]
             if p.get("required"):
@@ -751,7 +753,8 @@ def from_ontology(onto: dict, include_studio: bool = True, include_layout: bool 
             ds["metrics"] = ds_metrics[cid]
         exts = copy.deepcopy(_list((c.get("ossie") or {}).get("nonportable_extensions")))
         if include_studio:
-            sx = {k: c.get(k) for k in ("role", "instance_count", "provenance", "identifier_inferred", "source_kind")
+            sx = {k: c.get(k) for k in ("role", "instance_count", "provenance", "identifier_inferred", "source_kind",
+                                        "review_note", "new_columns")
                   if c.get(k) is not None}
             sx.update({k: c[k] for k in ("domains", "certification") if c.get(k)})
             if sx:

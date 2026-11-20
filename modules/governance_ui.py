@@ -34,8 +34,10 @@ def current_user() -> str:
 
 
 def _commit(onto, msg):
+    from .modeling import log_change
     from .ontology_builder import refresh_index
     refresh_index(onto)
+    log_change(onto, msg, current_user())
     ss.gov_msg = msg
     st.rerun()
 
@@ -433,12 +435,20 @@ def _experts(onto):
 # =========================================================================== #
 TYPE_LABEL = {"popular-snippet": "🔥 Popular snippet", "conflict": "⚖️ Conflicting definitions",
               "uncertified": "📝 Needs certification", "negative-feedback": "👎 Feedback hotspot",
-              "knowledge-gap": "🕳️ Knowledge gap", "unassigned": "🗂️ No domain"}
+              "knowledge-gap": "🕳️ Knowledge gap", "unassigned": "🗂️ No domain", "lint": "🧹 Model check"}
+REVIEW_MODES = ["✅ Review queue", "🧭 Modeling worklist"]
 
 
-def review_tab(onto: dict, on_databricks: bool):
+def review_tab(onto: dict, on_databricks: bool, runner: dict | None = None, uc_runner=None):
     gv.ensure(onto)
     _flash()
+    mode = st.segmented_control("Review", REVIEW_MODES, default=ss.get("rv_mode_pick", REVIEW_MODES[0]),
+                                key="rv_mode", label_visibility="collapsed") or REVIEW_MODES[0]
+    ss.rv_mode_pick = mode
+    if mode == REVIEW_MODES[1]:
+        from . import modeling_ui as mu
+        mu.worklist_view(onto, runner or {}, uc_runner, on_databricks, lambda msg: _commit(onto, msg), traces())
+        return
     items = rv.build_queue(onto, traces())
     c1, c2, c3 = st.columns([2, 2, 1.4])
     types = c1.multiselect("Show", list(TYPE_LABEL), default=list(TYPE_LABEL), format_func=TYPE_LABEL.get)
@@ -500,6 +510,8 @@ def _review_actions(onto, it):
         if cols[0].button("✨ Suggest domains", key=f"sd_{k}"):
             gv.suggest_domains(onto)
             _commit(onto, "Domains suggested")
+    elif it["type"] == "lint":
+        cols[0].caption(it.get("fix") or "")
     if cols[-1].button("Dismiss", key=f"dis_{k}"):
         rv.dismiss(onto, k)
         _commit(onto, "Dismissed")

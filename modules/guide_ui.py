@@ -1,7 +1,7 @@
 """Bilingual, business-user help for the Ontology Studio."""
 from __future__ import annotations
 
-from textwrap import dedent
+from inspect import cleandoc
 
 import streamlit as st
 
@@ -307,7 +307,7 @@ def _show_guide() -> None:
 
     for index, (title, content) in enumerate(_GUIDE[language]):
         with st.expander(title, expanded=index == 0):
-            st.markdown(dedent(content))
+            st.markdown(cleandoc(content))
 
 
 def sidebar_button() -> None:

@@ -104,6 +104,7 @@ def tab_css(c: dict) -> str:
     radial-gradient(circle at 0 0, transparent 9.5px, {active} 10px) left bottom / 10px 10px no-repeat,
     radial-gradient(circle at 100% 0, transparent 9.5px, {active} 10px) right bottom / 10px 10px no-repeat; }}
 .st-key-theme_watcher {{ display: none; }}
+.st-key-section p, .st-key-section span, .st-key-section button {{ font-size: 16px; }}
 .stTabs [role="tabpanel"] {{
   background: {active}; border: 1px solid {border}; border-top: none; border-radius: 0 0 12px 12px;
   padding: 18px 18px 14px 18px; margin-top: 0; }}
@@ -113,7 +114,7 @@ def tab_css(c: dict) -> str:
 st.markdown(tab_css(theme.colors()), unsafe_allow_html=True)
 theme.watch()
 
-SECTIONS = {"update": "① 📂 Update existing model", "create": "② ✨ Create new model", "deploy": "③ 🚀 Deploy to Databricks"}
+SECTIONS = {"update": "📂 Update existing model", "create": "✨ Create new model", "deploy": "🚀 Deploy to Databricks"}
 section = st.segmented_control(
     "Section", list(SECTIONS), format_func=SECTIONS.get, default="create", required=True, key="section",
     label_visibility="collapsed",

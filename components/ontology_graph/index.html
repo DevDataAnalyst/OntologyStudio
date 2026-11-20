@@ -10,7 +10,7 @@
   .dark { --bg:#0e1117; --fg:#e6e8eb; --muted:#9aa3ae; --line:#2c323c; --panel:#161a22; --accent:#60a5fa;
           --chip:#1e2433; }
   html, body { margin:0; padding:0; background:var(--bg); color:var(--fg);
-               font-family:"Source Sans Pro","Segoe UI",Helvetica,Arial,sans-serif; font-size:13px; }
+               font-family:var(--font,Arial,Helvetica,sans-serif); font-size:13px; }
   #wrap { display:flex; flex-direction:column; border:1px solid var(--line); border-radius:12px; overflow:hidden;
           background:var(--bg); }
   #wrap:fullscreen { border-radius:0; }
@@ -22,7 +22,7 @@
   button, select { font:inherit; color:var(--fg); background:var(--bg); border:1px solid var(--line);
                    border-radius:7px; padding:3px 9px; cursor:pointer; white-space:nowrap; }
   button:hover:not(:disabled), select:hover { border-color:var(--accent); }
-  button.on { background:var(--accent); color:#fff; border-color:var(--accent); }
+  button.on { background:var(--accent); color:var(--on-accent,#fff); border-color:var(--accent); }
   button:disabled { opacity:.4; cursor:default; }
   button.icon { padding:3px 7px; min-width:28px; }
   label.tg { display:flex; gap:3px; align-items:center; color:var(--muted); cursor:pointer; user-select:none; }
@@ -158,13 +158,62 @@
              grid: "#1a1f29", accent: "#60a5fa", sel: "#f87171", hit: "#facc15", sug: "#fb923c", lin: "#34d399",
              label: "#161a22", labelLine: "#2c323c", shadow: "rgba(0,0,0,0.55)", connect: "#4ade80" }
   };
-  const FONT = '"Source Sans Pro","Segoe UI",Helvetica,Arial,sans-serif';
+  const BASE_FONT = 'Arial,Helvetica,sans-serif';   // the whole app uses Arial (see .streamlit/config.toml)
+  let FONT = BASE_FONT;
+
+  // ------------------------------------------------------------------ theme (Streamlit sends the active theme
+  // with every render message, including right after the user switches Light/Dark in the app menu)
+  function rgb(hex) {
+    const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(String(hex || "").trim());
+    if (!m) return null;
+    let h = m[1]; if (h.length === 3) h = h.split("").map((c) => c + c).join("");
+    return [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16));
+  }
+  function mix(a, b, t) {            // a blended toward b by t (0..1), as #rrggbb
+    const x = rgb(a), y = rgb(b);
+    if (!x || !y) return a;
+    return "#" + x.map((v, i) => Math.round(v + (y[i] - v) * t).toString(16).padStart(2, "0")).join("");
+  }
+  function lum(hex) {
+    const c = rgb(hex); if (!c) return 0.5;
+    const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+    return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]);
+  }
+  function themedPalette(theme, dark) {
+    const base = dark ? PALETTE.dark : PALETTE.light;
+    const t = theme || {};
+    const bg = rgb(t.backgroundColor) ? t.backgroundColor : base.bg;
+    const fg = rgb(t.textColor) ? t.textColor : base.text;
+    const panel = rgb(t.secondaryBackgroundColor) ? t.secondaryBackgroundColor : (dark ? "#161a22" : "#f6f7f9");
+    const accent = rgb(t.primaryColor) ? t.primaryColor : base.accent;
+    const p = Object.assign({}, base, {
+      bg: bg, text: fg, accent: accent, panel: panel,
+      card: dark ? mix(bg, fg, 0.07) : mix(bg, "#ffffff", 0.7),
+      cardLine: mix(bg, fg, dark ? 0.22 : 0.2),
+      sub: mix(fg, bg, dark ? 0.35 : 0.38),
+      edge: mix(fg, bg, dark ? 0.42 : 0.48),
+      grid: mix(bg, fg, dark ? 0.12 : 0.1),
+      label: dark ? mix(bg, fg, 0.04) : mix(bg, "#ffffff", 0.7),
+      labelLine: mix(bg, fg, dark ? 0.2 : 0.16),
+      line: mix(bg, fg, dark ? 0.24 : 0.17),
+      chip: mix(bg, accent, dark ? 0.22 : 0.14),
+      onAccent: lum(accent) > 0.45 ? "#000000" : "#ffffff"
+    });
+    p.font = BASE_FONT;
+    return p;
+  }
+  function applyChromeVars(p) {      // toolbar, legend, tooltip, minimap frame (HTML around the SVG)
+    const s = document.body.style;
+    [["--bg", p.bg], ["--fg", p.text], ["--muted", p.sub], ["--line", p.line], ["--panel", p.panel],
+     ["--accent", p.accent], ["--chip", p.chip], ["--on-accent", p.onAccent], ["--font", p.font]]
+      .forEach(([k, v]) => s.setProperty(k, v));
+  }
   const $ = (id) => document.getElementById(id);
 
   // ------------------------------------------------------------------ state
   const st = {
     nodes: [], links: [], byId: new Map(), mode: "select", pendingSource: null, sel: null, hoverId: null,
-    layout: "force", dark: false, height: 640, first: true, query: "", hits: [], laidOut: false,
+    layout: "force", dark: false, pal: PALETTE.light, themeSig: "", height: 640, first: true, query: "", hits: [], laidOut: false,
     relayoutRequested: false, settling: false
   };
   let svg, root, gGrid, gLinks, gLabels, gNodes, rubber, defs, styleEl, zoom, sim;
@@ -192,11 +241,11 @@
   function truncate(t, max) { return t.length > max ? t.slice(0, max - 1) + "…" : t; }
 
   // ------------------------------------------------------------------ styles (live inside the SVG, so exports keep them)
-  function svgCss(dark) {
-    const p = dark ? PALETTE.dark : PALETTE.light;
+  function svgCss() {
+    const p = st.pal;
     return `
       .card { fill:${p.card}; stroke:${p.cardLine}; stroke-width:1.2; }
-      .node.external .card { fill:none; stroke:${PALETTE.light.sub}; stroke-dasharray:4 3; }
+      .node.external .card { fill:none; stroke:${p.sub}; stroke-dasharray:4 3; }
       .node .title { font: 600 13px ${FONT}; fill:${p.text}; }
       .node .sub { font: 400 11px ${FONT}; fill:${p.sub}; }
       .node.external .title { font-style:italic; font-weight:400; fill:${p.sub}; }
@@ -230,7 +279,7 @@
 
   // ------------------------------------------------------------------ markers: crow's foot (many), bar (one), arrow
   const MARK_COLORS = () => {
-    const p = st.dark ? PALETTE.dark : PALETTE.light;
+    const p = st.pal;
     return { edge: p.edge, hl: p.accent, sel: p.sel, sug: p.sug, lin: p.lin };
   };
   function buildMarkers() {
@@ -833,7 +882,7 @@
     clone.removeAttribute("style");
     const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
     bg.setAttribute("x", x0); bg.setAttribute("y", y0); bg.setAttribute("width", x1 - x0); bg.setAttribute("height", y1 - y0);
-    bg.setAttribute("fill", (st.dark ? PALETTE.dark : PALETTE.light).bg);
+    bg.setAttribute("fill", st.pal.bg);
     clone.insertBefore(bg, r);
     return { text: new XMLSerializer().serializeToString(clone), w: x1 - x0, h: y1 - y0 };
   }
@@ -948,9 +997,11 @@
   }
 
   // ------------------------------------------------------------------ render (called on every Streamlit rerun)
-  function render(args) {
+  let lastArgs = null, lastTheme = null;
+  function render(args, theme) {
+    lastArgs = args; lastTheme = theme;
     st.height = args.height || 640;
-    const dark = !!args.dark;
+    const dark = theme && (theme.base === "dark" || theme.base === "light") ? theme.base === "dark" : !!args.dark;
     document.body.classList.toggle("dark", dark);
     $("wrap").style.height = (document.fullscreenElement ? window.innerHeight : st.height) + "px";
     post("streamlit:setFrameHeight", { height: st.height + 2 });
@@ -958,10 +1009,19 @@
       init();
       if (st.height < 560) { $("legend").classList.add("min"); $("legHd").textContent = "Legend ▸"; }
     }
-    if (dark !== st.dark || !styleEl.text()) {
-      st.dark = dark; styleEl.text(svgCss(dark)); buildMarkers();
+    const sig = JSON.stringify([dark, theme || null]);
+    if (sig !== st.themeSig || !styleEl.text()) {
+      st.themeSig = sig; st.dark = dark; st.pal = themedPalette(theme, dark); FONT = st.pal.font;
+      applyChromeVars(st.pal);
+      styleEl.text(svgCss()); buildMarkers();
       svg.select("#shadowFx").attr("flood-color", dark ? "#000000" : "#0f172a").attr("flood-opacity", dark ? 0.55 : 0.14);
-      miniView.attr("stroke", dark ? "#60a5fa" : "#2563eb");
+      miniView.attr("stroke", st.pal.accent).attr("fill", st.pal.accent).attr("fill-opacity", 0.1);
+      // card widths are measured with the theme font: measure again once the font file has arrived
+      if (document.fonts && document.fonts.load) {
+        Promise.all(["400", "600"].map((w) => document.fonts.load(w + " 13px " + FONT))).then(() => {
+          if (lastArgs) { st.nodes.forEach(size); draw(); }
+        }).catch(() => {});
+      }
     }
     const g = args.graph || { nodes: [], links: [] }, pos = args.positions || {};
 
@@ -1026,7 +1086,7 @@
   }
 
   window.addEventListener("message", (ev) => {
-    if (ev.data && ev.data.type === "streamlit:render") render(ev.data.args || {});
+    if (ev.data && ev.data.type === "streamlit:render") render(ev.data.args || {}, ev.data.theme || null);
   });
   post("streamlit:componentReady", { apiVersion: 1 });
 })();

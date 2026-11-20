@@ -10,6 +10,8 @@ Signals (each item says which one fired and why):
   negative-feedback 👎 / failed Ask requests clustered by domain and asset (knowledge hotspots)
   knowledge-gap     questions whose words match nothing in the ontology
   unassigned        classes without a domain (they never show up in a domain-scoped search)
+  lint              model checks from modules/modeling.py: descriptions without the grain, multi-role joins
+                    without a default, unlinked id columns, measures without a metric, metrics that fail
 """
 from __future__ import annotations
 
@@ -192,6 +194,10 @@ def build_queue(onto: dict, traces: list[dict] | None = None, min_authority: flo
             "title": f"{len(un)} class(es) have no domain",
             "why": ", ".join(un[:12]) + " — they are skipped by domain-scoped questions.",
             "action": "domains", "classes": un, "domains": []})
+
+    # 7. model checks: grain, default joins, unlinked ids, measures without metrics, metrics that fail
+    from .modeling import lint
+    items += lint(onto)
 
     items = [i for i in items if i["id"] not in dismissed]
     items.sort(key=lambda i: -i["priority"])

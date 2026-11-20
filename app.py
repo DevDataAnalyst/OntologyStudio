@@ -1,12 +1,22 @@
 """
 Ontology Studio — Databricks App (Streamlit)
 
+Three sections (top of the page), around the lifecycle of a semantic model:
+  ① Update existing model : open an Ossie model from the versioned Volume store (ONTOLOGY_STORE), an upload
+                            or pasted YAML; edit it; save it back as a new version (🕘 Versions tab)
+  ② Create new model      : pick a source type (Databricks / Non-Databricks), then the flow below; publish
+                            the Ossie YAML to the Volume store
+  ③ Deploy to Databricks  : put the model next to its tables (volume in their schema + comments, tags,
+                            metric views, keys) — modules/deploy.py
+
 1. Connect   : pick up to 100 tables/views anywhere in Unity Catalog (or upload a SQLite / .sql file,
                or an Apache Ossie semantic model, which is validated against the official spec)
 2. Analyze   : declared keys + discovered joins (naming, value overlap, query history), lineage,
                fact/dimension and measure/dimension classification, base metrics
 3. Edit      : interactive D3.js network diagram — drag, connect, repoint, delete, accept/reject
                suggestions; inspector for classes, columns, metrics and joins
+   Form editor: a guided, step-by-step form for business users to edit an Apache Ossie YAML
+               (model info, datasets, fields, relationships, metrics, review & submit)
 4. Export    : ontology YAML, Apache Ossie YAML and Databricks metric view YAML (download or deploy
                to Unity Catalog)
 """
@@ -23,10 +33,14 @@ import pandas as pd
 import streamlit as st
 import yaml
 
-from modules import discovery, governance as gv, governance_ui as gui, ontology_edit as ed, ossie, ossie_ui
+from modules import discovery, governance as gv, governance_ui as gui, ontology_edit as ed, ossie, ossie_form, ossie_ui
 from modules.dictionary_ui import dictionary_tab
-from modules import semantics, store
+from modules import lifecycle_ui as lc, semantics, store, theme
+from modules import sources as src
 from modules import metric_views as mv
+from modules import mv_builder_ui as mvb
+from modules import workbench_ui as wb
+from modules import modeling as md, modeling_ui as mu
 from modules.extractors import from_sql_script, from_sqlite_file, is_sqlite_bytes
 from modules.graph_component import handle_event, network
 from modules.ontology_builder import (BuildOptions, attach_lineage, attach_suggestions,
@@ -53,18 +67,73 @@ ss.setdefault("graph_key", 0)
 ss.setdefault("uc_cache", {})
 
 
-def is_dark() -> bool:
-    try:
-        return st.context.theme.type == "dark"
-    except Exception:  # noqa: BLE001
-        return False
+def tab_css(c: dict) -> str:
+    """Chromium-style tab strip for every st.tabs: separate rounded tabs on a bar; the active tab joins the
+    panel below it with the curved 'flares' Chrome draws at its bottom corners. Colours come from the active
+    light/dark theme in .streamlit/config.toml (see modules/theme.py)."""
+    bg, txt = c["backgroundColor"], c["textColor"]
+    strip, active = c["secondaryBackgroundColor"], bg
+    hover = f"color-mix(in srgb, {txt} 7%, {strip})"
+    sep = f"color-mix(in srgb, {txt} 28%, {strip})"
+    border = f"color-mix(in srgb, {c['borderColor']} 70%, {bg})"
+    muted = f"color-mix(in srgb, {txt} 72%, {bg})"
+    tl, tab = '.stTabs [role="tablist"]', '.stTabs [role="tab"]'   # react-aria (1.5x+) and baseweb DOMs
+    return f"""<style>
+{tl} {{
+  gap: 0; background: {strip}; padding: 7px 14px 0 14px; border-radius: 12px 12px 0 0;
+  border: 1px solid {border}; border-bottom: none; box-shadow: none; overflow-x: auto; overflow-y: hidden;
+  scrollbar-width: thin; }}
+.stTabs [data-baseweb="tab-border"], .stTabs [data-baseweb="tab-highlight"],
+.stTabs .react-aria-SelectionIndicator {{ display: none !important; }}
+{tab} {{
+  position: relative; height: 38px; margin: 0; padding: 0 15px; flex: 0 0 auto; display: flex;
+  align-items: center; background: transparent; border: none; border-radius: 10px 10px 0 0; color: {muted};
+  transition: background .12s ease; }}
+{tab} p {{ font-size: .9rem; white-space: nowrap; margin: 0; }}
+{tab}:not(:first-of-type)::before {{
+  content: ""; position: absolute; left: 0; top: 11px; bottom: 11px; width: 1px; background: {sep}; }}
+{tab}:hover {{ background: {hover}; color: {txt}; }}
+{tab}[aria-selected="true"] {{
+  background: {active}; color: {txt}; z-index: 1; box-shadow: 0 -1px 3px rgba(0,0,0,.10); }}
+{tab}[aria-selected="true"] p {{ font-weight: 650; }}
+{tab}[aria-selected="true"]::before, {tab}[aria-selected="true"] + [role="tab"]::before,
+{tab}:hover::before, {tab}:hover + [role="tab"]::before {{ opacity: 0; }}
+{tab}[aria-selected="true"]::after {{
+  content: ""; position: absolute; bottom: 0; left: -10px; right: -10px; height: 10px; pointer-events: none;
+  background:
+    radial-gradient(circle at 0 0, transparent 9.5px, {active} 10px) left bottom / 10px 10px no-repeat,
+    radial-gradient(circle at 100% 0, transparent 9.5px, {active} 10px) right bottom / 10px 10px no-repeat; }}
+.st-key-theme_watcher {{ display: none; }}
+.stTabs [role="tabpanel"] {{
+  background: {active}; border: 1px solid {border}; border-top: none; border-radius: 0 0 12px 12px;
+  padding: 18px 18px 14px 18px; margin-top: 0; }}
+</style>"""
+
+
+st.markdown(tab_css(theme.colors()), unsafe_allow_html=True)
+theme.watch()
+
+SECTIONS = {"update": "① Update existing model", "create": "② Create new model", "deploy": "③ Deploy to Databricks"}
+section = st.segmented_control(
+    "Section", list(SECTIONS), format_func=SECTIONS.get, default="create", required=True, key="section",
+    label_visibility="collapsed",
+    help="① open a saved, uploaded or pasted Apache Ossie model and change it · ② build a new model from "
+         "your tables · ③ put a model into Unity Catalog next to its tables") or "create"
+
+
+def user_token() -> str | None:
+    if not ON_DATABRICKS:
+        return None
+    from modules.db_connection import get_user_token
+    return get_user_token()
 
 
 def commit(msg: str | None = None, rerun: bool = True):
-    """Persist a mutation of ss.onto and redraw."""
+    """Persist a mutation of ss.onto, log it in the model's change log, and redraw."""
     refresh_index(ss.onto)
     if msg:
         ss.graph_msg = msg
+        md.log_change(ss.onto, msg, lc.current_user())
     if rerun:
         st.rerun()
 
@@ -85,9 +154,32 @@ def cached(key, fn):
 # =========================================================================== #
 with st.sidebar:
     st.title("🕸️ Ontology Studio")
-    st.header("1 · Connect")
-    sources = (["Unity Catalog"] if ON_DATABRICKS else []) + ["Upload file", "Ossie YAML", "Saved version"]
-    source = st.radio("Source", sources, horizontal=True, label_visibility="collapsed")
+    st.header("0 · Source type")
+    family = st.radio("Source type", src.FAMILIES, index=0 if ON_DATABRICKS else 1, horizontal=True,
+                      key="src_family", label_visibility="collapsed",
+                      help="Databricks: tables and views in Unity Catalog. Non-Databricks: files today; "
+                           "Snowflake, PostgreSQL and Informatica CDGC connectors are planned.")
+    if family == src.DATABRICKS and not ON_DATABRICKS:
+        st.caption("Unity Catalog is available when the app runs in Databricks Apps.")
+
+    source, planned, paste_text, force_open = None, None, "", False
+    if section == "update":
+        st.header("1 · Open model")
+        source = st.radio("Open from", ["Saved version", "Ossie YAML", "Paste YAML"], horizontal=True,
+                          format_func={"Saved version": "Volume store", "Ossie YAML": "Upload",
+                                       "Paste YAML": "Paste"}.get, key="open_from", label_visibility="collapsed")
+    elif section == "create":
+        st.header("1 · Connect")
+        fam = [s_ for s_ in src.for_family(family) if s_.key != "Unity Catalog" or ON_DATABRICKS]
+        if fam:
+            source = st.radio("Source", [s_.key for s_ in fam], format_func=src.label, key=f"src_{family}",
+                              label_visibility="collapsed")
+            info = src.get(source)
+            if info and not info.available:
+                planned = info
+    else:
+        st.caption("Pick the model to deploy in the main panel. Deploying writes to Unity Catalog, so it "
+                   "needs the app to run in Databricks Apps.")
 
     selected_fqns, uploaded, dialect, version_path = [], None, "auto", None
     ossie_rep, ossie_ready, ossie_model = None, False, 0
@@ -154,56 +246,82 @@ with st.sidebar:
         else:
             ss.pop("ossie_key", None)
             ss.pop("ossie_report", None)
-    else:
+    elif source == "Saved version":
         if store.enabled():
-            token = None
-            if ON_DATABRICKS:
-                from modules.db_connection import get_user_token
-                token = get_user_token()
-            versions = cached("versions", lambda: store.list_versions(token))
-            version_path = st.selectbox("Version", versions,
-                                        format_func=lambda p: "/".join(p.split("/")[-2:]))
+            token = user_token()
+            models = cached("store_models", lambda: store.list_models(token))
+            smodel = st.selectbox("Model", models, key="sv_model")
+            hist = cached(f"hist:{smodel}", lambda: store.history(smodel, token)) if smodel else []
+            hlabels = {v.path: v.label() for v in hist}
+            version_path = st.selectbox("Version", list(hlabels), format_func=hlabels.get,
+                                        key=f"sv_ver_{smodel}_{len(hist)}")
+            if not models:
+                st.caption(f"No models in `{store.root()}` yet. Save one from section ② (🕘 Versions or "
+                           "🧩 Apache Ossie tab).")
+            force_open = st.checkbox("Open even if it has validation errors", value=False, key="sv_force")
             if st.button("Refresh list"):
-                ss.uc_cache.pop("versions", None)
+                for k in [k for k in ss.uc_cache if k in ("store_models", "versions") or k.startswith("hist:")]:
+                    ss.uc_cache.pop(k, None)
                 st.rerun()
         else:
             st.caption("Set ONTOLOGY_STORE in app.yaml to a /Volumes/... path to keep versions. "
-                       "You can also paste a YAML in the Ontology YAML tab.")
+                       "You can also paste a YAML here or in the Ontology YAML tab.")
+    elif source == "Paste YAML":
+        paste_text = st.text_area("Apache Ossie model or studio ontology YAML", height=240, key="sb_paste",
+                                  placeholder="version: 0.3.0.dev0\nname: sales\ndatasets:\n  - name: orders\n"
+                                              "    source: main.sales.orders")
+        force_open = st.checkbox("Open even if it has validation errors", value=False, key="paste_force")
+    elif planned is not None:
+        st.info(f"**{planned.label}** is coming soon. {planned.note}")
+    elif section == "create" and source is None:
+        st.info("Switch the source type to **Non-Databricks** to upload a file, or open the app in "
+                "Databricks Apps to read Unity Catalog.")
 
-    st.header("2 · Analyze")
-    with st.expander("Discovery & lineage", expanded=False):
-        profile = st.checkbox("Profile data (row counts, samples, enumerations)", value=True)
-        verify = st.checkbox("Verify joins by value overlap", value=True,
-                             help="Runs a sampled DISTINCT/LEFT JOIN check per candidate join.")
-        use_history = st.checkbox("Mine joins from query history", value=ON_DATABRICKS,
-                                  disabled=not ON_DATABRICKS,
-                                  help="Reads system.query.history (needs SELECT; text is redacted "
-                                       "unless you are in databricks_pii_access).")
-        history_days = st.slider("Query history window (days)", 7, 365, 90, disabled=not use_history)
-        use_lineage = st.checkbox("Include lineage", value=ON_DATABRICKS, disabled=not ON_DATABRICKS,
-                                  help="Reads system.access.table_lineage / column_lineage.")
-        lineage_days = st.slider("Lineage window (days)", 7, 365, 180, disabled=not use_lineage)
-        threshold = st.slider("Auto-accept joins with confidence ≥", 0.5, 0.99, 0.75, 0.01,
-                              help="Lower-confidence joins become suggestions in the diagram.")
-        enum_max = st.slider("Max distinct values for an enumeration", 2, 50, 12)
-    with st.expander("Ontology naming", expanded=False):
-        onto_name = st.text_input("Ontology name", value="MyOntology")
-        base_iri = st.text_input("Base IRI", value="http://example.org/ontology/")
-        prefix = st.text_input("Prefix", value="ex")
-        naming = st.radio("Naming", ["semantic", "raw"], horizontal=True)
-        strip = st.checkbox("Strip dim_/fact_ prefixes from class names", value=True)
-        collapse = st.checkbox("Collapse bridge tables into many-to-many", value=True)
-        include_views = st.checkbox("Include views", value=True)
+    profile, verify, use_history, history_days, use_lineage, lineage_days = True, True, False, 90, False, 180
+    threshold, enum_max, onto_name, base_iri, prefix = 0.75, 12, "MyOntology", "http://example.org/ontology/", "ex"
+    naming, strip, collapse, include_views = "semantic", True, True, True
+    if section == "create":
+        st.header("2 · Analyze")
+        with st.expander("Discovery & lineage", expanded=False):
+            profile = st.checkbox("Profile data (row counts, samples, enumerations)", value=True)
+            verify = st.checkbox("Verify joins by value overlap", value=True,
+                                 help="Runs a sampled DISTINCT/LEFT JOIN check per candidate join.")
+            use_history = st.checkbox("Mine joins from query history", value=ON_DATABRICKS,
+                                      disabled=not ON_DATABRICKS,
+                                      help="Reads system.query.history (needs SELECT; text is redacted "
+                                           "unless you are in databricks_pii_access).")
+            history_days = st.slider("Query history window (days)", 7, 365, 90, disabled=not use_history)
+            use_lineage = st.checkbox("Include lineage", value=ON_DATABRICKS, disabled=not ON_DATABRICKS,
+                                      help="Reads system.access.table_lineage / column_lineage.")
+            lineage_days = st.slider("Lineage window (days)", 7, 365, 180, disabled=not use_lineage)
+            threshold = st.slider("Auto-accept joins with confidence ≥", 0.5, 0.99, 0.75, 0.01,
+                                  help="Lower-confidence joins become suggestions in the diagram.")
+            enum_max = st.slider("Max distinct values for an enumeration", 2, 50, 12)
+        with st.expander("Ontology naming", expanded=False):
+            onto_name = st.text_input("Ontology name", value="MyOntology")
+            base_iri = st.text_input("Base IRI", value="http://example.org/ontology/")
+            prefix = st.text_input("Prefix", value="ex")
+            naming = st.radio("Naming", ["semantic", "raw"], horizontal=True)
+            strip = st.checkbox("Strip dim_/fact_ prefixes from class names", value=True)
+            collapse = st.checkbox("Collapse bridge tables into many-to-many", value=True)
+            include_views = st.checkbox("Include views", value=True)
 
-    st.header("3 · Semantic layer (optional)")
-    enrich = st.checkbox("LLM: descriptions, synonyms, code meanings, rules, metrics",
-                         value=False, disabled=not ON_DATABRICKS)
-    docs_files = st.file_uploader("Business docs to ground it", type=["md", "txt", "csv", "json", "yaml", "yml"],
-                                  accept_multiple_files=True, disabled=not enrich)
+    enrich, docs_files = False, None
+    if section != "deploy":
+        st.header(("3" if section == "create" else "2") + " · Semantic layer (optional)")
+        enrich = st.checkbox("LLM: descriptions, synonyms, code meanings, rules, metrics",
+                             value=False, disabled=not ON_DATABRICKS)
+        docs_files = st.file_uploader("Business docs to ground it",
+                                      type=["md", "txt", "csv", "json", "yaml", "yml"],
+                                      accept_multiple_files=True, disabled=not enrich)
 
-    can_go = bool(selected_fqns or uploaded or version_path or ossie_ready)
-    go = st.button({"Saved version": "Load version", "Ossie YAML": "Load Ossie model"}.get(source, "Analyze & build"),
-                   type="primary", use_container_width=True, disabled=not can_go)
+    go = False
+    if section != "deploy":
+        can_go = planned is None and bool(selected_fqns or uploaded or version_path or ossie_ready
+                                          or paste_text.strip())
+        go = st.button({"Saved version": "Open version", "Ossie YAML": "Load Ossie model",
+                        "Paste YAML": "Open pasted YAML"}.get(source, "Analyze & build"),
+                       type="primary", use_container_width=True, disabled=not can_go)
 
 
 # =========================================================================== #
@@ -330,25 +448,106 @@ def load_ossie(rep: ossie.Report, model_index: int) -> dict:
     return refresh_index(new)
 
 
+def submit_form_model(doc: dict, file_name: str) -> None:
+    """The form editor's Submit: load its (validated) Ossie model as the studio ontology."""
+    new = ossie.to_ontology(doc, file_name, base_iri=base_iri, prefix=prefix)
+    three_part = all(str(c.get("source_fqn") or "").count(".") == 2 for c in new["classes"].values())
+    ss.runner = {"kind": "uc" if ON_DATABRICKS and three_part else None, "dialect": "databricks"}
+    ss.ossie_loaded = {"key": None, "file": file_name, "notes": ["Loaded from the YAML form editor."]}
+    ss.onto = refresh_index(new)
+    ss.selection, ss.last_nonce, ss.graph_msg = {"kind": None}, None, f"Loaded {file_name} from the form editor"
+    ss.graph_key += 1
+
+
+def remember_model(path: str | None = None, model: str | None = None) -> None:
+    """What the open model was loaded from, so saves go to its folder and changes can be diffed."""
+    m = re.match(r".*/(\d{8}T\d+Z)\.[a-z.]*yaml$", path or "")
+    ss.model_ref = {"model": store.slug(model or ss.onto.get("ontology", {}).get("name") or "model"),
+                    "version": m[1] if m else "", "path": path or "", "text": lc.ossie_text(ss.onto)[0]}
+
+
+def open_text(text: str, file_name: str, path: str | None = None, force: bool = False) -> str | None:
+    """Open a stored or pasted YAML: a studio ontology as is, an Apache Ossie model after validation.
+    Returns an error message (and leaves the open model alone) when it cannot be opened."""
+    model = path.split("/")[-3] if path and "/versions/" in path else (path.split("/")[-2] if path else None)
+    if store.kind_of_text(text) == store.ONTOLOGY:
+        new = yaml.safe_load(text)
+        new.setdefault("layout", {})
+        ss.onto = refresh_index(new)
+        ss.pop("ossie_loaded", None)
+    else:
+        rep = ossie.validate_text(text, file_name)
+        ss.ossie_report = rep
+        ss.ossie_key = ("text", file_name, hashlib.sha1(text.encode("utf-8")).hexdigest())
+        if not rep.convertible:
+            return f"{file_name} cannot be read as an Apache Ossie model: {rep.headline()}"
+        if rep.errors and not force:
+            return (f"{file_name} has {len(rep.errors)} validation error(s). Tick **Open even if it has "
+                    "validation errors** to open it anyway, or see the report.")
+        ss.onto = load_ossie(rep, 0)
+    gv.ensure(ss.onto)
+    remember_model(path, model)
+    ss.selection, ss.last_nonce, ss.graph_msg = {"kind": None}, None, f"Opened {file_name}"
+    ss.graph_key += 1
+    return None
+
+
+open_error = None
 if go:
     if source == "Saved version":
-        token = None
-        if ON_DATABRICKS:
-            from modules.db_connection import get_user_token
-            token = get_user_token()
-        ss.onto = yaml.safe_load(store.load(version_path, token))
-        ss.pop("ossie_loaded", None)
+        try:
+            open_error = open_text(store.load(version_path, user_token()), version_path.rsplit("/", 1)[-1],
+                                   version_path, force=force_open)
+        except Exception as e:  # noqa: BLE001
+            open_error = str(e)
+    elif source == "Paste YAML":
+        open_error = open_text(paste_text, "pasted.yaml", None, force=force_open)
     elif source == "Ossie YAML":
         ss.onto = load_ossie(ossie_rep, ossie_model)
+        gv.ensure(ss.onto)
+        remember_model(None, ossie_rep.model_names()[ossie_model] if ossie_rep.models else None)
     else:
         ss.onto = build()
         ss.pop("ossie_loaded", None)
-    ss.selection, ss.last_nonce, ss.graph_msg = {"kind": None}, None, None
-    ss.graph_key += 1           # fresh diagram for a fresh ontology
+        ss.pop("model_ref", None)            # a brand-new model
+    if not open_error:
+        ss.selection, ss.last_nonce, ss.graph_msg = {"kind": None}, None, ss.graph_msg if source in (
+            "Saved version", "Paste YAML") else None
+        ss.graph_key += 1           # fresh diagram for a fresh ontology
 
 onto = ss.onto
 if onto is not None:
     gv.ensure(onto)
+if open_error:
+    st.error(open_error)
+
+if section == "deploy":
+    lc.deploy_page(onto, user_token(), uc_runner if ON_DATABRICKS else None, ON_DATABRICKS)
+    st.stop()
+
+if onto is None and section == "update":
+    st.title("① Update an existing semantic model")
+    if source in ("Ossie YAML", "Paste YAML", "Saved version") and ss.get("ossie_report") is not None \
+            and (source != "Ossie YAML" or ossie_rep is not None):
+        st.caption(f"File: **{ss.ossie_report.file_name}**")
+        ossie_ui.report_view(ss.ossie_report, key="landing")
+        st.stop()
+    st.markdown(
+        "Open an **Apache Ossie** model from the sidebar: a version saved in the Volume store, a file you "
+        "upload, or YAML you paste. It is checked against the official specification, then opens in the same "
+        "editors as a new model (network, ✏️ YAML form editor, tables). Save your changes as a **new version** "
+        "in the **🕘 Versions** tab, where you can also compare and restore versions.")
+    if store.enabled():
+        st.caption(f"Store: `{store.root()}`")
+        rows = [v.as_row() | {"model": v.model} for v in store.all_versions(user_token())[:200]]
+        if rows:
+            st.dataframe(pd.DataFrame(rows)[["model", "version", "kind", "saved by", "note", "errors"]],
+                         hide_index=True, use_container_width=True)
+        else:
+            st.caption("No versions saved yet.")
+    else:
+        lc._store_missing()
+    st.stop()
 if onto is None:
     if source == "Ossie YAML" and ss.get("ossie_report") is not None:
         st.title("Apache Ossie validation")
@@ -357,15 +556,25 @@ if onto is None:
         st.caption(f"File: **{ss.ossie_report.file_name}** · {nxt}")
         ossie_ui.report_view(ss.ossie_report, key="landing")
         st.stop()
-    st.title("Ontology Studio")
-    st.markdown(
-        "Connect to Unity Catalog tables (or upload a SQLite / `.sql` file), then **Analyze & build**. "
+    st.title("② Create a new semantic model")
+    land_start, land_form = st.tabs(["🏠 Get started", "✏️ YAML form editor"])
+    with land_form:
+        ossie_form.editor_tab(None, submit_form_model)
+    land_start.markdown(
+        "Pick the **source type** in the sidebar: **Databricks** reads Unity Catalog tables, **Non-Databricks** "
+        "takes a SQLite / `.sql` file today (Snowflake, PostgreSQL and Informatica CDGC are coming). Then "
+        "**Analyze & build**. "
         "You get a network of classes and relationships you can edit, plus exports as ontology "
         "YAML, Apache Ossie YAML and Databricks metric views.\n\n"
-        "Have an **Apache Ossie** semantic model already? Choose **Ossie YAML** in the sidebar: the file is "
+        "Have an **Apache Ossie** semantic model already? Use **① Update existing model** and upload it: the file is "
         f"checked against the official specification (current version `{ossie.CURRENT_VERSION}`; older "
         "`0.2.0.dev0` and `0.1.1` files are checked against their own version and can be upgraded) and can "
-        "then be loaded into the same editor.")
+        "then be loaded into the same editor.\n\n"
+        "Business users can also open the **✏️ YAML form editor** tab to edit an Ossie YAML step by step "
+        "through simple forms, then download it or load it here.\n\n"
+        "When the model is ready, save it to the Volume store (**🕘 Versions** or **🧩 Apache Ossie** tab) "
+        "and put it next to its tables with **③ Deploy to Databricks**. To change a saved model later, use "
+        "**① Update existing model**.")
     st.stop()
 
 # =========================================================================== #
@@ -384,13 +593,21 @@ m[3].metric("Suggestions", len(pending))
 m[4].metric("Lineage edges", len(onto.get("lineage", {}).get("tables", [])))
 m[5].metric("Metrics", len(onto.get("metrics", [])))
 m[6].metric("Domains", len(onto.get("domains", [])))
+wb.readiness_line(onto, ss.get("runner", {}))
 for w in onto.get("warnings", [])[:8]:
     st.warning(w)
 
-(tab_net, tab_home, tab_dict, tab_yaml, tab_ossie, tab_mv, tab_sem, tab_know, tab_review, tab_tables, tab_ask,
- tab_mon) = st.tabs(
-    ["🕸️ Network", "🏠 Domains", "📘 Data dictionary", "Ontology YAML", "Apache Ossie", "Metric views",
-     "Semantic layer", "📚 Knowledge", "✅ Review queue", "Tables", "Ask (Text-to-SQL)", "📈 Monitor"])
+(tab_net, tab_home, tab_dict, tab_form, tab_yaml, tab_ossie, tab_ver, tab_mv, tab_sem, tab_know, tab_review,
+ tab_tables, tab_ask, tab_mon) = st.tabs(
+    ["🕸️ Network", "🏠 Domains", "📘 Data dictionary", "✏️ YAML form editor", "🧾 Ontology YAML",
+     "🧩 Apache Ossie", "🕘 Versions", "📐 Metric views", "🧠 Semantic layer", "📚 Knowledge", "✅ Review queue",
+     "🗂️ Tables", "💬 Ask (Text-to-SQL)", "📈 Monitor"])
+
+# =========================================================================== #
+# YAML form editor (guided, step-by-step Ossie editing for business users)
+# =========================================================================== #
+with tab_form:
+    ossie_form.editor_tab(onto, submit_form_model)
 
 # =========================================================================== #
 # Network + inspector
@@ -398,7 +615,7 @@ for w in onto.get("warnings", [])[:8]:
 with tab_net:
     left, right = st.columns([2.6, 1.2], gap="medium")
     with left:
-        evt = network(onto, height=660, dark=is_dark(), message=ss.graph_msg, selected=ss.selection,
+        evt = network(onto, height=660, dark=theme.is_dark(), message=ss.graph_msg, selected=ss.selection,
                       key=f"graph_{ss.graph_key}")
         st.caption("Drag to arrange · scroll to zoom · double-click a class to focus · **＋ Connect**: drag from "
                    "the class holding the key to the class it points to · select a relationship to **Repoint** "
@@ -414,6 +631,7 @@ with tab_net:
             ss.selection = sel
         if evt["type"] not in ("positions",):
             ss.graph_msg = msg
+            md.log_change(onto, msg, lc.current_user())
             st.rerun()
 
     with right:
@@ -436,9 +654,19 @@ with tab_net:
                 g1, g2 = st.columns(2)
                 cstatus = g1.selectbox("Status", gv.STATUSES, index=gv.STATUSES.index(cert.get("status", "draft")))
                 cowner = g2.text_input("Owner", cert.get("owner") or "")
+                cnote = st.text_input("Reviewer note", c.get("review_note") or "",
+                                      placeholder="What a reviewer should know or check")
                 if st.form_submit_button("Apply", type="primary"):
+                    redo = cert.get("status") == "certified" and cstatus == "certified" and (
+                        new_name != cid or desc.strip() != (c.get("description") or "").strip())
+                    if redo:                           # a certified definition that changed needs a new review
+                        cstatus = "draft"
                     ed.update_class(onto, cid, role=role, description=desc,
                                     synonyms=syn.split(",") if syn else [])
+                    if cnote.strip():
+                        c["review_note"] = cnote.strip()
+                    else:
+                        c.pop("review_note", None)
                     gv.certify(onto, "class", cid, cstatus, owner=cowner or None, by=gui.current_user(),
                                domains=[d for d in doms.split(",") if d.strip()])
                     if new_name != cid:
@@ -448,7 +676,8 @@ with tab_net:
                         except ValueError as e:
                             st.error(str(e))
                             st.stop()
-                    commit(f"Updated {new_name}")
+                    commit(f"Updated {new_name}" + (": its certified definition changed, so it is back to draft"
+                                                    if redo else ""))
             st.markdown("**Columns** — role & aggregation")
             rows = [{"property": pid, "column": p.get("source_column", pid), "type": p.get("range"),
                      "role": p.get("semantic_role", "dimension"), "aggregation": p.get("aggregation"),
@@ -474,13 +703,20 @@ with tab_net:
                     ed.delete_metric(onto, x["name"])
                     commit(f"Deleted metric {x['name']}")
             with st.form(f"addm_{cid}", clear_on_submit=True):
-                st.caption("Add / replace a metric (SQL over this class's columns)")
+                st.caption("Add / replace a metric (SQL over this class's columns). With live data it is run "
+                           "read-only first, and nothing is saved if the database rejects it.")
                 mn = st.text_input("Name", placeholder="gross_margin")
                 msql = st.text_input("SQL", placeholder="SUM(net_amount) - SUM(cost)")
                 mdesc = st.text_input("Description")
                 if st.form_submit_button("Save metric") and mn and msql:
-                    ed.upsert_metric(onto, mn, cid, msql, mdesc)
-                    commit(f"Saved metric {mn}")
+                    run_ = wb.make_run(ss.get("runner", {}), uc_runner)
+                    err = md.test_expression(run_, onto, cid, msql, "measure",
+                                             wb.dialect_of(ss.get("runner", {}))) if run_ else None
+                    if err:
+                        st.error(f"Not saved, the database rejected it: {err}")
+                    else:
+                        ed.upsert_metric(onto, mn, cid, msql, mdesc)
+                        commit(f"Saved metric {mn}" + ("" if run_ else " (not tested: no live data)"))
 
         # ---------------- relationship inspector ----------------
         elif sel.get("kind") == "edge" and sel.get("edge_kind") == "rel" and sel.get("pid") in ops:
@@ -492,6 +728,8 @@ with tab_net:
             dcols, rcols = ed.class_columns(onto, p["domain"]), ed.class_columns(onto, p["range"])
             cur_from = [x.rpartition(".")[2] for x in p["join"]["from"]]
             cur_to = [x.rpartition(".")[2] for x in p["join"]["to"]]
+            siblings = [q for q, x in ops.items() if x.get("join") and x.get("domain") == p["domain"]
+                        and x.get("range") == p["range"] and x.get("cardinality") in ("many-to-one", "one-to-one")]
             with st.form(f"rel_{pid}"):
                 name = st.text_input("Name", pid)
                 card = st.selectbox("Cardinality", CARDS, index=CARDS.index(p["cardinality"])
@@ -500,6 +738,13 @@ with tab_net:
                                        default=[x for x in cur_from if x in dcols])
                 tcols = st.multiselect(f"{p['range']} columns (referenced)", rcols,
                                        default=[x for x in cur_to if x in rcols])
+                rrole = st.text_input("Role", p.get("role") or "", placeholder="e.g. billing, delivery",
+                                      help="The business role when several columns join the same two classes.")
+                rdesc = st.text_input("Description", p.get("description") or "")
+                rdef = st.checkbox("Default join between these two classes", value=bool(p.get("default")),
+                                   disabled=len(siblings) < 2,
+                                   help="Used by Ask, join paths and the SQL checker when a question does not say "
+                                        "which role it means.")
                 c1, c2 = st.columns(2)
                 apply_ = c1.form_submit_button("Apply", type="primary")
                 delete_ = c2.form_submit_button("Delete")
@@ -508,6 +753,15 @@ with tab_net:
                     st.error("Pick the same number of columns on both sides.")
                 else:
                     new = ed.update_relationship(onto, pid, fcols, tcols, card, new_name=name)
+                    for k, v in (("role", rrole.strip()), ("description", rdesc.strip())):
+                        if v:
+                            ops[new][k] = v
+                        else:
+                            ops[new].pop(k, None)
+                    if len(siblings) > 1 and rdef:
+                        md.set_default(onto, new)
+                    elif not rdef:
+                        ops[new].pop("default", None)
                     ss.selection = {"kind": "edge", "edge_kind": "rel", "pid": new, "id": f"rel:{new}"}
                     commit(f"Updated {new}")
             if delete_:
@@ -595,7 +849,8 @@ with tab_yaml:
                 st.write("•", i)
     include_layout = st.checkbox("Include diagram layout in the export", value=True)
     export_text = yaml_text if include_layout else to_yaml({k: v for k, v in onto.items() if k != "layout"})
-    edited_yaml = st.text_area("Ontology (edit and apply to update the diagram)", export_text, height=480,
+    edited_yaml = st.text_area("Ontology (edit and apply to update the diagram; you can also paste an Apache "
+                               "Ossie model here)", export_text, height=480,
                                key=f"yaml_{hash(export_text)}")
     c1, c2, c3 = st.columns(3)
     fname = re.sub(r"\W+", "_", onto["ontology"]["name"]).strip("_").lower() + ".ontology.yaml"
@@ -605,8 +860,10 @@ with tab_yaml:
         try:
             new = yaml.safe_load(edited_yaml)
             if isinstance(new, dict) and "datasets" in new and "classes" not in new:
-                raise ValueError("this is an Apache Ossie semantic model, not a studio ontology. Load it with "
-                                 "Source → Ossie YAML in the sidebar so it is validated first.")
+                err = open_text(edited_yaml, "pasted.ossie.yaml")      # Apache Ossie: validate, then open
+                if err:
+                    raise ValueError(err + " The report is in the 🧩 Apache Ossie tab.")
+                st.rerun()
             assert isinstance(new, dict) and "classes" in new and "object_properties" in new
             new.setdefault("layout", onto.get("layout", {}))
             ss.onto = refresh_index(new)
@@ -618,8 +875,10 @@ with tab_yaml:
         if c3.button("💾 Save version to Volume", use_container_width=True):
             from modules.db_connection import get_user_token
             try:
-                st.success(store.save(yaml_text, onto["ontology"]["name"], get_user_token()))
-                ss.uc_cache.pop("versions", None)
+                v = store.save(yaml_text, lc.default_model_name(onto), get_user_token(), kind=store.ONTOLOGY,
+                               author=lc.current_user(), note="studio ontology (Ontology YAML tab)")
+                st.success(f"Saved {v.path} (as {v.written_as})")
+                lc.forget_store_cache()
             except Exception as e:  # noqa: BLE001
                 st.error(str(e))
     else:
@@ -628,6 +887,10 @@ with tab_yaml:
 # =========================================================================== #
 # Apache Ossie: validation report, export, validate any document
 # =========================================================================== #
+with tab_ver:
+    lc.versions_tab(onto, user_token(), lambda text, path: open_text(text, path.rsplit("/", 1)[-1], path, force=True))
+    mu.changes_view(onto)
+
 with tab_ossie:
     st.markdown(f"[Apache Ossie](https://github.com/apache/ossie) is the vendor-neutral exchange format for "
                 f"semantic models. Files are checked against the official JSON Schema of the version they "
@@ -677,6 +940,12 @@ with tab_ossie:
             ossie_ui.report_view(ex["report"], key="export", show_stats=False, upgrade=False)
 
     st.divider()
+    st.subheader("💾 Publish to the Volume store")
+    st.caption("Saves this Ossie export as a new version under ONTOLOGY_STORE (history, compare and restore are "
+               "in the 🕘 Versions tab). Deploy it next to its tables with ③ Deploy to Databricks.")
+    lc.save_box(onto, user_token(), key="ox")
+
+    st.divider()
     st.subheader("🔎 Validate another document")
     v1, v2 = st.columns([2, 1])
     pasted = v1.text_area("Paste Ossie YAML or JSON", height=180, key="ossie_paste",
@@ -694,29 +963,40 @@ with tab_ossie:
 # =========================================================================== #
 with tab_mv:
     facts = mv.fact_classes(onto)
-    if not facts:
+    custom = onto.get("metric_views") or {}
+    mv_mode = st.segmented_control("Metric views", ["📄 Views", "➕ New metric view"], default="📄 Views",
+                                   key="mv_mode", label_visibility="collapsed") or "📄 Views"
+    if mv_mode == "➕ New metric view":
+        mvb.builder(onto, commit,
+                    (lambda sql: uc_runner()(sql)) if ss.get("runner", {}).get("kind") == "uc" else None)
+    elif not facts and not custom:
         st.info("No fact classes found. Mark a class as **fact** in the inspector (or give it measure "
-                "columns) to generate a metric view.")
+                "columns) to generate a metric view, or build one in **➕ New metric view**.")
     else:
         views = {f: mv.to_yaml(mv.build_metric_view(onto, f)) for f in facts}
-        fsel = st.selectbox("Fact", facts, format_func=lambda f: f"{f} ({classes[f].get('source_table')})")
+        targets = {f: (".".join(classes[f]["source_fqn"].split(".")[:2]) + "." if classes[f].get("source_fqn")
+                       else "") + mv.view_name(onto, f) for f in facts}
+        for n, c in custom.items():                     # ★ = made in ➕ New metric view
+            views[f"★ {n}"], targets[f"★ {n}"] = mv.to_yaml(c["view"]), c.get("target") or n
+        opts, pick = list(views), ss.get("mv_view_pick")
+        fsel = st.selectbox("Metric view", opts, index=opts.index(pick) if pick in opts else 0,
+                            format_func=lambda f: f if f.startswith("★") else f"{f} ({classes[f].get('source_table')})")
+        ss.mv_view_pick = fsel     # widget state is wiped by an st.rerun() earlier in the run (e.g. Refresh list)
         st.code(views[fsel], language="yaml")
-        fq = classes[fsel].get("source_fqn")
-        default_target = (".".join(fq.split(".")[:2]) + "." if fq else "") + mv.view_name(onto, fsel)
-        target = st.text_input("Metric view name (catalog.schema.view)", default_target, key=f"mvt_{fsel}")
+        target = st.text_input("Metric view name (catalog.schema.view)", targets[fsel], key=f"mvt_{fsel}")
         ddl = mv.ddl(views[fsel], target)
         with st.expander("Deploy SQL"):
             st.code(ddl, language="sql")
         c1, c2, c3 = st.columns(3)
-        c1.download_button("⬇️ This metric view (.yaml)", views[fsel], file_name=f"{mv.view_name(onto, fsel)}.yaml",
+        c1.download_button("⬇️ This metric view (.yaml)", views[fsel],
+                           file_name=f"{targets[fsel].rpartition('.')[2]}.yaml",
                            mime="application/x-yaml", use_container_width=True)
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, "w") as z:
             for f, y in views.items():
-                z.writestr(f"{mv.view_name(onto, f)}.yaml", y)
-                tgt = (".".join(classes[f]["source_fqn"].split(".")[:2]) + "." if classes[f].get("source_fqn")
-                       else "") + mv.view_name(onto, f)
-                z.writestr(f"{mv.view_name(onto, f)}.sql", mv.ddl(y, tgt))
+                n = targets[f].rpartition(".")[2]
+                z.writestr(f"{n}.yaml", y)
+                z.writestr(f"{n}.sql", mv.ddl(y, targets[f]))
             z.writestr("ontology.yaml", yaml_text)
         c2.download_button("⬇️ All metric views + ontology (.zip)", buf.getvalue(),
                            file_name="metric_views.zip", mime="application/zip", use_container_width=True)
@@ -729,11 +1009,15 @@ with tab_mv:
                 st.success(f"Created metric view {target}")
             except Exception as e:  # noqa: BLE001
                 st.error(f"Deploy failed: {e}")
+        if fsel.startswith("★") and st.button("🗑️ Remove this view from the model", key=f"mvrm_{fsel}"):
+            onto["metric_views"].pop(fsel[2:], None)
+            commit(f"Metric view {fsel[2:]} removed")
 
 # =========================================================================== #
 # Semantic layer
 # =========================================================================== #
 with tab_sem:
+    mu.search_box(onto)
     st.markdown("**Value meanings** — what coded values stand for")
     vms = onto.get("value_meanings", [])
     if vms:
@@ -762,6 +1046,7 @@ with tab_sem:
             st.dataframe(pd.DataFrame(onto["rules"]), hide_index=True, width="stretch")
         else:
             st.caption("None yet — enable LLM enrichment and upload docs that describe them.")
+    wb.glossary_box(onto, commit)
     st.markdown("**Synonyms index**")
     st.dataframe(pd.DataFrame([{"term": k, "maps to": v if isinstance(v, str) else ", ".join(v)}
                                for k, v in onto.get("synonyms_index", {}).items()]),
@@ -771,13 +1056,18 @@ with tab_sem:
 # Tables
 # =========================================================================== #
 with tab_tables:
+    mu.rescan_box(onto, ss.get("runner", {}), uc_runner, commit)
     st.markdown("**Classes**")
     st.dataframe(pd.DataFrame([{"class": cid, "role": c.get("role"), "table": c.get("source_fqn")
                                 or c.get("source_table"), "rows": c.get("instance_count"),
                                 "identifier": ", ".join(c.get("identifier", [])),
                                 "pk inferred": c.get("identifier_inferred", False),
                                 "measures": sum(p.get("semantic_role") == "measure"
-                                                for p in c["data_properties"].values())}
+                                                for p in c["data_properties"].values()),
+                                "unmapped columns": len({x.lower() for x in c.get("source_columns") or []}
+                                                        - {str(p.get("source_column") or k).lower()
+                                                           for k, p in c["data_properties"].items()}),
+                                "new columns": ", ".join(c.get("new_columns") or [])}
                                for cid, c in classes.items()]), hide_index=True, width="stretch")
     st.markdown("**Relationships**")
     st.dataframe(pd.DataFrame([{"property": pid, "domain": p["domain"], "range": p["range"],
@@ -800,7 +1090,7 @@ with tab_dict:
 with tab_know:
     gui.knowledge_tab(onto, ss.get("runner", {}), uc_runner, ON_DATABRICKS)
 with tab_review:
-    gui.review_tab(onto, ON_DATABRICKS)
+    gui.review_tab(onto, ON_DATABRICKS, ss.get("runner", {}), uc_runner)
 with tab_ask:
     gui.ask_tab(onto, ss.get("runner", {}), uc_runner, ON_DATABRICKS)
 with tab_mon:

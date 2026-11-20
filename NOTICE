@@ -20,5 +20,12 @@ catalog.schema.table names; some rule and message texts follow the originals clo
   extraction rules, readiness (from auto-ontology-mcp search.py, naming.py, graph.py, guidance.py and
   service.py, which follow Auto Ontology's entity coverage and text-to-SQL prompts).
 - modules/ask.py: SQL-writing rules in the answer prompt (from auto-ontology-mcp guidance.py).
+- modules/modeling.py: re-scan drift and table filters, the modeling worklist, unlinked identifier columns,
+  observed joins, default joins for multi-role relationships, filter suggestions from small value sets,
+  testing expressions before saving, the change log and the model checks (from auto-ontology-mcp
+  service.py scan_datasource, get_modeling_worklist, list_relationships, suggest_sql_attributes,
+  save_sql_attribute, recent_changes and its review_ontology prompt).
+- modules/llm_enrich.py: the grain, column-description and variant-table rules in the enrichment prompt (from
+  auto-ontology-mcp guidance.py TERM_RULES, which follow Auto Ontology's term extractor).
 
 The Apache Ossie schemas under modules/ossie/schemas/ carry their own LICENSE and NOTICE.

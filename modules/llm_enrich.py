@@ -17,6 +17,8 @@ import os
 import re
 
 FM_ENDPOINT = os.getenv("FM_ENDPOINT_NAME", "databricks-meta-llama-3-3-70b-instruct")
+# The grain / column / variant-table rules in SYSTEM_PROMPT are adapted from auto-ontology-mcp's TERM_RULES
+# (Apache-2.0, ported from NVIDIA Auto Ontology's term extractor); see NOTICE.
 MAX_DOC_CHARS = 60_000
 
 SYSTEM_PROMPT = """You are a senior data modeller turning a database ontology into a business \
@@ -28,6 +30,12 @@ Rules:
 - Prefer facts from the documents. Set "provenance" to "docs/<file name>" when a document \
 supports an item, otherwise "llm".
 - Synonyms are business words people would type in a question (3-8 per item, lower case).
+- Class descriptions: one or two sentences of business meaning that say what one row is (the grain, e.g. "One \
+row per order line") and which population it covers. Use the sample values as evidence; do not speculate.
+- Property descriptions: one factual sentence for columns whose meaning is not obvious from the name; mention the \
+units, codes and formats you can see in the samples.
+- When a table name marks it as a variant of another table (archive, history, hist, staging, deleted, temp), \
+say so at the start of its description.
 - Rules and metrics need valid SQL fragments using the given source table/column names.
 - Only add value meanings for the coded columns listed under "coded_columns".
 - Respond with ONLY JSON, no prose and no markdown fences, in exactly this shape:
@@ -55,13 +63,33 @@ def chat(system: str, user: str, max_tokens: int = 4000, endpoint: str | None = 
     return resp.choices[0].message.content.strip()
 
 
-def parse_json(text: str) -> dict:
+SECTIONS = ("classes", "data_properties", "object_properties", "value_meanings", "rules", "metrics")
+
+
+def parse_json(text: str, sections: tuple = ()) -> dict:
+    """The model's JSON object. Tolerates prose around it, a stray quote after a closing brace and trailing
+    commas; when it still does not parse, each expected top-level section is read on its own, so a slip between
+    sections (an extra brace, a stray quote) loses nothing."""
     text = re.sub(r"^```(?:json)?|```$", "", text.strip(), flags=re.M).strip()
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        start, end = text.find("{"), text.rfind("}")
-        return json.loads(text[start:end + 1])
+    start, end = text.find("{"), text.rfind("}")
+    tries = [text, text[start:end + 1]]
+    tries += [re.sub(r",\s*([}\]])", r"\1", re.sub(r'([}\]])"(\s*[,}\]])', r"\1\2", t)) for t in tries]
+    for t in tries:
+        try:
+            return json.loads(t)
+        except json.JSONDecodeError as e:
+            err = e
+    found, dec = {}, json.JSONDecoder()
+    for key in sections:
+        m = re.search(rf'"{key}"\s*:\s*', text)
+        if m:
+            try:
+                found[key] = dec.raw_decode(text, m.end())[0]
+            except json.JSONDecodeError:
+                pass
+    if found:
+        return found
+    raise err
 
 
 # --------------------------------------------------------------------------- #
@@ -101,11 +129,12 @@ def _docs_block(docs: dict[str, str]) -> str:
 
 
 def enrich(onto: dict, docs: dict[str, str] | None = None, batch_size: int = 25,
-           endpoint: str | None = None, progress=None) -> dict:
-    """Mutates and returns `onto`. `docs` = {file name: text}."""
+           endpoint: str | None = None, progress=None, classes: list[str] | None = None) -> dict:
+    """Mutates and returns `onto`. `docs` = {file name: text}; `classes` limits it to those classes (the
+    modeling worklist drafts one table at a time). Only fills what is empty, so people's edits stay."""
     from .ontology_builder import refresh_index
 
-    names = list(onto["classes"])
+    names = [c for c in classes or onto["classes"] if c in onto["classes"]]
     docs_text = _docs_block(docs or {})
     batches = [names[i:i + batch_size] for i in range(0, len(names), batch_size)] or [[]]
     for n, batch in enumerate(batches, 1):
@@ -113,7 +142,12 @@ def enrich(onto: dict, docs: dict[str, str] | None = None, batch_size: int = 25,
             progress(n / len(batches), f"Enriching batch {n}/{len(batches)}")
         user = (f"ONTOLOGY:\n{json.dumps(_compact(onto, batch), default=str)}\n\n"
                 f"DOCUMENTS:\n{docs_text or '(none provided)'}")
-        result = parse_json(chat(SYSTEM_PROMPT, user, max_tokens=6000, endpoint=endpoint))
+        try:
+            result = parse_json(chat(SYSTEM_PROMPT, user, max_tokens=6000, endpoint=endpoint), SECTIONS)
+        except ValueError as e:                       # unreadable JSON: ask once more, saying what was wrong
+            result = parse_json(chat(SYSTEM_PROMPT, f"{user}\n\nYour previous answer was not valid JSON ({e}). "
+                                     "Answer again with ONLY valid JSON in the required shape; escape double quotes "
+                                     "inside strings.", max_tokens=6000, endpoint=endpoint), SECTIONS)
         _merge(onto, result)
     return refresh_index(onto)
 

@@ -29,7 +29,7 @@ import json
 import os
 import re
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 STORE = os.getenv("ONTOLOGY_STORE", "").strip().rstrip("/")
 OSSIE, ONTOLOGY = "ossie", "ontology"
@@ -48,8 +48,19 @@ def slug(name: str) -> str:
     return re.sub(r"[^A-Za-z0-9_\-]+", "-", str(name or "")).strip("-").lower() or "model"
 
 
+_LAST_STAMP = ""
+
+
 def stamp() -> str:
-    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")             # microseconds: no clashes
+    """UTC version stamp to the microsecond, strictly increasing within a process: a coarse clock (Windows on
+    Python < 3.12) repeats the same microsecond, and two versions must never share a file name."""
+    global _LAST_STAMP
+    fmt = "%Y%m%dT%H%M%S%fZ"
+    s = datetime.now(timezone.utc).strftime(fmt)
+    if s <= _LAST_STAMP:
+        s = (datetime.strptime(_LAST_STAMP, fmt) + timedelta(microseconds=1)).strftime(fmt)
+    _LAST_STAMP = s
+    return s
 
 
 def pretty_stamp(s: str) -> str:

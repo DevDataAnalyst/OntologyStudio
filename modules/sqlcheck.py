@@ -142,16 +142,18 @@ def catalog(onto: dict) -> dict:
         k = alias.get(tbl.lower())
         return (k, col.lower()) if k else None
 
-    rels, by_pair = {}, {}
+    rels, by_pair, defaults = {}, {}, {}
 
-    def add(a, b, one, many, pid, status="accepted"):
+    def add(a, b, one, many, pid, status="accepted", role=None, default=False):
         if not a or not b:
             return
         key = frozenset({a, b})
-        rels.setdefault(key, {"pid": pid, "one": one, "many": many, "status": status,
+        rels.setdefault(key, {"pid": pid, "one": one, "many": many, "status": status, "role": role,
                               "text": f"{tables[a[0]]['name']}.{a[1]} = {tables[b[0]]['name']}.{b[1]}"})
         if status == "accepted":
             by_pair.setdefault(frozenset({a[0], b[0]}), []).append(rels[key]["text"])
+        if default:
+            defaults[frozenset({a[0], b[0]})] = pid
 
     for pid, p in onto.get("object_properties", {}).items():
         j = p.get("join") or {}
@@ -167,7 +169,8 @@ def catalog(onto: dict) -> dict:
         for fr, to in zip(j.get("from", []), j.get("to", [])):
             a, b = col_ref(fr), col_ref(to)
             one_one = p.get("cardinality") == "one-to-one"
-            add(a, b, None if one_one or not b else b[0], None if one_one or not a else a[0], pid)
+            add(a, b, None if one_one or not b else b[0], None if one_one or not a else a[0], pid,
+                role=p.get("role"), default=bool(p.get("default")))
     for s in onto.get("suggested_relationships") or []:            # reviewed or pending suggestions
         if s.get("status") not in ("proposed", "rejected"):
             continue
@@ -179,7 +182,7 @@ def catalog(onto: dict) -> dict:
         if A and B and bool(A["type"]) != bool(B["type"]):
             (A if not A["type"] else B)["type"] = A["type"] or B["type"]
     return {"tables": tables, "alias": alias, "by_class": by_class, "three": three, "rels": rels,
-            "by_pair": by_pair}
+            "by_pair": by_pair, "defaults": defaults}
 
 
 def table_ref(t: dict) -> exp.Table:
@@ -493,6 +496,10 @@ def _check_joins(a, cat, run, d, errors, warnings, notes, budget) -> set:
                 errors.append(f"Join {label} was reviewed and rejected in the model.")
             elif rel["status"] == "proposed":
                 warnings.append(f"Join {label} is only a suggested (unreviewed) relationship.")
+            dflt = cat["defaults"].get(frozenset({x[0], y[0]}))
+            if dflt and rel["status"] == "accepted" and rel["pid"] != dflt:
+                notes.append(f"Join {label} uses {rel['pid']}" + (f" (role {rel['role']})" if rel.get("role") else "")
+                             + f", not the default join {dflt}. Check that the question means this role.")
             if rel["one"] and rel["many"]:
                 fanned.add((rel["one"], rel["many"]))
             continue
@@ -825,7 +832,7 @@ def grounding(a, cat, onto, sql) -> dict:
 
 
 def validate(sql: str, onto: dict, dialect: str | None = "databricks", run: Callable | None = None,
-             question: str | None = None, dry_run: bool = True, probe_budget: int = 12) -> dict:
+             question: str | None = None, dry_run: bool = True, probe_budget: int = 12, cat: dict | None = None) -> dict:
     """Check one query against the model and, with run(sql) -> DataFrame, against the data."""
     out = {"valid": False, "errors": [], "warnings": [], "notes": [], "grounding": {}, "probes": 0}
     d = glot(dialect)
@@ -834,7 +841,7 @@ def validate(sql: str, onto: dict, dialect: str | None = "databricks", run: Call
     except Refused as e:
         out["errors"].append(str(e))
         return out
-    cat = catalog(onto)
+    cat = cat or catalog(onto)
     work, errors, used = _resolve_tables(tree, cat)
     out["errors"] += errors
     if errors:
@@ -912,6 +919,20 @@ def lookup_values(run, onto: dict, table: str, column: str, contains: str | None
     out["top_values"] = [{"value": r[0], "rows": int(r[1])} for r in rows[:limit]]
     out["more_values_exist"] = len(rows) > limit
     return out
+
+
+def joins_in(sql: str, onto: dict, dialect: str | None = "databricks", cat: dict | None = None) -> list:
+    """The column-to-column joins a query makes, as (frozenset of two (table key, column) pairs, 'a.x = b.y')."""
+    cat, d = cat or catalog(onto), glot(dialect)
+    try:
+        work, errors, _ = _resolve_tables(parse(sql, d), cat)
+        if errors:
+            return []
+        q = qualify(work.copy(), schema=_schema(cat, d), dialect=d, validate_qualify_columns=False,
+                    quote_identifiers=False, identify=False)
+    except Exception:  # noqa: BLE001 - a query that cannot be read has no joins to learn from
+        return []
+    return [(frozenset({x, y}), f"{_name(cat, x)} = {_name(cat, y)}") for x, y in _analyze(q, cat, d)["joins"]]
 
 
 def find_value(run, onto: dict, columns: list[tuple[str, str]], word: str, dialect: str | None = "databricks",

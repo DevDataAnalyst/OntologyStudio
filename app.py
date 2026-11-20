@@ -33,7 +33,9 @@ import pandas as pd
 import streamlit as st
 import yaml
 
-from modules import discovery, governance as gv, governance_ui as gui, ontology_edit as ed, ossie, ossie_form, ossie_ui
+from modules import (
+    discovery, governance as gv, governance_ui as gui, guide_ui, ontology_edit as ed, ossie, ossie_form, ossie_ui,
+)
 from modules.dictionary_ui import dictionary_tab
 from modules import lifecycle_ui as lc, semantics, store, theme
 from modules import sources as src
@@ -154,6 +156,7 @@ def cached(key, fn):
 # Sidebar
 # =========================================================================== #
 with st.sidebar:
+    guide_ui.sidebar_button()
     st.title("🕸️ Ontology Studio")
     st.header("0 · Source type")
     family = st.radio("Source type", src.FAMILIES, index=0 if ON_DATABRICKS else 1, horizontal=True,

@@ -1,0 +1,24 @@
+Ontology Studio
+Copyright (c) 2026 DevDataAnalyst. Licensed under the MIT License (see LICENSE).
+
+This repository includes material adapted from the Apache-2.0 projects below. The full text of the
+Apache License, Version 2.0, is in modules/ossie/schemas/LICENSE.
+
+auto-ontology-mcp - https://github.com/gogoymh/auto-ontology-mcp
+Copyright 2026 gogoymh. Licensed under the Apache License, Version 2.0.
+It is a derivative work of NVIDIA Auto Ontology - https://github.com/NVIDIA/auto-ontology
+Copyright (c) 2024-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+Licensed under the Apache License, Version 2.0.
+
+Adapted parts. They were rewritten for the Ontology Studio model (Apache Ossie) and Unity Catalog
+catalog.schema.table names; some rule and message texts follow the originals closely.
+- modules/sqlcheck.py: the read-only guard, column lineage, join, fan-out, text-value, numeric-scale,
+  grouping, integer-division and placeholder checks, and value lookups (from auto-ontology-mcp
+  sqlcheck.py, validation.py and structure.py, which follow Auto Ontology's db_probe and
+  sql_parse_validation).
+- modules/answering.py: lexical search scoring, join paths, the entity coverage check and its
+  extraction rules, readiness (from auto-ontology-mcp search.py, naming.py, graph.py, guidance.py and
+  service.py, which follow Auto Ontology's entity coverage and text-to-SQL prompts).
+- modules/ask.py: SQL-writing rules in the answer prompt (from auto-ontology-mcp guidance.py).
+
+The Apache Ossie schemas under modules/ossie/schemas/ carry their own LICENSE and NOTICE.

@@ -12,7 +12,7 @@ Ontology Studio (`sql2ontology`) is a Streamlit app that runs on [Databricks App
 
 Every SQL statement runs **as the signed-in user** (on-behalf-of-user authorization), so Unity Catalog grants, row filters and column masks still apply. The app never reads data the user couldn't already read.
 
-On top of the modeled ontology, the studio keeps it governed and learning: **domains** that narrow what Ask searches, **certified** metrics and tables, governed wiki **pages**, **learned snippets** mined from query history with an authority score, a **review queue** that proposes what to promote or certify, and a **monitor** with request traces, feedback, cost and per-user budgets. An **Ask** tab shows whether the ontology actually helps an LLM: it writes SQL for the same question with and without the ontology, side by side.
+On top of the modeled ontology, the studio keeps it governed and learning: **domains** that narrow what Ask searches, **certified** metrics and tables, governed wiki **pages**, **learned snippets** mined from query history with an authority score, a **review queue** that proposes what to promote or certify, and a **monitor** with request traces, feedback, cost and per-user budgets. An **Ask** tab shows whether the ontology actually helps an LLM: it writes SQL for the same question with and without the ontology, side by side. Before any SQL it checks that the model covers the question, and a **SQL checker** tests every query against the model and the data (unknown columns, joins the model does not know, double counting, misspelled values, percent vs fraction) before you see it.
 
 No Databricks workspace handy? The same engine runs locally on a SQLite file or a `.sql` script, in the app or from a [command-line interface](#command-line-interface).
 
@@ -139,6 +139,10 @@ The **Tables** tab lists every class with its source table, row count and key (t
 The **Ask (Text-to-SQL)** tab writes SQL for a business question from the ontology and runs it as you. With **Compare with schema-only** ticked, it also shows a baseline written from the bare table and column names.
 
 ![Ask tab with a question and the SQL generated from the ontology](docs/images/ask.png)
+
+The same tab has four more modes. **Check SQL** checks any query you paste against the model and the data, runs it with a row cap, and saves it as a **verified example** that Ask reuses. **Join path** gives the chain of joins between two classes as a ready `FROM ... JOIN` clause. **Look up values** shows the real values in a column. **Verified examples** lists the confirmed question and SQL pairs.
+
+![Check SQL flags double counting, a misspelled value and a percent written against a 0 to 1 column](docs/images/check-sql.png)
 
 ### 7. Save a version and deploy it
 
@@ -320,12 +324,40 @@ Type a business question. The Foundation Model writes SQL **from the ontology** 
 
 How Ask works out an answer:
 
-1. **Focus.** It matches the question's words against class, column and metric names, labels, synonyms and page titles, and puts the best matches (tables, the joins between them, metrics with their SQL, certified first) at the top of the prompt.
-2. **Plan and write.** The model answers with JSON: a short reasoning, the assumptions it made, and one query. The prompt tells it to reuse metric and snippet definitions instead of inventing formulas, join only along declared relationships, respect the grain ("for each month in 1997" means one row per month, filtered to 1997, in order), return readable labels, and use the dialect's date functions.
-3. **Check.** The query must parse (sqlglot, in the source's dialect) and be a single read-only `SELECT` / `WITH`.
-4. **Run and self-correct.** It runs on Unity Catalog as you, or on the uploaded SQLite file. If it fails, the error goes back to the model to fix its own query (up to three attempts in total); an empty result gets one retry. **How it answered** shows the reasoning, assumptions and every corrected attempt.
+1. **Coverage check** (*Coverage check first*, on by default). The model pulls 1 to 5 phrases out of the question, and each is looked up in the model: a class, column, metric, rule or page (**covered**), a glossary abbreviation that leads to one, a value stored in the data such as a product or a country (**covered by a stored value**, found in the profiled values or with one small query), a **weak** match, or **not covered**. When nothing is covered, Ask writes no SQL and says what data would be needed. When part is missing, it says so above the answer and tells the model not to substitute a similar measure.
+2. **Focus.** It matches the question's words against class, column and metric names, labels, synonyms and page titles, and puts the best matches at the top of the prompt: tables, metrics with their SQL (certified first), the **join path** between the matched classes as a `FROM ... JOIN` clause with fan-out notes, **verified examples** for similar questions, the **glossary**, and the exact stored values to use as literals.
+3. **Plan and write.** The model answers with JSON: a short reasoning, the assumptions it made, and one query. The prompt tells it to reuse metric and snippet definitions instead of inventing formulas, follow the join path hop by hop, aggregate detail rows before joining them to a parent, respect the grain ("for each month in 1997" means one row per month, filtered to 1997, in order), return readable labels, and use the dialect's date functions.
+4. **Check.** The query must parse and be a single read-only `SELECT` / `WITH`, and then goes through the **SQL checker** (below). Its errors go back to the model before anything runs.
+5. **Run and self-correct.** It runs on Unity Catalog as you, or on the uploaded SQLite file. If it fails, the error goes back to the model to fix its own query (up to three attempts in total); an empty result, or a query the checker warns about, gets one more try. A query the model keeps on purpose is not run twice. **How it answered** shows the reasoning, assumptions, every corrected attempt and the checker's findings; warnings stay on screen next to the answer.
 
-Profiled sample values (Decimal, dates, bytes from Unity Catalog) are converted before they go into the prompt. The Ask tab needs the model endpoint, so it works on Databricks only.
+Profiled sample values (Decimal, dates, bytes from Unity Catalog) are converted before they go into the prompt. The Ask mode needs the model endpoint, so it works on Databricks only; the other modes below work anywhere.
+
+#### Check SQL, join paths, values and verified examples
+
+The SQL checker (`modules/sqlcheck.py`) reads a query without returning rows and reports:
+
+- anything that is not a single read-only `SELECT`, reads a table outside the model, or calls a function that reaches outside the query (`read_files`, `http_request`, `ai_query` …),
+- unknown tables or columns, with the model's name for them ("did you mean"), including Unity Catalog `catalog.schema.table` names,
+- joins the model does not know, joins it rejected or only suggests, and joins on the wrong columns when the model joins those tables differently (with a value-containment probe for unknown joins),
+- double counting: `SUM` / `AVG` / `COUNT` over the one side of a one-to-many join, or over a table whose sibling branch fans out through a shared parent,
+- a many-side column selected next to a `GROUP BY` on its parent, a `GROUP BY` on a primary key, integer division in SQLite and similar dialects, and placeholder queries (`WHERE 1 = 0`),
+- with live data: text values that match no row, with the closest real values (`'retail'` → `'Retail'`); thresholds on the wrong scale (`discount_pct > 5` on a 0 to 1 column, or "below 0.18%" written as `0.18`); a dry run,
+- which classes and metrics the query relies on, and which of them are not certified yet.
+
+Probes are small read-only queries with the viewer's permissions, capped per check. The Ask tab's other modes use the same engine:
+
+| Mode | What it does |
+|---|---|
+| 🧪 Check SQL | Check any query, run it with a 200-row cap (traced in Monitor), save it as a verified example |
+| 🔗 Join path | The shortest chain of modeled joins between two classes, its `FROM ... JOIN` clause, fan-out and shared-parent notes, other roles for the same hop |
+| 🔎 Look up values | Real values in a column: matches for a word with row counts, close spellings, or the most common values |
+| ✅ Verified examples | The confirmed question and SQL pairs: open one in Check SQL or delete it |
+
+A 👍 on an Ask answer also keeps it as a verified example. Verified examples and the **glossary** (abbreviations and jargon, edited in the 🧠 Semantic layer tab) are saved with the model: in Ossie, the example questions go to the model's `ai_context.examples` and the rest travels in the `ONTOLOGY_STUDIO` extension. A **readiness** line under the header metrics says whether SQL can run on the model's data, how much is described, joined and certified, and what to do next.
+
+![Join path from Customer to Date through Sale, with the one-to-many note](docs/images/join-path.png)
+
+These checks, the coverage check, join paths and the modeling rules in the prompt are adapted from [auto-ontology-mcp](https://github.com/gogoymh/auto-ontology-mcp), which ports [NVIDIA Auto Ontology](https://github.com/NVIDIA/auto-ontology); both are Apache-2.0 (see [NOTICE](NOTICE)).
 
 ### 6. Apache Ossie: validation, import and export
 
@@ -751,7 +783,7 @@ python -m pip install -r requirements.txt pytest
 python -m pytest tests -q
 ```
 
-35 tests, no workspace needed (Databricks calls are faked):
+44 tests, no workspace needed (Databricks calls are faked):
 
 | File | Covers |
 |---|---|
@@ -759,6 +791,7 @@ python -m pytest tests -q
 | `tests/test_ossie_form.py` | The YAML form editor: renames that follow keys and relationships, untouched extensions, submit |
 | `tests/test_governance.py` | Domains, certification, learned snippets, the review queue, governance through Ossie |
 | `tests/test_ask.py` | Ask: Decimal-safe prompts, focus, JSON answers, self-correction |
+| `tests/test_answering.py` | The SQL checker (guard, unknown names, joins, fan-out, values, scale, dry run, Unity Catalog names), join paths, the coverage check, verified examples and glossary through Ossie, Ask's repair loop, value lookups, readiness |
 | `tests/test_lifecycle.py` | The versioned store (save, history, diff, restore, legacy files), the SQL warehouse fallback statements, deployment plans and grants, execute with fallbacks, the source registry, the metric view spec (`fields`, `rely`, aggregate-only measures) |
 
 ## Troubleshooting
@@ -798,6 +831,7 @@ app.py                          Streamlit UI: sections ①②③ · connect · a
 app.yaml                        Databricks Apps start command and environment
 cli.py                          The same engine from the command line
 requirements.txt                Python dependencies
+NOTICE                          Credits for the Apache-2.0 code adapted from auto-ontology-mcp and NVIDIA Auto Ontology
 components/ontology_graph/      Editable network diagram (D3.js, bundled)
 components/theme_watcher/       Hidden helper that reruns the app when the user switches light/dark
 .streamlit/config.toml          Light ([theme.light]) and dark ([theme.dark]) themes
@@ -819,6 +853,9 @@ modules/lifecycle_ui.py         🕘 Versions tab, publish box and the Deploy pa
 modules/sources.py              Source types (Databricks / Non-Databricks) and planned connectors
 modules/llm_enrich.py           Optional LLM semantic layer
 modules/ask.py                  Text-to-SQL test bench (ontology vs. baseline)
+modules/sqlcheck.py             SQL checker: guard, model names, joins, fan-out, value and scale probes; value lookups
+modules/answering.py            Join paths, coverage check, verified examples, glossary, readiness, prompt context
+modules/workbench_ui.py         Ask tab modes (Check SQL, Join path, Look up values, Verified examples), glossary, readiness
 modules/ossie/                  Apache Ossie validator, converter and bundled official schemas
 modules/ossie_ui.py             Validation report views
 modules/governance.py           Domains and subdomains, certification, pages, Unity Catalog tags, domain scoping
@@ -831,6 +868,7 @@ tests/test_ossie_form.py        YAML form editor
 tests/test_governance.py        Domains, snippets, review queue, governance round trip through Ossie
 tests/test_lifecycle.py         Versioned store, deployment plan, source registry, metric view builder
 tests/test_ask.py               Ask engine: Decimal-safe prompts, focus, JSON answers, self-correction
+tests/test_answering.py         SQL checker, join paths, coverage check, verified examples, glossary, readiness
 samples/                        Sample databases, scripts, docs and their generated outputs
 docs/images/                    Screenshots and the network diagram used in this README
 ```
@@ -848,6 +886,8 @@ docs/images/                    Screenshots and the network diagram used in this
 | [#8](https://github.com/DevDataAnalyst/OntologyStudio/pull/8) | 2026-11-19 | Volume files through the SQL warehouse (PUT/GET/LIST) when the user token lacks the `files` scope |
 | [#9](https://github.com/DevDataAnalyst/OntologyStudio/pull/9) | 2026-11-19 | Deploy: *Let the app write the files* grants the app's service principal access to the target volume |
 | [#10](https://github.com/DevDataAnalyst/OntologyStudio/pull/10) | 2026-11-19 | Metric views follow the current Databricks YAML 1.1 reference (`fields`, `rely`, aggregate-only measures, synonyms, display names) |
+| [#11](https://github.com/DevDataAnalyst/OntologyStudio/pull/11) | 2026-11-19 | README: full rewrite with lifecycle, deploy, Free Edition and troubleshooting |
+| [#12](https://github.com/DevDataAnalyst/OntologyStudio/pull/12) | 2026-11-19 | Metric views: guided ➕ New metric view builder |
 
 ## Security and governance notes
 
@@ -867,10 +907,10 @@ docs/images/                    Screenshots and the network diagram used in this
 Ideas the current design leaves room for, none of them built yet:
 
 - a golden question set that re-runs the Ask comparison on every ontology change,
-- an answerability check that asks for clarification when a question uses a concept the ontology lacks,
+- a clarifying question when the coverage check finds a gap (today Ask names the gap and answers the rest),
 - converters from Ossie to other semantic layers (dbt, LookML, Power BI),
 - MCP tools so external agents can query the ontology.
 
 ## License
 
-[MIT](LICENSE). [D3.js](https://d3js.org/), bundled in `components/ontology_graph/`, is ISC licensed; see [`D3_LICENSE`](components/ontology_graph/D3_LICENSE). The Apache Ossie schemas in [`modules/ossie/schemas/`](modules/ossie/schemas/) and `samples/ossie/tpcds_semantic_model.ossie.yaml` are Apache-2.0; see the `LICENSE` and `NOTICE` in that folder.
+[MIT](LICENSE). [D3.js](https://d3js.org/), bundled in `components/ontology_graph/`, is ISC licensed; see [`D3_LICENSE`](components/ontology_graph/D3_LICENSE). The Apache Ossie schemas in [`modules/ossie/schemas/`](modules/ossie/schemas/) and `samples/ossie/tpcds_semantic_model.ossie.yaml` are Apache-2.0; see the `LICENSE` and `NOTICE` in that folder. The SQL checker, coverage check, join paths and modeling rules adapt Apache-2.0 code from auto-ontology-mcp and NVIDIA Auto Ontology; see [NOTICE](NOTICE).

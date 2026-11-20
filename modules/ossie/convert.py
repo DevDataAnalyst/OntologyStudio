@@ -57,7 +57,8 @@ _IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 # --------------------------------------------------------------------------- #
 GOVERNANCE_KEYS = ("domains", "status", "owner", "certified_by", "certified_at", "learned_from")
 MODEL_GOVERNANCE_KEYS = ("domains", "pages", "snippets", "trusted_authors", "review_dismissed",
-                         "metric_views")                # views made in the guided builder
+                         "metric_views",                # views made in the guided builder
+                         "glossary", "examples")        # glossary and verified question + SQL pairs
 
 
 def _list(v) -> list:
@@ -355,6 +356,12 @@ def to_ontology(doc: dict, file_name: str = "", base_iri: str = "http://example.
     pfx = meta.get("prefix") or prefix
     model_stash = {k: copy.deepcopy(v) for k, v in doc.items()
                    if k in ("version", "name", "description", "ai_context")}
+    ours = {str(e.get("question")) for e in _dicts(studio.get("examples"))}
+    ai_stash = model_stash.get("ai_context")
+    if ours and isinstance(ai_stash, dict) and ai_stash.get("examples"):   # export re-adds the studio's own
+        ai_stash["examples"] = [x for x in _list(ai_stash["examples"]) if str(x) not in ours]
+        if not ai_stash["examples"]:
+            ai_stash.pop("examples")
     if _foreign_exts(doc):
         model_stash["nonportable_extensions"] = _foreign_exts(doc)
     if file_name:
@@ -757,8 +764,13 @@ def from_ontology(onto: dict, include_studio: bool = True, include_layout: bool 
     desc = meta.get("description") or mstash.get("description")
     if desc:
         doc["description"] = desc
-    if mstash.get("ai_context"):
-        doc["ai_context"] = copy.deepcopy(mstash["ai_context"])
+    ai = copy.deepcopy(mstash.get("ai_context")) or None
+    questions = [str(e["question"]) for e in _dicts(onto.get("examples")) if e.get("question")]
+    if questions:                                   # verified examples: their questions are portable
+        ai = {"instructions": ai} if isinstance(ai, str) else (ai or {})
+        ai["examples"] = list(dict.fromkeys([*map(str, _list(ai.get("examples"))), *questions]))
+    if ai:
+        doc["ai_context"] = ai
     doc["datasets"] = datasets
     if relationships:
         doc["relationships"] = relationships

@@ -38,6 +38,7 @@ from modules import lifecycle_ui as lc, semantics, store, theme
 from modules import sources as src
 from modules import metric_views as mv
 from modules import mv_builder_ui as mvb
+from modules import workbench_ui as wb
 from modules.extractors import from_sql_script, from_sqlite_file, is_sqlite_bytes
 from modules.graph_component import handle_event, network
 from modules.ontology_builder import (BuildOptions, attach_lineage, attach_suggestions,
@@ -589,6 +590,7 @@ m[3].metric("Suggestions", len(pending))
 m[4].metric("Lineage edges", len(onto.get("lineage", {}).get("tables", [])))
 m[5].metric("Metrics", len(onto.get("metrics", [])))
 m[6].metric("Domains", len(onto.get("domains", [])))
+wb.readiness_line(onto, ss.get("runner", {}))
 for w in onto.get("warnings", [])[:8]:
     st.warning(w)
 
@@ -1002,6 +1004,7 @@ with tab_sem:
             st.dataframe(pd.DataFrame(onto["rules"]), hide_index=True, width="stretch")
         else:
             st.caption("None yet — enable LLM enrichment and upload docs that describe them.")
+    wb.glossary_box(onto, commit)
     st.markdown("**Synonyms index**")
     st.dataframe(pd.DataFrame([{"term": k, "maps to": v if isinstance(v, str) else ", ".join(v)}
                                for k, v in onto.get("synonyms_index", {}).items()]),

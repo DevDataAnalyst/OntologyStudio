@@ -206,6 +206,15 @@ How to write the query:
 - Name output columns in snake_case business terms; round money to 2 decimals; ORDER BY something meaningful.
 - Lists of rows (no aggregation) end with LIMIT 200. No SELECT *.
 - Apply business rules only when they are relevant to the question.
+- When JOIN PATH is given, follow it hop by hop; never shortcut a multi-hop path by joining its endpoints. Use
+  explicit JOIN ... ON; both sides of a join have the same type; never match a name or label against an id.
+- When a VERIFIED EXAMPLE matches the question, start from its SQL. For literal filters use the exact values under
+  USE THESE STORED VALUES; respect value formats (fractions vs percents, codes, date strings).
+- Aggregate detail rows at their own grain before joining them to a parent whose measure you also aggregate
+  (fan-out). Two tables that each hang one-to-many from the same parent are related only through it: aggregate
+  each in its own subquery, then join on the parent. A ratio of totals is not a mean of ratios.
+- If something the question needs is NOT COVERED BY THE MODEL, do not substitute a similar measure: answer the
+  rest and say what is missing in assumptions.
 - Dates: {date_hints}
 {qualify}
 {context_intro}"""
@@ -290,13 +299,19 @@ def focus(question: str, onto: dict, top: int = 8) -> dict:
 
 
 def answer_prompt(question: str, onto: dict, mode: str = "ontology", dialect: str = "sqlite",
-                  snippets: list[dict] | None = None) -> str:
-    """System prompt for the answering engine (ontology or schema-only baseline)."""
+                  snippets: list[dict] | None = None, coverage: dict | None = None) -> str:
+    """System prompt for the answering engine (ontology or schema-only baseline). `coverage` is a
+    check_answerable result: its matched classes pick the join path, its stored values become literals."""
     if mode == "ontology":
+        from .answering import context_for
         ctx = ("DATA MODEL (ontology). learned_snippets show how colleagues query the data; they name columns "
                "as Class.column — translate to the class's table. Higher authority = more trusted.\n"
                + ontology_context(onto, snippets))
         f = focus(question, onto)
+        extra = context_for(question, onto, (f.get("classes") or [])[:3], dialect, coverage) if question else {}
+        if extra.get("join_path"):
+            f.pop("joins", None)                         # the multi-hop path replaces the one-hop joins
+        f.update({k.upper().replace("_", " "): v for k, v in extra.items()})
         if f:
             ctx = ("MOST RELEVANT FOR THIS QUESTION (start here):\n"
                    + yaml.safe_dump(plain(f), sort_keys=False, width=200, allow_unicode=True) + "\n" + ctx)
@@ -349,16 +364,21 @@ def check_sql(sql: str, dialect: str) -> str | None:
 
 
 def answer(question: str, onto: dict, mode: str = "ontology", dialect: str = "sqlite",
-           execute=None, snippets: list[dict] | None = None, max_attempts: int = 3, chat_fn=None) -> dict:
-    """Generate SQL, check it, run it with `execute(sql) -> DataFrame` (None = don't run) and, when it fails
-    or returns nothing, show the model the error and let it fix its own query (up to max_attempts).
-    Returns sql, reasoning, assumptions, result, status, error, attempts and token / time counters."""
+           execute=None, snippets: list[dict] | None = None, max_attempts: int = 3, chat_fn=None,
+           coverage: dict | None = None) -> dict:
+    """Generate SQL, check it, run it with `execute(sql) -> DataFrame` (None = don't run) and, when it fails,
+    returns nothing or the SQL checker objects, show the model the problem and let it fix its own query (up to
+    max_attempts). In ontology mode every query goes through modules/sqlcheck.py first: its errors are fixed
+    before anything runs, its warnings get one retry after the run. Returns sql, reasoning, assumptions,
+    result, status, error, attempts (each with its checks) and token / time counters."""
     import time as _t
+
+    from . import sqlcheck
     chat_fn = chat_fn or chat
-    system = answer_prompt(question, onto, mode, dialect, snippets)
+    system = answer_prompt(question, onto, mode, dialect, snippets, coverage)
     out = {"sql": None, "reasoning": "", "assumptions": [], "result": None, "status": "error", "error": None,
-           "attempts": [], "prompt_tokens": 0, "completion_tokens": 0, "llm_ms": 0, "sql_ms": 0}
-    user, empty_retry_used, best = question, False, None
+           "attempts": [], "prompt_tokens": 0, "completion_tokens": 0, "llm_ms": 0, "sql_ms": 0, "checks": None}
+    user, empty_retry_used, warn_retry_used, best = question, False, False, None
     for _ in range(max_attempts):
         t0 = _t.time()
         reply = chat_fn(system, user, max_tokens=1500)
@@ -369,7 +389,18 @@ def answer(question: str, onto: dict, mode: str = "ontology", dialect: str = "sq
         out.update(sql=a["sql"], reasoning=a["reasoning"], assumptions=a["assumptions"])
         attempt = {"sql": a["sql"], "error": None, "rows": None}
         out["attempts"].append(attempt)
+        if best is not None and a["sql"] == best["sql"]:     # kept the same query after a warning: accept it
+            out.update(best, status="ok", error=None)
+            return out
         problem = check_sql(a["sql"], dialect)
+        checks = None
+        if problem is None and mode == "ontology":
+            checks = sqlcheck.validate(a["sql"], onto, dialect, run=execute, question=question, dry_run=False,
+                                       probe_budget=6)
+            attempt["checks"] = out["checks"] = {k: checks[k] for k in ("errors", "warnings", "notes", "grounding")}
+            if checks["errors"]:
+                problem = "has problems the SQL checker found:\n- " + "\n- ".join(checks["errors"])
+        warned = (checks or {}).get("warnings") or []
         if problem is None and execute is not None:
             try:
                 t0 = _t.time()
@@ -377,13 +408,20 @@ def answer(question: str, onto: dict, mode: str = "ontology", dialect: str = "sq
                 out["sql_ms"] += int((_t.time() - t0) * 1000)
                 attempt["rows"] = len(res)
                 out["result"] = res
-                best = {k: out[k] for k in ("sql", "reasoning", "assumptions", "result")}
+                best = {k: out[k] for k in ("sql", "reasoning", "assumptions", "result", "checks")}
                 if len(res) == 0 and not empty_retry_used:
-                    empty_retry_used = True
+                    empty_retry_used = warn_retry_used = True
                     problem = ("ran but returned 0 rows. If that is not plausible, check filters, date formats "
-                               "and value spelling/case against the samples.")
+                               "and value spelling/case against the samples."
+                               + ("\nThe SQL checker warns:\n- " + "\n- ".join(warned) if warned else ""))
             except Exception as e:  # noqa: BLE001
                 problem = f"failed when it ran: {str(e)[:600]}"
+        if problem is None and warned and not warn_retry_used:
+            warn_retry_used = True
+            if execute is None:
+                best = {k: out[k] for k in ("sql", "reasoning", "assumptions", "result", "checks")}
+            problem = ("passed, but the SQL checker warns:\n- " + "\n- ".join(warned) + "\nFix the query if a "
+                       "warning applies. If none applies, return the same SQL and say why in assumptions.")
         if problem is None:
             out.update(status="ok", error=None)
             return out

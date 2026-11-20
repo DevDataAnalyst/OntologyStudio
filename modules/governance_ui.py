@@ -617,14 +617,25 @@ def monitor_tab(uc_runner, on_databricks: bool):
 # Ask (scoped, traced, with feedback)
 # =========================================================================== #
 def ask_tab(onto: dict, runner: dict, uc_runner, on_databricks: bool):
-    from .ask import answer, answer_prompt, run_on_sqlite
+    from . import answering as an
+    from . import workbench_ui as wb
+    from .ask import answer, answer_prompt
     gv.ensure(onto)
     user = current_user()
+    if "ask_mode_next" in ss:                    # switched from another mode (e.g. Open in Check SQL)
+        ss.ask_mode = ss.pop("ask_mode_next")
+    ask_mode = st.segmented_control("Ask mode", wb.MODES, default=ss.get("ask_mode_pick", wb.MODES[0]),
+                                    key="ask_mode", label_visibility="collapsed") or wb.MODES[0]
+    ss.ask_mode_pick = ask_mode                  # survives an st.rerun() that runs before this widget
+    if ask_mode != wb.MODES[0]:
+        wb.render(ask_mode, onto, runner, uc_runner, user, lambda msg: _commit(onto, msg))
+        return
     st.markdown("Ask a business question; the Foundation Model writes SQL **from the ontology** "
-                "(optionally side by side with a schema-only baseline). Every request is traced in **Monitor**.")
+                "(optionally side by side with a schema-only baseline). Every query is checked against the model "
+                "and the data before you see it, and every request is traced in **Monitor**.")
     if not on_databricks:
         st.info("Needs the Foundation Model endpoint — available when running on Databricks.")
-    c1, c2, c3 = st.columns([2, 1.2, 1.2])
+    c1, c2, c3, c4 = st.columns([2, 1.1, 1.1, 1.1])
     doms = gv.domain_names(onto)
     scope_dom = c1.selectbox("Domain scope", ["All domains"] + doms, key="ask_scope",
                              format_func=lambda n: n if n == "All domains" else gv.domain_path(onto, n),
@@ -632,6 +643,9 @@ def ask_tab(onto: dict, runner: dict, uc_runner, on_databricks: bool):
                                   "snippets go to the model.")
     use_snips = c2.checkbox("Use learned snippets", value=True, key="ask_snips")
     compare = c3.checkbox("Compare with schema-only", value=True, key="ask_compare")
+    cover = c4.checkbox("Coverage check first", value=True, key="ask_cover",
+                        help="Before any SQL, checks that the model covers each part of the question (one short "
+                             "model call). Nothing covered: no SQL is written. Partly covered: the gaps are named.")
     scoped = gv.scope(onto, None if scope_dom == "All domains" else scope_dom)
     snips = sn.top_for_context(scoped) if use_snips else []
     full_tokens = tm.estimate_tokens(answer_prompt("", onto, "ontology", runner.get("dialect") or "databricks",
@@ -656,27 +670,34 @@ def ask_tab(onto: dict, runner: dict, uc_runner, on_databricks: bool):
     if st.button("Ask", type="primary", disabled=not (q and on_databricks) or blocked):
         from .llm_enrich import chat
         results = []
+        dialect, execute = wb.dialect_of(runner), wb.make_run(runner, uc_runner)
+        coverage = None
+        if cover:
+            with st.spinner("Checking what the model covers…"):
+                try:
+                    coverage = an.check_answerable(q, scoped, run=execute, dialect=dialect, chat_fn=chat)
+                except Exception as e:  # noqa: BLE001
+                    st.caption(f"Coverage check skipped: {str(e)[:200]}")
+        ss.ask_coverage = coverage
         for mode in (["ontology", "baseline"] if compare else ["ontology"]):
             t = tm.new_trace(q, user, mode, None if scope_dom == "All domains" else scope_dom)
             ctx_onto = dict(scoped, _snippets_in_context=snips if mode == "ontology" else [])
             t["assets"] = tm.assets_used(ctx_onto) if mode == "ontology" else {
                 "classes": sorted(scoped["classes"])}
-            dialect = runner.get("dialect") or "databricks"
-            if dialect == "auto":
-                dialect = "databricks"
-            execute = None
-            if runner.get("kind") == "sqlite":
-                db = open(runner["path"], "rb").read()
-                execute = lambda sql, db=db: run_on_sqlite(sql, db_bytes=db)  # noqa: E731
-            elif runner.get("kind") == "uc":
-                execute = uc_runner()
-            with st.spinner("Thinking, writing SQL" + (" and checking it on the data…" if execute else "…")):
-                try:
-                    a = answer(q, scoped, mode, dialect, execute=execute,
-                               snippets=snips if mode == "ontology" else None, chat_fn=chat)
-                except Exception as e:  # noqa: BLE001
-                    a = {"status": "error", "error": f"SQL generation failed: {e}", "sql": None, "result": None,
-                         "attempts": [], "prompt_tokens": 0, "completion_tokens": 0, "llm_ms": 0, "sql_ms": 0}
+            if mode == "ontology" and coverage and coverage["verdict"] == "not_answerable":
+                a = {"status": "refused", "error": "No SQL written: " + coverage["next_step"], "sql": None,
+                     "result": None, "attempts": [], "prompt_tokens": 0, "completion_tokens": 0, "llm_ms": 0,
+                     "sql_ms": 0}
+            else:
+                with st.spinner("Thinking, writing SQL" + (" and checking it on the data…" if execute else "…")):
+                    try:
+                        a = answer(q, scoped, mode, dialect, execute=execute,
+                                   snippets=snips if mode == "ontology" else None, chat_fn=chat,
+                                   coverage=coverage if mode == "ontology" else None)
+                    except Exception as e:  # noqa: BLE001
+                        a = {"status": "error", "error": f"SQL generation failed: {e}", "sql": None, "result": None,
+                             "attempts": [], "prompt_tokens": 0, "completion_tokens": 0, "llm_ms": 0, "sql_ms": 0}
+            t["checks"] = a.get("checks")
             res = a.get("result")
             for k in ("sql", "status", "error", "prompt_tokens", "completion_tokens", "llm_ms"):
                 t[k] = a.get(k)
@@ -697,6 +718,18 @@ def ask_tab(onto: dict, runner: dict, uc_runner, on_databricks: bool):
                     st.caption(err)
             results.append((t["id"], res))
         ss.ask_results = results
+    cov = ss.get("ask_coverage") if ss.get("ask_results") else None
+    if cov:
+        state = {"covered": "✅ covered", "covered_via_glossary": "✅ via glossary", "covered_by_value": "✅ stored value",
+                 "weak": "🟡 weak match", "not_covered": "❌ not covered"}
+        (st.warning if cov["verdict"] in ("partially_answerable", "uncertain") else st.caption)(
+            f"Coverage: **{cov['verdict'].replace('_', ' ')}** ({cov['coverage']:.0%}). {cov['next_step']}")
+        with st.expander("What the model covers in this question"):
+            st.dataframe(pd.DataFrame([{
+                "phrase": e["entity"], "state": state.get(e["state"], e["state"]),
+                "matched": ", ".join([m["name"] for m in e.get("matches") or []][:2]
+                                     or [f"{v['column']} = {v['value']}" for v in e.get("values") or []][:2])}
+                for e in cov["entities"]]), hide_index=True, width="stretch")
     for col, (tid, res) in zip(st.columns(max(1, len(ss.get("ask_results", [])))), ss.get("ask_results", [])):
         t = next((x for x in ss.get("traces", []) if x["id"] == tid), None)
         if t is None:
@@ -706,7 +739,10 @@ def ask_tab(onto: dict, runner: dict, uc_runner, on_databricks: bool):
             if t.get("sql"):
                 st.code(t["sql"], language="sql", wrap_lines=True)
             fixes = sum(1 for x in t.get("attempts") or [] if x.get("error"))
-            if t.get("reasoning") or t.get("assumptions") or fixes:
+            chk = t.get("checks") or {}
+            for w in chk.get("warnings") or []:
+                st.warning(w)
+            if t.get("reasoning") or t.get("assumptions") or fixes or chk:
                 with st.expander("How it answered" + (f" · self-corrected {fixes}×" if fixes else "")):
                     if t.get("reasoning"):
                         st.markdown(t["reasoning"].replace("*", "\\*").replace("_", "\\_"))
@@ -715,6 +751,8 @@ def ask_tab(onto: dict, runner: dict, uc_runner, on_databricks: bool):
                     for i, x in enumerate(t.get("attempts") or [], 1):
                         if x.get("error"):
                             st.caption(f"Attempt {i}: the query {x['error'][:300]}")
+                    if chk:
+                        wb.show_checks({**chk, "warnings": []})
             if t["status"] == "error":
                 st.error(t["error"])
             elif t["status"] == "refused":
@@ -726,7 +764,8 @@ def ask_tab(onto: dict, runner: dict, uc_runner, on_databricks: bool):
             st.caption(f"{t['prompt_tokens']:,} + {t['completion_tokens']:,} tokens · model {t.get('llm_ms')} ms · "
                        f"SQL {t.get('sql_ms') or '–'} ms · ${t['cost_usd']:.5f}")
             if t.get("feedback"):
-                st.caption("Thanks — feedback saved." + (" Learned as a snippet." if t["feedback"] == "up" else ""))
+                st.caption("Thanks — feedback saved." + (" Kept as a verified example and learned as a snippet."
+                                                        if t["feedback"] == "up" and t["mode"] == "ontology" else ""))
             else:
                 f1, f2 = st.columns([1, 3])
                 note = f2.text_input("What was wrong?", key=f"fbn_{tid}", label_visibility="collapsed",
@@ -741,9 +780,11 @@ def ask_tab(onto: dict, runner: dict, uc_runner, on_databricks: bool):
 def _feedback(onto, t, value, note, uc_runner, on_databricks):
     t["feedback"], t["feedback_note"] = value, note or None
     if value == "up" and t.get("sql") and t["mode"] == "ontology":
+        from .answering import save_example
         dialect = (ss.get("runner") or {}).get("dialect") or "databricks"
         mined = sn.mine([sn.ask_record(t["question"], t["sql"], t["user"])], onto, dialect=dialect)
         sn.merge_into(onto, mined, ingest=f"ask:{t['id']}")
+        save_example(onto, t["question"], t["sql"], by=t["user"])     # a confirmed answer: Ask reuses it
     if on_databricks and tm.table_enabled():
         tm.save_trace(uc_runner(), t)
     _commit(onto, "Feedback saved")

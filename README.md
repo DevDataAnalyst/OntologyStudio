@@ -43,7 +43,7 @@ The page opens with a switcher with three sections. The sidebar and the tabs bel
 | Section | Use it to | Sidebar | Main panel |
 |---|---|---|---|
 | **① Update existing model** | change a semantic model you already have | **0 · Source type**, **1 · Open model** (*Volume store*, *Upload* or *Paste*), **2 · Semantic layer (optional)**, then **Open version** / **Load Ossie model** / **Open pasted YAML** | Before anything is open: a list of every model and version in the store. After: the same tabs as ②, including **🕘 Versions**. |
-| **② Create new model** | build a new model from tables | **0 · Source type**, **1 · Connect**, **2 · Analyze**, **3 · Semantic layer (optional)**, then **Analyze & build** | The full editor: Network, Domains, ✏️ YAML form editor, Ontology YAML, Apache Ossie (with **💾 Publish to the Volume store**), 🕘 Versions, Metric views, Semantic layer, Knowledge, Review queue, Tables, Ask, Monitor. |
+| **② Create new model** | build a new model from tables | **0 · Source type**, **1 · Connect**, **2 · Analyze**, **3 · Semantic layer (optional)**, then **Analyze & build** | The full editor: Network, Domains, ✏️ YAML form editor, Ontology YAML, Apache Ossie (with **💾 Publish to the Volume store**), 🕘 Versions, Metric views, Semantic layer, Knowledge, Review queue, Tables, Data preview, Ask, Monitor. |
 | **③ Deploy to Databricks** | put a model into Unity Catalog next to its tables | a short note | The deploy page: pick the model, set the target, tick the options, preview every file and SQL statement, **🚀 Deploy**, then see the result and earlier deployments. |
 
 ### ① Update existing model
@@ -237,6 +237,7 @@ Classes go to the model in batches of 25, with up to 60,000 characters of your d
 - **Ontology YAML:** edit the YAML and click **Apply YAML edits** to redraw the diagram. Validation notes flag relationships that point at missing classes, inverses that don't point back, classes without an identifier, and coded values that still have no meaning.
 - **Semantic layer:** search the model (classes, columns, metrics, rules, pages, glossary, stored values) and open a **Term card** with a class's definition, columns and samples, unmapped columns, joins, metrics and pages; edit value meanings and the glossary; review metrics, business rules and the synonyms index.
 - **Tables:** classes (with unmapped and new columns), relationships and suggestions as plain tables, and **🔄 Re-scan the tables in Unity Catalog** (below).
+- **🔎 Data preview:** choose any modeled source table and browse its rows in read-only pages. Choose 10–500 rows per page and use **← Previous** / **Next →** to navigate; each page reads only the requested rows. Available for live Unity Catalog and SQLite sources.
 
 #### Modeling assistant: re-scan, worklist and relationship review
 

@@ -113,8 +113,8 @@
       <div class="body">
         <div class="row">
           <span><span class="sw" style="background:#d89f3a"></span>Fact</span>
-          <span><span class="sw" style="background:#0088a8"></span>Dimension</span>
-          <span><span class="sw" style="background:#7b7b7b"></span>Entity</span>
+          <span><span class="sw" style="background:#035c7a"></span>Dimension</span>
+          <span><span class="sw" style="background:#4f5254"></span>Entity</span>
           <span><span class="sw" style="background:#557192"></span>Bridge</span>
           <span><span class="sw" style="background:transparent;border:1px dashed #ababab"></span>External</span>
         </div>
@@ -149,9 +149,9 @@
 
   // ------------------------------------------------------------------ constants
   const ROLE = {
-    fact:      { color: "#d89f3a", glyph: "F", label: "fact" },        // palette accents: gold, azure,
-    dimension: { color: "#0088a8", glyph: "D", label: "dimension" },   // mineral grey, steel blue,
-    entity:    { color: "#7b7b7b", glyph: "E", label: "entity" },      // aluminum grey
+    fact:      { color: "#d89f3a", glyph: "F", label: "fact" },        // palette accents: gold, deep azure,
+    dimension: { color: "#035c7a", glyph: "D", label: "dimension" },   // dark grey, steel blue,
+    entity:    { color: "#4f5254", glyph: "E", label: "entity" },      // aluminum grey
     bridge:    { color: "#557192", glyph: "B", label: "bridge" },
     external:  { color: "#ababab", glyph: "↗", label: "external" }
   };
@@ -183,6 +183,10 @@
     const c = rgb(hex); if (!c) return 0.5;
     const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
     return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]);
+  }
+  function contrast(a, b) { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); }
+  function glyphInk(fill) {          // white or near-black letter on a role badge, whichever reads better
+    return contrast(fill, "#ffffff") >= contrast(fill, "#21262b") ? "#ffffff" : "#21262b";
   }
   function themedPalette(theme, dark) {
     const base = dark ? PALETTE.dark : PALETTE.light;
@@ -254,7 +258,7 @@
       .node .title { font: 600 13px ${FONT}; fill:${p.text}; }
       .node .sub { font: 400 11px ${FONT}; fill:${p.sub}; }
       .node.external .title { font-style:italic; font-weight:400; fill:${p.sub}; }
-      .node .glyph { font: 700 11px ${FONT}; fill:#ffffff; text-anchor:middle; dominant-baseline:central; }
+      .node .glyph { font: 700 11px ${FONT}; text-anchor:middle; dominant-baseline:central; }
       .node .ring { fill:none; stroke:none; stroke-width:2.5; }
       .node.sel .ring { stroke:${p.sel}; }
       .node.hit .ring { stroke:${p.hit}; stroke-width:3.5; }
@@ -559,7 +563,8 @@
       const role = ROLE[d.role] || ROLE.entity;
       g.select("circle.badge").attr("cx", -d.w / 2 + 19).attr("cy", 0).attr("r", ext ? 0 : 11)
         .attr("fill", role.color);
-      g.select("text.glyph").attr("x", -d.w / 2 + 19).attr("y", 0.5).text(ext ? "" : role.glyph);
+      g.select("text.glyph").attr("x", -d.w / 2 + 19).attr("y", 0.5).attr("fill", glyphInk(role.color))
+        .text(ext ? "" : role.glyph);
       g.select("text.title").attr("x", ext ? -d.w / 2 + 13 : -d.w / 2 + 38).attr("y", ext ? 0 : -6)
         .attr("dominant-baseline", "central").text(d.title);
       g.select("text.sub").attr("x", -d.w / 2 + 38).attr("y", 11).attr("dominant-baseline", "central")

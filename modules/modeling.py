@@ -25,6 +25,7 @@ from datetime import datetime, timezone
 from sqlglot import exp
 
 from . import sqlcheck
+from .llm_enrich import lacks_description
 from .ontology_builder import camel, label, xsd_type
 
 ID_SUFFIX = re.compile(r"(?:^|_)(?:id|key|code|no|num|nbr|sk|fk)$", re.I)
@@ -113,6 +114,8 @@ def _prop(col) -> dict:
         p["allowed_values"] = list(col.distinct_values)
     elif col.samples:
         p["samples"] = list(col.samples)[:5]
+    if col.date_format:
+        p["date_format"] = col.date_format
     return p
 
 
@@ -139,6 +142,8 @@ def apply_drift(onto: dict, ds, report: dict) -> list[str]:
                     p["allowed_values"] = list(col.distinct_values)
                 elif col.samples and not p.get("allowed_values"):
                     p["samples"] = list(col.samples)[:5]
+                if col.date_format:
+                    p["date_format"] = col.date_format
             elif col.name in ch.get("new", []):
                 new, i = camel(col.name) if semantic else col.name, 2
                 base = new
@@ -264,8 +269,10 @@ def worklist(onto: dict) -> list[dict]:
     rows = []
     for cid, c in onto.get("classes", {}).items():
         props = c.get("data_properties") or {}
-        bare = [pid for pid, p in props.items() if not p.get("description") and not p.get("identifier")]
-        new, desc, todo = c.get("new_columns") or [], c.get("description") or "", []
+        bare = [pid for pid, p in props.items()
+                if lacks_description(p, pid, p.get("label"), p.get("source_column")) and not p.get("identifier")]
+        desc = "" if lacks_description(c, cid, c.get("label"), c.get("source_table")) else c["description"]
+        new, todo = c.get("new_columns") or [], []
         if new:
             todo.append(f"{len(new)} new column(s): {', '.join(new[:4])}")
         if not desc:

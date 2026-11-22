@@ -5,6 +5,8 @@ Unity Catalog, where PK/FK constraints are informational and often missing).
 Evidence, combined into one confidence score (0–1) per candidate join:
   declared FK            -> 1.00 (always accepted)
   naming                 -> fact.customer_key = dim_customer.customer_key, order.cust_id -> customers.id …
+  same key               -> customer_ext.customer_id = customers.customer_id: one row per customer in both
+                            (Auto Ontology's vertical split), a one-to-one join to the larger table
   type compatibility     -> penalty when numeric vs string
   value overlap          -> share of distinct child values found in the parent key (sampled SQL check)
   query history          -> how often people actually join these columns (system.query.history)
@@ -16,12 +18,27 @@ from __future__ import annotations
 
 import math
 import re
+from collections import defaultdict
 
-from .schema_model import DatabaseSchema, ForeignKey, Table
+from . import profiling
+from .schema_model import Column, DatabaseSchema, ForeignKey, Table
 
 _KEY_SUFFIX = r"(?:_?(?:id|key|sk|fk|code|no|num|nbr))$"
 _NUMERIC = re.compile(r"INT|DEC|NUM|DOUBLE|FLOAT|REAL|LONG|SHORT|BYTE", re.I)
 _TEXT = re.compile(r"CHAR|STRING|TEXT|UUID", re.I)
+_GENERIC_KEYS = {"id", "pk", "key", "code", "uuid", "guid", "rowid"}       # every surrogate key is called so
+_LABEL_WORDS = {"name", "title", "label", "description", "desc", "comment", "note", "notes"}
+# layer, variant and copy markers: customers, stg_customers and customers_2024 are copies, not parts, of one entity
+_COPY = re.compile(r"^(?:dim|fact|fct|tbl|stg|vw|lkp|ref|raw|src|bronze|silver|gold|old|new|tmp|temp|bak|backup|"
+                   r"archive|hist|history)_|_(?:dim|fact|fct|tbl|lkp|lookup|old|new|tmp|temp|bak|backup|archive|arch|"
+                   r"hist|history|snapshot|snap|copy|staging|stg|deleted|v?\d+)$", re.I)
+
+
+def _copy_stem(t: Table) -> str:
+    name, prev = t.name.lower(), None
+    while name != prev:
+        name, prev = _COPY.sub("", name), name
+    return _singular(name)
 
 
 def tkey(t: Table) -> str:
@@ -40,6 +57,19 @@ def _entity_words(t: Table) -> set[str]:
     words = {base, _singular(base)}
     words |= {w[:4] for w in list(words) if len(w) > 5}          # customer -> cust
     return {w for w in words if w}
+
+
+def ambiguous(c: Column) -> bool:
+    """Whether matching this column's values to another key proves nothing (Auto Ontology's value-search guard):
+    a label column, or values all shorter than 3 characters, which sit inside any surrogate key (1, 2, 3 ...).
+    With no values to look at (personal data is never sampled) a column with under 100 distinct values counts."""
+    words = set(re.split(r"[^a-z0-9]+", re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", c.name).lower()))
+    if words & _LABEL_WORDS:
+        return True
+    vals = [v for v in [*(c.samples or []), c.min_value, c.max_value] if v is not None]
+    if vals:
+        return all(len(str(v)) < 3 for v in vals)
+    return (c.distinct_count or 0) < 100
 
 
 def _type_family(sql_type: str) -> str:
@@ -121,7 +151,42 @@ def name_candidates(ds: DatabaseSchema) -> dict:
                 key = (tkey(a), c.name, tkey(b), pk.name)
                 cands[key] = {"from_table": tkey(a), "from_cols": [c.name], "to_table": tkey(b),
                               "to_cols": [pk.name], "name_score": score, "evidence": [why]}
+    _same_key_candidates(ds, targets, cands)
     return cands
+
+
+def _same_key_candidates(ds: DatabaseSchema, targets: list[Table], cands: dict) -> None:
+    """Tables keyed by the same specific column (customer_id in customers and customer_scores) hold one row per
+    entity each: join every one to the largest of them, one-to-one. A generic key name (id, key, code ...) is
+    never enough, copies of one table (stg_customers, customers_2024) are left apart, and short or label-like key
+    values earn no credit from the overlap check (ambiguous)."""
+    linked = set()
+    for t in ds.tables:
+        for fk in t.foreign_keys:
+            if (r := ds.table(fk.ref_table)) is not None:
+                linked.add(frozenset((tkey(t), tkey(r))))
+    groups: dict[str, list[Table]] = defaultdict(list)
+    for t in targets:
+        if not t.is_view and t.primary_key[0].lower() not in _GENERIC_KEYS:
+            groups[t.primary_key[0].lower()].append(t)
+    for ts in groups.values():
+        if len(ts) < 2:
+            continue
+        base = min(ts, key=lambda t: (-(t.row_count or 0), tkey(t).lower()))   # most rows, then first by name
+        kb = base.column(base.primary_key[0])
+        for a in ts:
+            if a is base or frozenset((tkey(a), tkey(base))) in linked or _copy_stem(a) == _copy_stem(base):
+                continue
+            ka = a.column(a.primary_key[0])
+            cand = {"from_table": tkey(a), "from_cols": [ka.name], "to_table": tkey(base), "to_cols": [kb.name],
+                    "name_score": 0.6, "evidence": [f"same key as {base.name}: one row per {ka.name} in both"]}
+            fa, fb = _type_family(ka.sql_type), _type_family(kb.sql_type)
+            if fa != fb and "other" not in (fa, fb):
+                cand["name_score"] -= 0.3
+                cand["evidence"][0] += " (type mismatch)"
+            if ambiguous(ka) or ambiguous(kb):
+                cand["ambiguous"] = True
+            cands[(tkey(a), ka.name, tkey(base), kb.name)] = cand
 
 
 # --------------------------------------------------------------------------- #
@@ -155,9 +220,13 @@ def add_query_evidence(ds: DatabaseSchema, cands: dict, joins) -> None:
 def verify_overlap(run_sql, ds: DatabaseSchema, cands: dict, table_ref, quote,
                    max_checks: int = 80, sample: int = 5000) -> list[str]:
     """run_sql(sql) -> DataFrame; table_ref(Table) -> SQL name; quote(col) -> quoted column."""
-    notes = []
+    notes, fails = [], 0
     ranked = sorted(cands.values(), key=lambda c: -(c["name_score"] + 0.1 * c.get("query_count", 0)))
     for cand in ranked[:max_checks]:
+        if fails >= profiling.MAX_TRANSIENT:            # the warehouse stopped answering: stop probing it
+            notes.append(f"overlap checks failed {fails} times in a row (the SQL warehouse did not answer); "
+                         "the remaining checks were skipped")
+            break
         A, B = ds.table(cand["from_table"]), ds.table(cand["to_table"])
         if not A or not B or A.is_view or B.is_view:
             continue
@@ -170,11 +239,15 @@ def verify_overlap(run_sql, ds: DatabaseSchema, cands: dict, table_ref, quote,
             n, m = int(row["n"] or 0), int(row["m"] or 0)
         except Exception as e:  # noqa: BLE001
             notes.append(f"overlap check failed for {A.name}.{qa} → {B.name}: {str(e)[:100]}")
+            fails += profiling.transient(e)
             continue
+        fails = 0
         if n:
             cand["coverage"] = round(m / n, 3)
             cand["evidence"].append(f"{cand['coverage']:.0%} of {n} distinct values found in "
-                                    f"{B.name}.{cand['to_cols'][0]}")
+                                    f"{B.name}.{cand['to_cols'][0]}"
+                                    + (" (short or label-like values: not counted as proof)"
+                                       if cand.get("ambiguous") and cand["coverage"] >= 0.7 else ""))
     return notes
 
 
@@ -186,7 +259,7 @@ def score(c: dict) -> float:
     if c.get("query_count"):
         s = max(s, 0.45) + min(0.3, 0.1 * math.log2(1 + c["query_count"]))
     cov = c.get("coverage")
-    if cov is not None:
+    if cov is not None and not (c.get("ambiguous") and cov >= 0.7):     # ambiguous overlap is no proof
         s += 0.35 if cov >= 0.98 else 0.25 if cov >= 0.9 else 0.1 if cov >= 0.7 else -0.5
     return round(max(0.0, min(0.99, s)), 2)
 
@@ -200,7 +273,12 @@ def apply(ds: DatabaseSchema, cands: dict, threshold: float = 0.75) -> list[dict
         k = (c["from_table"], c["from_cols"][0].lower())
         if k not in by_column or c["confidence"] > by_column[k]["confidence"]:
             by_column[k] = c
-    for i, c in enumerate(sorted(by_column.values(), key=lambda x: -x["confidence"])):
+    pairs: dict[frozenset, dict] = {}                # two key columns joined both ways are one relationship
+    for c in by_column.values():
+        k = frozenset(((c["from_table"], c["from_cols"][0].lower()), (c["to_table"], c["to_cols"][0].lower())))
+        if k not in pairs or c["confidence"] > pairs[k]["confidence"]:
+            pairs[k] = c
+    for i, c in enumerate(sorted(pairs.values(), key=lambda x: -x["confidence"])):
         if c["confidence"] < 0.3:
             continue
         if c["confidence"] >= threshold:

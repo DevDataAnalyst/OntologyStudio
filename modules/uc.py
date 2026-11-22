@@ -9,9 +9,11 @@ for all values; identifiers are validated and back-quoted.
 from __future__ import annotations
 
 import re
+import threading
 from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+from . import profiling
 from .schema_model import Column, DatabaseSchema, ForeignKey, Table
 
 MAX_TABLES = 100
@@ -166,13 +168,23 @@ def extract_objects(run, full_names: list[str], profile: bool = True, enum_max: 
 
     if profile:
         todo = [t for t in ds.tables if not t.is_view]
+        lock, state = threading.Lock(), {"fails": 0, "skipped": 0}     # the circuit breaker
 
         def work(t):
             # runs in a worker thread: SQL only — never touch Streamlit here
+            if state["fails"] >= profiling.MAX_TRANSIENT:              # the warehouse stopped answering
+                with lock:
+                    state["skipped"] += 1
+                return None
             try:
                 _profile_table(run, t, enum_max)
+                with lock:
+                    state["fails"] = 0
                 return None
             except Exception as e:  # noqa: BLE001
+                if profiling.transient(e):
+                    with lock:
+                        state["fails"] += 1
                 return f"{t.full_name}: profiling skipped ({str(e)[:160]})"
 
         with ThreadPoolExecutor(max_workers=workers) as ex:
@@ -184,16 +196,22 @@ def extract_objects(run, full_names: list[str], profile: bool = True, enum_max: 
                     ds.warnings.append(err)
                 if progress:
                     progress(i / max(1, len(todo)), f"Profiled {i}/{len(todo)} tables")
+        if state["skipped"]:
+            ds.warnings.append(f"Profiling stopped after {profiling.MAX_TRANSIENT} tables in a row timed out or could "
+                               f"not reach the SQL warehouse; {state['skipped']} more table(s) were not profiled.")
     return ds.finalize()
 
 
 def _profile_table(run, t: Table, enum_max: int) -> None:
+    """Counts for every column; values (samples, enum lists, min/max, date formats) only for columns that do not
+    hold personal data (profiling.pii_category)."""
     fq = bq(*t.full_name.split("."))
     cols = [c for c in t.columns if not _COMPLEX.search(c.sql_type)][:120]
     if not cols:
         t.row_count = int(run(f"SELECT /* ontology-studio */ COUNT(*) AS n FROM {fq}").iloc[0, 0])
         return
-    ranged = [i for i, c in enumerate(cols) if _RANGED.search(c.sql_type)]
+    private = {c.name for c in cols if profiling.pii_category(t.full_name, c.name)}
+    ranged = [i for i, c in enumerate(cols) if _RANGED.search(c.sql_type) and c.name not in private]
     sel = ", ".join([f"COUNT(*) AS `__n`"]
                     + [f"approx_count_distinct(`{c.name}`) AS `d{i}`" for i, c in enumerate(cols)]
                     + [f"COUNT(`{c.name}`) AS `nn{i}`" for i, c in enumerate(cols)]
@@ -213,9 +231,15 @@ def _profile_table(run, t: Table, enum_max: int) -> None:
         c.non_null_count = int(stats[f"nn{i}"])
         if i in ranged:
             c.min_value, c.max_value = stats[f"mn{i}"], stats[f"mx{i}"]
+    cols = [c for c in cols if c.name not in private]
+    if not cols:
+        return
     sample = run(f"SELECT /* ontology-studio */ {', '.join(f'`{c.name}`' for c in cols)} FROM {fq} LIMIT 200")
     for c in cols:
-        c.samples = sample[c.name].dropna().drop_duplicates().head(5).tolist()
+        vals = sample[c.name].dropna().tolist()
+        c.samples = profiling.keep_samples(vals)
+        if vals and all(isinstance(v, str) for v in vals):
+            c.date_format = profiling.infer_date_format(vals)
     enum_cols = [c for c in cols if c.distinct_count and c.distinct_count <= enum_max
                  and re.search(r"STRING|CHAR", c.sql_type)]
     if enum_cols:

@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 
 import yaml
 
+from . import profiling
 from .schema_model import DatabaseSchema, ForeignKey, Table
 
 XSD = "http://www.w3.org/2001/XMLSchema#"
@@ -218,12 +219,22 @@ def _build(schema: DatabaseSchema, opts: BuildOptions) -> dict:
         used_prop_ids.add(candidate)
         return candidate
 
+    def modeled(fk: ForeignKey) -> Table | None:
+        """The FK's target table when it becomes a class of this model (it gets a relationship), else None."""
+        target = schema.table(fk.ref_table)
+        if target is None or target.name.lower() not in class_names or target.name.lower() in junctions:
+            return None
+        return target
+
     # ---- classes + data properties ---------------------------------------
     for t in tables:
         if t.name.lower() in junctions:
             continue
         cls = class_names[t.name.lower()]
-        fk_cols = {c.lower() for fk in t.foreign_keys for c in fk.columns}
+        fk_cols = {c.lower() for fk in t.foreign_keys if modeled(fk) for c in fk.columns}
+        # an FK to a table outside the model stays a column (it would vanish otherwise), noting what it points at
+        refs = {c.lower(): fk.ref_table + (f".{fk.ref_columns[i]}" if i < len(fk.ref_columns or []) else "")
+                for fk in t.foreign_keys if not modeled(fk) for i, c in enumerate(fk.columns)}
         data_props: dict = {}
         for c in t.columns:
             if c.name.lower() in fk_cols and not opts.include_fk_columns and not c.primary_key:
@@ -253,6 +264,10 @@ def _build(schema: DatabaseSchema, opts: BuildOptions) -> dict:
                 prov = "schema+profile"
             if opts.include_samples and c.samples and "allowed_values" not in p and not c.primary_key:
                 p["samples"] = c.samples
+            if c.date_format:
+                p["date_format"] = c.date_format
+            if c.name.lower() in refs:
+                p["references"] = refs[c.name.lower()]
             if opts.include_provenance:
                 p["provenance"] = "schema+comment" if c.comment and prov == "schema" else prov
             if opts.include_sql_metadata:
@@ -304,8 +319,8 @@ def _build(schema: DatabaseSchema, opts: BuildOptions) -> dict:
             continue
         domain = class_names[t.name.lower()]
         for fk in t.foreign_keys:
-            target_t = schema.table(fk.ref_table)
-            if target_t is None or target_t.name.lower() not in class_names:
+            target_t = modeled(fk)
+            if target_t is None:
                 continue
             rng = class_names[target_t.name.lower()]
             cols = [t.column(c) for c in fk.columns]
@@ -430,7 +445,9 @@ def _build(schema: DatabaseSchema, opts: BuildOptions) -> dict:
 
 def refresh_index(onto: dict) -> dict:
     """Rebuild `synonyms_index`: business term -> Class / Class.property / metric / rule.
-    Call after any enrichment so new synonyms are searchable."""
+    Call after any enrichment so new synonyms are searchable. Every model passes here, so it also tags
+    personal-data columns and drops their stored values (profiling.protect)."""
+    profiling.protect(onto)
     idx: dict[str, set] = {}
 
     def add(term, target):

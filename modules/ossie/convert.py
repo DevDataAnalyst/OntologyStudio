@@ -59,7 +59,8 @@ GOVERNANCE_KEYS = ("domains", "status", "owner", "certified_by", "certified_at",
 MODEL_GOVERNANCE_KEYS = ("domains", "pages", "snippets", "trusted_authors", "review_dismissed",
                          "metric_views",                # views made in the guided builder
                          "glossary", "examples",        # glossary and verified question + SQL pairs
-                         "changes")                     # change log
+                         "changes",                     # change log
+                         "test_runs")                   # test set results (modules/testset.py)
 
 
 def _list(v) -> list:

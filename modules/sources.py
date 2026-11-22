@@ -2,9 +2,9 @@
 Source types offered on the first screen.
 
 Two families: **Databricks** (Unity Catalog tables and views, read with the viewer's
-permissions) and **Non-Databricks** (everything else). Only some sources are built today;
-the rest are placeholders so the screen already shows where new connectors will plug in
-(see plans/multi-source-cdgc-plan.md: a connector protocol + registry under modules/).
+permissions) and **Non-Databricks** (everything else). The app's Connect step shows only the
+sources that work (modules/steps/connect.py); the planned ones stay here as the seam new
+connectors plug into (see plans/multi-source-cdgc-plan.md: a connector protocol + registry).
 """
 from __future__ import annotations
 

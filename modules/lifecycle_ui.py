@@ -1,13 +1,15 @@
 """
 Streamlit UI for the semantic-model lifecycle:
 
-  versions_tab()  save the open model as a new version in ONTOLOGY_STORE, browse the
-                  history, compare two versions, load or restore one
-  deploy_page()   section ③ — deploy an Ossie model into Databricks next to its tables
+  versions_tab()  Publish → Save & versions: save the open model as a new version in ONTOLOGY_STORE
+                  (the one save in the app), browse the history, compare two versions, open or restore one
+  deploy_page()   Publish → Deploy: put an Ossie model into Databricks next to its tables, plus metric
+                  views, tags, keys and a Genie space (the one place the app writes to Unity Catalog)
 """
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 from typing import Callable
 
@@ -26,6 +28,17 @@ def current_user() -> str:
         return h.get("X-Forwarded-Email") or h.get("X-Forwarded-Preferred-Username") or ""
     except Exception:  # noqa: BLE001
         return ""
+
+
+def _deploy_log(catalog: str, schema: str, volume: str, model: str, token: str | None) -> list[dict]:
+    key = ("dp_log", catalog, schema, volume, model, (ss.get("dp_result") or {}).get("version"))
+    if ss.get("_dp_log_key") != key:
+        try:
+            ss._dp_log = dp.read_log(catalog, schema, volume, model, token) if catalog and schema else []
+        except Exception:  # noqa: BLE001
+            ss._dp_log = []
+        ss._dp_log_key = key
+    return ss._dp_log
 
 
 def ossie_text(onto: dict) -> tuple[str, dict, object]:
@@ -61,12 +74,12 @@ def forget_store_cache() -> None:
 
 def _store_missing() -> None:
     st.info("Versioning is off. Set **ONTOLOGY_STORE** in `app.yaml` to a `/Volumes/<catalog>/<schema>/<volume>` "
-            "path (the app needs READ VOLUME and WRITE VOLUME on it), then redeploy the app. You can still "
-            "paste a YAML in the **🧾 Ontology YAML** tab.")
+            "path (the app needs READ VOLUME and WRITE VOLUME on it), then redeploy the app. Until then, download "
+            "the model in **Publish → Exports** and import it again in **Connect**.")
 
 
 # --------------------------------------------------------------------------- #
-# Versions tab (sections ① and ②)
+# Publish → Save & versions
 # --------------------------------------------------------------------------- #
 def save_box(onto: dict, token: str | None, key: str, compact: bool = False) -> None:
     """Save the open model to the store as a new Ossie version."""
@@ -163,31 +176,32 @@ def versions_tab(onto: dict, token: str | None, on_load: Callable[[str, str], No
 
 
 # --------------------------------------------------------------------------- #
-# Section ③ Deploy to Databricks
+# Publish → Deploy
 # --------------------------------------------------------------------------- #
 def deploy_page(onto: dict | None, token: str | None, runner: Callable | None, on_databricks: bool) -> None:
-    st.title("🚀 Deploy to Databricks")
     st.markdown("Puts the Apache Ossie YAML in a Unity Catalog **volume inside the same schema as its tables**, "
-                "so the model travels with the data and inherits its permissions. Optionally writes the model's "
-                "descriptions as table and column comments, tags the tables, creates metric views and "
-                "informational keys. You see everything before it runs, and it runs with your permissions.")
+                "so the model travels with the data and inherits its permissions, and, if you tick them, writes "
+                "table and column comments, tags, metric views, informational keys and a **Genie space**. You see "
+                "everything before it runs, and it runs with your permissions.")
 
     choices = []
     if onto is not None:
         choices.append("Model open in the studio")
     if store.enabled():
         choices.append("A saved version")
-    choices.append("Paste or upload Ossie YAML")
+    if not choices:
+        st.info("Open a model in **Connect** first (or set ONTOLOGY_STORE to deploy saved versions).")
+        return
     pick = st.radio("What to deploy", choices, horizontal=True, key="dp_pick")
 
     text, label = None, ""
     if pick == "Model open in the studio":
         text, _, _ = ossie_text(onto)
         label = default_model_name(onto)
-    elif pick == "A saved version":
+    else:
         versions = [v for v in store.all_versions(token) if v.kind == store.OSSIE]
         if not versions:
-            st.info("No Ossie versions in the store yet. Save one from section ① or ②.")
+            st.info("No versions in the store yet. Save one in **Save & versions**.")
             return
         sel = st.selectbox("Version", versions, format_func=lambda v: f"{v.model} · {v.label()}", key="dp_ver")
         try:
@@ -196,13 +210,6 @@ def deploy_page(onto: dict | None, token: str | None, runner: Callable | None, o
             st.error(str(e))
             return
         label = sel.model
-    else:
-        up = st.file_uploader("Ossie YAML", type=["yaml", "yml", "json"], key="dp_up")
-        pasted = st.text_area("…or paste it", height=160, key="dp_paste")
-        if up is not None:
-            text, label = up.getvalue().decode("utf-8-sig", errors="replace"), ossie_ui.stem(up.name)
-        elif pasted.strip():
-            text, label = pasted, ""
     if not text:
         return
 
@@ -221,7 +228,7 @@ def deploy_page(onto: dict | None, token: str | None, runner: Callable | None, o
     if rep.errors:
         with st.expander("Validation details"):
             ossie_ui.report_view(rep, key="deploy", show_stats=False, upgrade=False)
-        st.error("Fix the errors before deploying (section ① opens the model for editing).")
+        st.error("Fix the errors before deploying: they are listed in **Review → Blockers**.")
         return
 
     model_onto = onto if pick == "Model open in the studio" else None
@@ -247,8 +254,10 @@ def deploy_page(onto: dict | None, token: str | None, runner: Callable | None, o
     o1, o2, o3 = st.columns(3)
     create_volume = o1.checkbox("Create the volume if missing", value=True, key="dp_o_vol")
     comments = o1.checkbox("Descriptions → table & column comments", value=True, key="dp_o_com", disabled=not n_uc)
-    tags = o2.checkbox("Tag tables with the model and version", value=True, key="dp_o_tag", disabled=not n_uc)
-    mviews = o2.checkbox("Create metric views (one per fact)", value=False, key="dp_o_mv", disabled=not n_uc)
+    tags = o2.checkbox("Tag tables: model, version, domain, certification, owner", value=True, key="dp_o_tag",
+                       disabled=not n_uc)
+    mviews = o2.checkbox("Create metric views (one per fact, plus the ones you built)", value=True, key="dp_o_mv",
+                         disabled=not n_uc)
     app_sp = os.getenv("DATABRICKS_CLIENT_ID", "")
     grant = o3.checkbox("Let the app write the files", value=bool(app_sp), key="dp_o_grant", disabled=not app_sp,
                         help="Grants the app's service principal USE CATALOG, USE SCHEMA and READ/WRITE VOLUME on "
@@ -256,23 +265,40 @@ def deploy_page(onto: dict | None, token: str | None, runner: Callable | None, o
                              "access (OAuth 'files' scope).")
     cons = o3.checkbox("Informational PK / FK constraints", value=False, key="dp_o_con", disabled=not n_uc,
                        help="NOT ENFORCED keys. Primary keys need NOT NULL columns; existing constraints fail.")
+    wid = os.getenv("SQL_WAREHOUSE_ID", "")
+    wid = "" if wid.startswith("REPLACE") else wid
+    genie = o1.checkbox("Create or update a Genie space", value=False, key="dp_o_genie",
+                        disabled=not (n_uc and wid),
+                        help="Tables and metric views, instructions from rules, glossary, code values and certified "
+                             "pages, joins, and the test questions as sample questions and benchmarks. Needs the "
+                             "app's `genie` user authorization scope." + ("" if wid else " Needs SQL_WAREHOUSE_ID."))
 
     if not (catalog and schema and volume):
         st.info("Enter the target catalog, schema and volume.")
         return
+    log = _deploy_log(catalog.strip(), schema.strip(), volume.strip(), model, token) if on_databricks else []
     p = dp.plan(doc, model_onto, catalog.strip(), schema.strip(), volume.strip(), create_volume=create_volume,
                 comments=comments and n_uc > 0, tags=tags and n_uc > 0, metric_views=mviews and n_uc > 0,
                 constraints=cons and n_uc > 0, model_name=model, yaml_text=text,
-                grant_app=app_sp if grant and app_sp else None)
+                grant_app=app_sp if grant and app_sp else None, genie=genie and n_uc > 0,
+                genie_space_id=dp.last_genie_space(log))
+    if model_onto is not None:
+        from . import testset as ts
+        t = ts.status(model_onto)
+        if t["total"] and (t["stale"] or t["passed"] < t["total"]):
+            st.warning(f"Test set: {t['verdict']}. Run it in **Test** before you publish.")
+        elif t["total"]:
+            st.caption(f"✅ Test set: {t['verdict']}.")
 
     st.subheader("Preview")
     counts = p.counts()
-    m = st.columns(5)
+    m = st.columns(6)
     m[0].metric("Files", len(p.files) + 1)
     m[1].metric("Comments", counts.get("comment", 0))
     m[2].metric("Tags", counts.get("tag", 0))
     m[3].metric("Metric views", counts.get("metric_view", 0))
     m[4].metric("Constraints", counts.get("constraint", 0))
+    m[5].metric("Genie space", ("update" if p.genie["space_id"] else "new") if p.genie else "–")
     if counts.get("grant"):
         st.caption(f"• The app's service principal (`{app_sp}`) gets READ / WRITE VOLUME on "
                    f"`{p.catalog}.{p.schema}.{p.volume}` (and USE on its catalog and schema).")
@@ -283,6 +309,18 @@ def deploy_page(onto: dict | None, token: str | None, runner: Callable | None, o
         st.code(p.script() or "-- no SQL, files only", language="sql")
     with st.expander("YAML to deploy"):
         st.code(text, language="yaml")
+    if p.genie:
+        from . import genie as gn
+        sm = gn.summary(p.genie["definition"])
+        with st.expander(f"Genie space “{p.genie['title']}”: {sm['tables']} tables, {sm['metric_views']} metric "
+                         f"views, {sm['joins']} joins, {sm['examples']} example questions, {sm['benchmarks']} "
+                         "benchmarks"):
+            st.json(p.genie["definition"], expanded=False)
+            st.download_button("⬇️ Genie space definition (.json)", json.dumps(p.genie["definition"], indent=2),
+                               file_name=f"{p.model}_genie_space.json", mime="application/json")
+            st.caption("Without the app's `genie` scope, create the space yourself with this definition:")
+            st.code(gn.curl_command(p.genie["definition"], wid, p.genie["title"], p.genie["description"]),
+                    language="bash")
 
     if not on_databricks:
         st.warning("Deploying needs the app to run in Databricks Apps. Download the SQL and YAML instead:")
@@ -293,7 +331,9 @@ def deploy_page(onto: dict | None, token: str | None, runner: Callable | None, o
                        use_container_width=True)
     if go:
         bar = st.progress(0.0, "Deploying…")
-        result = dp.execute(p, runner(), token, author=current_user(), progress=lambda f, msg: bar.progress(f, msg))
+        from . import genie as gn
+        result = dp.execute(p, runner(), token, author=current_user(), progress=lambda f, msg: bar.progress(f, msg),
+                            genie_fn=lambda d, t, ds, sid: gn.publish(d, wid, t, ds, token, sid))
         bar.empty()
         ss.dp_result = result
     res = ss.get("dp_result")
@@ -301,6 +341,13 @@ def deploy_page(onto: dict | None, token: str | None, runner: Callable | None, o
         (st.success if res["ok"] else st.warning)(
             f"Deployed {res['model']} version {store.pretty_stamp(res['version'])} to `{res['target']}`"
             + ("" if res["ok"] else " with some failures (see below)") + ".")
+        g = res.get("genie")
+        if g and g.get("status") == "ok":
+            st.success(f"Genie space {g.get('action', 'published')}" + (f": [open it]({g['url']})" if g.get("url")
+                                                                         else f" (id {g.get('space_id')})"))
+        elif g:
+            st.error(f"Genie space failed: {g.get('message')}. Download its definition above and create it "
+                     "with the API, or ask an admin to add the `genie` scope to the app.")
         if res["file_errors"]:
             st.error(f"{len(res['file_errors'])} file(s) could not be written. Details:")
             st.code("\n\n".join(res["file_errors"]), language="text", wrap_lines=True)
@@ -308,12 +355,12 @@ def deploy_page(onto: dict | None, token: str | None, runner: Callable | None, o
             st.dataframe(pd.DataFrame(res["steps"]), hide_index=True, use_container_width=True)
 
     with st.expander("Previous deployments of this model here"):
-        log = dp.read_log(catalog.strip(), schema.strip(), volume.strip(), p.model, token) if on_databricks else []
         if log:
             st.dataframe(pd.DataFrame([{"version": store.pretty_stamp(e.get("version", "")),
                                         "deployed at": e.get("deployed_at"), "by": e.get("deployed_by"),
                                         "failed steps": sum(1 for s in e.get("steps", []) if s["status"] != "ok"),
-                                        "files": len(e.get("files", []))} for e in log]),
+                                        "files": len(e.get("files", [])),
+                                        "genie": (e.get("genie") or {}).get("status", "")} for e in log]),
                          hide_index=True, use_container_width=True)
         else:
             st.caption("None yet.")

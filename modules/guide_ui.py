@@ -10,282 +10,213 @@ _GUIDE = {
     "English": [
         (
             "🌟 What does the Studio do?",
-            """Ontology Studio helps your team agree on what its data means. It reads tables, suggests how they
-            connect, and helps you describe business concepts such as customers, sales and revenue.
-
-            The result can be an editable model, Apache Ossie YAML, Databricks metric views, or a model saved
-            beside its data in Unity Catalog. You decide what to keep; review suggestions before relying on them.""",
+            """Ontology Studio helps your team agree on what its data means, then puts that meaning where people
+            already work in Databricks. It reads your Unity Catalog tables, suggests how they connect, helps you
+            describe business concepts (customers, sales, revenue), proves the model with your own questions, and
+            publishes it as table comments, tags, metric views and a Genie space. Nothing is copied out of
+            Databricks, and everything runs with your own permissions.""",
         ),
         (
-            "🧭 Which path should I choose?",
-            """Use the three choices at the top of the page:
+            "🧭 The six steps",
+            """Work left to right across the buttons at the top of the page:
 
-            - **📂 Update existing model**: open a model from the version store, upload an Ossie YAML/JSON file,
-              or paste YAML. Check the report, then load it to edit.
-            - **✨ Create new model**: connect tables or a file, analyze them, and edit the model.
-            - **🚀 Deploy to Databricks**: preview and publish a model to Unity Catalog.
+            1. **Connect**: build a model from Unity Catalog tables, open a saved model, import a file, or start
+               from a blank form.
+            2. **Model**: check the diagram, fix wrong joins, mark facts and dimensions.
+            3. **Describe**: add what only people know: descriptions, code values, glossary, rules, metrics,
+               domains, owners and pages.
+            4. **Review**: one inbox: blockers, suggested joins, certification, gaps.
+            5. **Test**: run your test questions and see what the model answers correctly.
+            6. **Publish**: save a version, deploy to Databricks, or download exports.
 
-            Your open model stays available when you move between these choices. Need help while working?
-            Open **❓ Help & FAQ** above the Ontology Studio logo in the left sidebar.""",
+            The sidebar always shows the open model, whether it has unsaved changes, its readiness and its test
+            result. **Advanced mode** in the sidebar shows expert options.""",
         ),
         (
             "🔌 How do I connect my data?",
-            """First choose a source type in the sidebar:
+            """In **Connect**, pick how to start:
 
-            - **Databricks → Unity Catalog**: choose a catalog, schemas and up to 100 tables or views you can
-              access. The app uses your permissions.
-            - **Non-Databricks → Upload file**: upload a SQLite database (`.db`, `.sqlite`, `.sqlite3`) or a SQL
-              script (`.sql`, `.ddl`, `.txt`). Choose the script's SQL dialect if needed.
-            - **Ossie YAML**, **Saved version** or **Paste YAML**: use these when updating a model.
+            - **🏛️ Unity Catalog tables**: choose a catalog, schemas and up to 100 tables or views. Available when
+              the app runs in Databricks Apps.
+            - **📂 Saved model**: open a version from the version store.
+            - **📥 Import a file**: an Apache Ossie model (YAML or JSON, checked against the official
+              specification), a studio model, a SQLite database or a .sql script, or paste YAML.
+            - **✏️ Start from scratch**: describe a model step by step in plain forms.
 
-            Snowflake, PostgreSQL and Informatica CDGC are shown as planned sources, not working connectors yet.
-            Unity Catalog access is available only when the app runs in Databricks Apps.""",
+            **Options** lets you profile data, learn from query history and lineage, and draft descriptions with
+            AI from documents you upload. Review every AI draft before relying on it.""",
         ),
         (
-            "🔍 What happens during analysis?",
-            """Choose **Analyze & build** to read the selected structures and, when enabled, profile data such as
-            row counts, distinct values and samples. The Studio looks for keys and possible joins, and classifies
-            tables as facts, dimensions or entities and columns as measures, keys, time or descriptive data.
+            "🛠️ How do I fix the model?",
+            """In **Model → Diagram**, click a table or a join to edit it in the inspector on the right. Drag
+            tables to arrange them. Use **＋ Connect** to add a join. Dashed orange lines are suggested joins:
+            click one to accept or reject it, or settle them all in **Review → Suggested joins**.
 
-            Strong join candidates may be added automatically. Less certain candidates appear as suggestions;
-            inspect their columns and evidence in the **🕸️ Network** tab before accepting them. Optional query
-            history and lineage need Databricks and the relevant permissions. Optional AI enrichment can draft
-            descriptions, synonyms, meanings, rules and metrics from documents you provide; review every draft.""",
+            **List** shows tables and joins as tables and can re-scan Unity Catalog for new columns or tables.
+            **Form** edits the model step by step without YAML.""",
         ),
         (
-            "🛠️ How do I edit and check the model?",
-            """In **🕸️ Network**, select a class or relationship to edit it in the inspector. Drag classes to
-            arrange them. Use **＋ Connect** to add a join; accept or reject suggested joins after checking the
-            evidence. The diagram help text explains zoom, layout and keyboard shortcuts.
+            "📚 How do I add business meaning?",
+            """**Describe** holds everything people know about the data:
 
-            Prefer forms? **✏️ YAML form editor** guides you through model information, datasets, fields,
-            relationships and metrics. **🧾 Ontology YAML** is for users comfortable editing YAML; apply changes
-            to update the diagram and read any validation notes first.
+            - **Dictionary**: search any table, column, metric or page and read one table in business terms.
+            - **Meanings**: what code values mean, the glossary (MRR = monthly recurring revenue), business rules.
+            - **Metrics**: the model's metrics and the metric views built from them, plus a guided builder.
+            - **Domains**: group tables into Finance, Sales …, assign owners and certify definitions.
+            - **Knowledge**: pages that explain concepts, and calculations learned from the queries people run.
 
-            **🗂️ Tables** lists classes, columns and joins. On Unity Catalog models, **Re-scan** can find schema
-            changes. **📘 Data dictionary** explains tables, columns, relationships and measures for Power BI.
-            **Take it to Power BI** downloads a starter kit with documentation, CSV files, DAX measures and
-            Power Query scripts.""",
+            Certification is a human decision; read a definition before you certify it.""",
         ),
         (
-            "📚 How do I add business meaning and governance?",
-            """Add clear descriptions, synonyms, column roles and metrics in the model. A good table description
-            explains what one row represents. Use **🏠 Domains** to group related tables and metrics, then assign
-            owners and statuses: draft, certified or deprecated.
-
-            In **🧠 Semantic layer**, maintain coded-value meanings, business rules, metrics and the glossary.
-            In **📚 Knowledge**, write pages that explain business concepts or learn useful joins, filters and
-            calculations from a query log. **✅ Review queue** and **🧭 Modeling worklist** help find definitions
-            that need attention. Certification is a human decision; check a definition before certifying it.""",
+            "✅ What does Review show?",
+            """One place for everything that needs a decision: **Blockers** (the model would not export as a valid
+            Apache Ossie document), **Suggested joins** (accept or reject in bulk), **Queue** (popular calculations
+            to promote, definitions to certify, conflicts, feedback hotspots), **Worklist** (tables to describe,
+            default joins) and the **Change log**. The readiness line at the top says what to do next.""",
         ),
         (
-            "💬 How do I ask a question or check SQL?",
-            """In **💬 Ask (Text-to-SQL)**, ask a plain-language question such as “What was net revenue by month?”
-            Choose a domain to narrow the context. The app checks whether the model covers the question, writes
-            read-only SQL, checks it against the model and data, then shows the query and result. Use
-            **Compare with schema-only** to compare a query that does not use the semantic model.
+            "🎯 How do I test the model?",
+            """In **Test → Test set**, add the questions your business asks, each with the SQL that answers it.
+            **Run** asks every question again through the model (and, if you like, from the raw tables only) and
+            compares the results. Run it after each change: **Publish** shows the result, and the questions also
+            become the Genie space's sample questions and benchmarks.
 
-            AI-powered Ask is available in Databricks Apps with a configured model endpoint. Other modes can
-            check SQL, show a modeled join path, look up values and manage verified examples. A check helps catch
-            common mistakes, but always confirm that the result answers your business question. A 👍 can save a
-            useful answer as a verified example.""",
+            **Ask** answers one question at a time and has tools to check SQL, find join paths and look up values.
+            A 👍 adds a good answer to the test set. **Traces** shows every request. AI features need the app to run
+            in Databricks Apps with a model endpoint.""",
         ),
         (
-            "📦 How do I save, export or restore work?",
-            """Download **Ontology YAML** for the Studio model, or use **🧩 Apache Ossie** to validate and export
-            the portable semantic model as YAML or JSON. **📐 Metric views** can generate views from fact tables;
-            you can download the YAML or SQL, or deploy a view when the data is in Unity Catalog.
+            "🚀 How do I save and publish?",
+            """**Publish → Save & versions** saves the open model as a new version (an Apache Ossie YAML file in the
+            version store; nothing is overwritten). Compare, open or restore any version there.
 
-            To keep version history, the app must be configured with an `ONTOLOGY_STORE` Unity Catalog Volume.
-            Use **💾 Save as new version** or **💾 Publish to the Volume store**. Each save creates a new version;
-            it does not overwrite the old one. In **🕘 Versions**, compare versions, open one, download it or
-            restore it as a new latest version.""",
-        ),
-        (
-            "🚀 How do I deploy a model?",
-            """Choose **🚀 Deploy to Databricks**, then select the open model, a saved version, or Ossie YAML.
-            Read the validation report and fill in the model name, catalog, schema and volume.
+            **Publish → Deploy** builds one plan for everything the app writes to Databricks: the YAML in a volume
+            next to the tables, table and column comments, tags (model, version, domain, certification, owner),
+            metric views, informational keys and, if you tick it, a **Genie space**. Read the preview; nothing is
+            written until you click **🚀 Deploy**, and each step reports its own result.
 
-            Review the preview before choosing **🚀 Deploy**. It lists files and SQL statements, including the
-            volume creation, comments, tags, metric views, app file-access grant or informational keys you
-            selected. Nothing is written before you deploy.
-            Deployment needs Databricks Apps and the required Unity Catalog permissions. A failed optional SQL
-            step is reported with its error; check each result rather than assuming every step succeeded.""",
-        ),
-        (
-            "📈 What does Monitor show?",
-            """**📈 Monitor** lists Ask activity, status, feedback, rows, model time, SQL time, token use and
-            estimated cost. Open a request to see its steps and SQL. You can set a daily token budget for Ask.
-
-            Traces are kept for the current app session unless an administrator configures `TELEMETRY_TABLE` to
-            store them in Unity Catalog. Loading warehouse cost or saved traces needs Databricks and additional
-            permissions. Cost is an estimate based on the token prices shown in Monitor.""",
+            **Publish → Exports** downloads Apache Ossie YAML or JSON, the metric views, a Power BI starter kit
+            (DAX measures, Power Query scripts) and the data dictionary.""",
         ),
         (
             "🧰 What if something is missing or fails?",
-            """- **No Unity Catalog source?** Open the app in Databricks Apps and ask an administrator to grant
-              the access listed in **Permissions** in the project README.
-            - **Cannot save versions?** Version history needs `ONTOLOGY_STORE` and read/write access to its Volume.
-              You can still download the model.
-            - **Validation reports errors?** Follow the report's file location and suggested fix. Do not deploy a
-              model with errors.
-            - **Join looks wrong?** Open it in the Network inspector and check the columns and direction. Reject
-              an incorrect suggestion or edit the relationship.
-            - **Deploy step failed?** Read the per-step error and ask the owner of the catalog, schema or volume
-              to grant the specific permission you need.
+            """- **No Unity Catalog option?** Open the app in Databricks Apps and ask an administrator for the
+              access listed under *Permissions* in the README.
+            - **Cannot save versions?** The app needs `ONTOLOGY_STORE` and read/write access to its volume. You can
+              still download the model in Exports.
+            - **Genie space failed?** The app needs the `genie` user authorization scope. Download the space
+              definition from the deploy preview and ask an administrator.
+            - **A deploy step failed?** Read its error and ask the owner of the catalog, schema or volume for that
+              permission.
 
-            The Studio honors your data access. Ask your workspace administrator for missing permissions; do not
-            paste passwords, access tokens or other secrets into the app.""",
+            The Studio honors your data access. Never paste passwords, access tokens or other secrets into it.""",
         ),
     ],
     "Français": [
         (
             "🌟 À quoi sert le Studio ?",
-            """Ontology Studio aide votre équipe à donner un sens commun aux données. Il lit les tables,
-            propose leurs liens et vous aide à décrire des notions métier comme les clients, les ventes et le
-            chiffre d'affaires.
-
-            Vous pouvez créer un modèle modifiable, exporter du YAML Apache Ossie ou des vues métriques
-            Databricks, ou enregistrer un modèle près de ses données dans Unity Catalog. Vous choisissez ce que
-            vous gardez : vérifiez les suggestions avant de vous y fier.""",
+            """Ontology Studio aide votre équipe à s'accorder sur le sens de ses données, puis place ce sens là où
+            les gens travaillent déjà dans Databricks. Il lit vos tables Unity Catalog, propose les liens entre
+            elles, aide à décrire les notions métier (clients, ventes, revenus), vérifie le modèle avec vos propres
+            questions et le publie sous forme de commentaires, d'étiquettes, de vues de métriques et d'un espace
+            Genie. Rien ne sort de Databricks, et tout s'exécute avec vos propres droits.""",
         ),
         (
-            "🧭 Quel parcours choisir ?",
-            """Utilisez les trois choix en haut de la page :
+            "🧭 Les six étapes",
+            """Avancez de gauche à droite avec les boutons en haut de la page :
 
-            - **📂 Update existing model** (mettre à jour) : ouvrez un modèle enregistré, importez un fichier
-              Ossie YAML/JSON
-              ou collez du YAML. Consultez le rapport, puis chargez le modèle pour le modifier.
-            - **✨ Create new model** (créer) : connectez des tables ou un fichier, analysez-les et modifiez
-              le modèle.
-            - **🚀 Deploy to Databricks** (déployer) : vérifiez l'aperçu et publiez le modèle dans Unity Catalog.
+            1. **Connect** (connecter) : créer un modèle à partir de tables Unity Catalog, ouvrir un modèle
+               enregistré, importer un fichier ou partir d'un formulaire vide.
+            2. **Model** (modèle) : vérifier le schéma, corriger les liens, marquer faits et dimensions.
+            3. **Describe** (décrire) : ajouter ce que seules les personnes savent : descriptions, codes, glossaire,
+               règles, métriques, domaines, responsables, pages.
+            4. **Review** (revue) : une seule boîte de réception : blocages, liens proposés, certification, manques.
+            5. **Test** : lancer vos questions de test et voir ce que le modèle répond correctement.
+            6. **Publish** (publier) : enregistrer une version, déployer dans Databricks ou télécharger.
 
-            Le modèle ouvert reste disponible lorsque vous changez de parcours. Besoin d'aide pendant le travail ?
-            Ouvrez **❓ Help & FAQ / Aide et FAQ**, au-dessus du logo Ontology Studio dans la barre latérale
-            gauche. Les noms des boutons et des onglets sont affichés en anglais ; ils sont indiqués ci-dessous
-            en gras pour vous aider à les retrouver.""",
+            La barre latérale montre toujours le modèle ouvert, les changements non enregistrés, son état et le
+            résultat des tests. Le **mode avancé** affiche les options expertes.""",
         ),
         (
             "🔌 Comment connecter mes données ?",
-            """Choisissez d'abord le type de source dans la barre latérale :
+            """Dans **Connect**, choisissez comment commencer :
 
-            - **Databricks → Unity Catalog** : choisissez un catalogue, des schémas et jusqu'à 100 tables ou vues
-              auxquelles vous avez accès. L'application utilise vos permissions.
-            - **Non-Databricks → Upload file** (importer un fichier) : importez une base SQLite
-              (`.db`, `.sqlite`, `.sqlite3`)
-              ou un script SQL (`.sql`, `.ddl`, `.txt`). Choisissez le dialecte SQL du script si nécessaire.
-            - **Ossie YAML**, **Saved version** (version enregistrée) ou **Paste YAML** (coller du YAML) :
-              utilisez ces options pour modifier un modèle existant.
+            - **🏛️ Unity Catalog tables** : un catalogue, des schémas et jusqu'à 100 tables ou vues (dans
+              Databricks Apps).
+            - **📂 Saved model** : ouvrir une version du magasin de versions.
+            - **📥 Import a file** : un modèle Apache Ossie (YAML ou JSON, vérifié selon la spécification
+              officielle), un modèle du Studio, une base SQLite ou un script .sql, ou du YAML collé.
+            - **✏️ Start from scratch** : décrire un modèle pas à pas dans des formulaires.
 
-            Snowflake, PostgreSQL et Informatica CDGC sont des sources prévues, mais pas encore disponibles.
-            Unity Catalog est accessible uniquement lorsque l'application fonctionne dans Databricks Apps.""",
+            **Options** permet de profiler les données, d'apprendre de l'historique des requêtes et du lignage, et
+            de rédiger des descriptions avec l'IA à partir de vos documents. Relisez chaque brouillon de l'IA.""",
         ),
         (
-            "🔍 Que fait l'analyse ?",
-            """Cliquez sur **Analyze & build** (analyser et créer) pour lire les structures sélectionnées et, si l'option est
-            activée, calculer des profils : nombre de lignes, valeurs distinctes et exemples. Le Studio cherche
-            les clés et les liens possibles. Il classe aussi les tables (faits, dimensions ou entités) et les
-            colonnes (mesures, clés, dates ou descriptions).
+            "🛠️ Comment corriger le modèle ?",
+            """Dans **Model → Diagram**, cliquez sur une table ou un lien pour le modifier dans le panneau de droite.
+            Faites glisser les tables pour les ranger. **＋ Connect** ajoute un lien. Les lignes orange en
+            pointillés sont des liens proposés : cliquez pour les accepter ou les rejeter, ou traitez-les tous dans
+            **Review → Suggested joins**.
 
-            Les liens très probables peuvent être ajoutés automatiquement. Les autres deviennent des
-            suggestions : vérifiez leurs colonnes et les indices dans l'onglet **🕸️ Network** avant de les
-            accepter. L'historique des requêtes et la lignée demandent Databricks et les permissions nécessaires.
-            L'IA peut proposer des descriptions, synonymes, significations, règles et mesures à partir de vos
-            documents ; relisez chaque proposition.""",
+            **List** présente tables et liens sous forme de tableaux et peut relire Unity Catalog pour trouver de
+            nouvelles colonnes. **Form** modifie le modèle pas à pas, sans YAML.""",
         ),
         (
-            "🛠️ Comment modifier et vérifier le modèle ?",
-            """Dans **🕸️ Network** (réseau), sélectionnez une classe ou un lien pour le modifier dans le panneau de droite.
-            Déplacez les classes pour organiser le schéma. Utilisez **＋ Connect** (connecter) pour ajouter un lien ;
-            vérifiez les indices avant d'accepter une suggestion. L'aide du schéma explique le zoom, les
-            dispositions et les raccourcis clavier.
+            "📚 Comment ajouter le sens métier ?",
+            """**Describe** réunit tout ce que l'on sait des données :
 
-            Vous préférez des formulaires ? **✏️ YAML form editor** vous guide sur les informations du modèle,
-            les jeux de données, les champs, les liens et les mesures. **🧾 Ontology YAML** permet de
-            modifier directement le YAML ; appliquez les changements et lisez les avertissements de validation.
+            - **Dictionary** : chercher une table, une colonne, une métrique ou une page.
+            - **Meanings** : la signification des codes, le glossaire, les règles métier.
+            - **Metrics** : les métriques du modèle et leurs vues de métriques, avec un assistant de création.
+            - **Domains** : regrouper les tables (Finance, Ventes…), nommer les responsables, certifier.
+            - **Knowledge** : des pages qui expliquent les notions et les calculs appris des requêtes.
 
-            **🗂️ Tables** liste les classes, colonnes et liens. Pour Unity Catalog, **Re-scan** (analyser à nouveau)
-            détecte les changements de schéma. **📘 Data dictionary** explique les tables, colonnes, relations et
-            mesures pour Power BI. **Take it to Power BI** télécharge un kit de démarrage avec la documentation,
-            des fichiers CSV, des mesures DAX et des scripts Power Query.""",
+            La certification est une décision humaine : lisez la définition avant de la certifier.""",
         ),
         (
-            "📚 Comment ajouter le sens métier et la gouvernance ?",
-            """Ajoutez des descriptions claires, synonymes, rôles de colonnes et mesures. Une bonne description
-            de table explique ce que représente une ligne. Utilisez **🏠 Domaines** pour regrouper les tables et
-            mesures, puis indiquez les responsables et les statuts : brouillon, certifié ou obsolète.
-
-            Dans **🧠 Semantic layer**, gérez les significations des codes, règles métier, mesures et le
-            glossaire. Dans **📚 Knowledge**, créez des pages qui expliquent les notions métier ou apprenez des
-            liens, filtres et calculs à partir d'un journal de requêtes. **✅ Review queue** (file de révision) et
-            **🧭 Modeling worklist** indiquent ce qui doit être vérifié. La certification est une décision humaine :
-            vérifiez la définition avant de la certifier.""",
+            "✅ Que montre Review ?",
+            """Un seul endroit pour tout ce qui demande une décision : **Blockers** (le modèle ne s'exporterait pas
+            en document Apache Ossie valide), **Suggested joins** (accepter ou rejeter en lot), **Queue** (calculs
+            populaires à promouvoir, définitions à certifier, conflits, retours négatifs), **Worklist** (tables à
+            décrire, liens par défaut) et le **Change log** (journal). La ligne d'état en haut indique la suite.""",
         ),
         (
-            "💬 Comment poser une question ou vérifier du SQL ?",
-            """Dans **💬 Ask (Text-to-SQL)**, écrivez une question simple, par exemple « Quel était le
-            chiffre d'affaires net par mois ? ». Choisissez un domaine pour limiter le contexte. L'application
-            vérifie si le modèle comprend la question, crée une requête SQL en lecture seule, la contrôle par
-            rapport au modèle et aux données, puis affiche la requête et le résultat. **Compare with schema-only**
-            (comparer au schéma seul) permet de comparer avec une requête qui n'utilise pas le modèle sémantique.
+            "🎯 Comment tester le modèle ?",
+            """Dans **Test → Test set**, ajoutez les questions de votre métier, chacune avec le SQL qui y répond.
+            **Run** repose chaque question au modèle (et, si vous le souhaitez, aux seules tables brutes) et compare
+            les résultats. Relancez après chaque changement : **Publish** affiche le résultat, et les questions
+            deviennent les exemples et les tests de l'espace Genie.
 
-            La fonction IA de questions nécessite Databricks Apps et un point de terminaison configuré. Les modes
-            **Check SQL**, **Join path**, **Look up values** et **Verified examples** vérifient du SQL, affichent
-            un chemin de jointure, cherchent des valeurs ou gèrent des exemples vérifiés. Ces contrôles aident à
-            repérer des erreurs courantes, mais vérifiez toujours que
-            le résultat répond à la question métier. Un 👍 peut enregistrer une bonne réponse comme exemple.""",
+            **Ask** répond à une question à la fois et propose des outils pour vérifier du SQL, trouver un chemin
+            de jointure ou chercher des valeurs. Un 👍 ajoute une bonne réponse aux tests. **Traces** montre chaque
+            requête. Les fonctions d'IA demandent Databricks Apps et un point de terminaison de modèle.""",
         ),
         (
-            "📦 Comment enregistrer, exporter ou restaurer le travail ?",
-            """Téléchargez **Ontology YAML** pour le modèle du Studio, ou utilisez **🧩 Apache Ossie** pour
-            valider et exporter le modèle sémantique en YAML ou JSON. **📐 Metric views** peut créer une vue par
-            table de faits. Dans **➕ New metric view**, suivez les étapes pour choisir les liens, champs, mesures
-            et filtres, puis vérifiez le résultat. Téléchargez le YAML ou le SQL, ou déployez une vue si les
-            données sont dans Unity Catalog.
+            "🚀 Comment enregistrer et publier ?",
+            """**Publish → Save & versions** enregistre le modèle ouvert comme nouvelle version (un fichier Apache
+            Ossie YAML ; rien n'est écrasé). Comparez, ouvrez ou restaurez une version au même endroit.
 
-            Pour conserver l'historique, l'application doit être configurée avec un volume Unity Catalog
-            `ONTOLOGY_STORE`. Utilisez **💾 Save as new version** ou **💾 Publish to the Volume store**.
-            Chaque enregistrement crée une nouvelle version, sans écraser l'ancienne. Dans **🕘 Versions**,
-            comparez, ouvrez, téléchargez ou restaurez une version comme nouvelle version la plus récente.""",
+            **Publish → Deploy** prépare un seul plan pour tout ce que l'application écrit dans Databricks : le YAML
+            dans un volume à côté des tables, les commentaires, les étiquettes (modèle, version, domaine,
+            certification, responsable), les vues de métriques, les clés informatives et, si vous le cochez, un
+            **espace Genie**. Lisez l'aperçu : rien n'est écrit avant **🚀 Deploy**, et chaque étape donne son
+            résultat.
+
+            **Publish → Exports** télécharge le modèle Apache Ossie, les vues de métriques, un kit Power BI (mesures
+            DAX, scripts Power Query) et le dictionnaire de données.""",
         ),
         (
-            "🚀 Comment déployer un modèle ?",
-            """Choisissez **🚀 Deploy to Databricks**, puis sélectionnez le modèle ouvert, une version
-            enregistrée ou un fichier Ossie YAML. Lisez le rapport de validation et indiquez le nom du modèle,
-            le catalogue, le schéma et le volume.
+            "🧰 Que faire si quelque chose manque ou échoue ?",
+            """- **Pas d'Unity Catalog ?** Ouvrez l'application dans Databricks Apps et demandez à l'administrateur
+              les accès listés dans *Permissions* du README.
+            - **Impossible d'enregistrer des versions ?** Il faut `ONTOLOGY_STORE` et l'accès en lecture et écriture
+              à son volume. Vous pouvez toujours télécharger le modèle dans Exports.
+            - **L'espace Genie a échoué ?** L'application a besoin du droit `genie`. Téléchargez la définition de
+              l'espace depuis l'aperçu et transmettez-la à l'administrateur.
+            - **Une étape du déploiement échoue ?** Lisez son erreur et demandez la permission au responsable du
+              catalogue, du schéma ou du volume.
 
-            Vérifiez l'aperçu avant de cliquer sur **🚀 Deploy**. Il liste les fichiers et les instructions
-            SQL : création du volume, commentaires, étiquettes, vues métriques, accès fichiers pour l'application
-            ou clés informatives selon vos choix. Aucune écriture n'a lieu avant le déploiement. Il faut
-            Databricks Apps et les permissions
-            Unity Catalog nécessaires. Une étape SQL en échec affiche son erreur ; vérifiez chaque résultat.""",
-        ),
-        (
-            "📈 Que montre Monitor ?",
-            """**📈 Monitor** liste l'activité Ask, le statut, les retours, les lignes, les durées, les jetons
-            utilisés et le coût estimé. Ouvrez une demande pour voir ses étapes et son SQL. Vous pouvez définir
-            un budget quotidien de jetons pour Ask.
-
-            Les traces restent dans la session de l'application, sauf si un administrateur configure
-            `TELEMETRY_TABLE` pour les enregistrer dans Unity Catalog. L'accès aux coûts du warehouse et aux
-            traces enregistrées demande Databricks et des permissions supplémentaires. Le coût est une estimation
-            basée sur les prix par jeton affichés dans Monitor.""",
-        ),
-        (
-            "🧰 Que faire si une option manque ou échoue ?",
-            """- **Pas de source Unity Catalog ?** Ouvrez l'application dans Databricks Apps et demandez à
-              l'administrateur les accès indiqués dans la section **Permissions** du README du projet.
-            - **Impossible d'enregistrer une version ?** Il faut configurer `ONTOLOGY_STORE` et avoir un accès
-              en lecture et écriture au volume. Vous pouvez toujours télécharger le modèle.
-            - **Des erreurs de validation ?** Suivez l'emplacement du problème et la correction proposée dans le
-              rapport. Ne déployez pas un modèle en erreur.
-            - **Un lien semble incorrect ?** Vérifiez les colonnes et le sens dans le panneau du réseau. Rejetez
-              la suggestion incorrecte ou modifiez le lien.
-            - **Une étape du déploiement échoue ?** Lisez son erreur et demandez au responsable du catalogue, du
-              schéma ou du volume la permission correspondante.
-
-            Le Studio respecte vos accès aux données. Demandez les permissions manquantes à l'administrateur ;
-            ne collez pas de mot de passe, jeton d'accès ou autre secret dans l'application.""",
+            Le Studio respecte vos accès. Ne collez jamais de mot de passe, de jeton ou d'autre secret.""",
         ),
     ],
 }

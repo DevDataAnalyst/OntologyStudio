@@ -765,14 +765,16 @@ The app knows it is on Databricks when the Apps runtime sets `DATABRICKS_APP_NAM
 
 ### Light and dark themes
 
-[`.streamlit/config.toml`](.streamlit/config.toml) defines two themes, taken from the examples in Streamlit's [theming guide](https://docs.streamlit.io/develop/concepts/configuration/theming):
+[`.streamlit/config.toml`](.streamlit/config.toml) defines two themes built from one corporate colour palette and type system:
 
 | Mode | Section | Look |
 |---|---|---|
-| Light | `[theme.light]` | Anthropic-inspired: warm off-white paper (`#fdfdf8`), clay accent (`#cb785c`) |
-| Dark | `[theme.dark]` | Spotify-inspired: charcoal surfaces (`#2a2a2a` / `#121212`), green accent (`#1ed760`) |
+| Light | `[theme.light]` | Red on white: white page (`#ffffff`), light grey panels (`#f2f3f3`), near-black text (`#21262b`), red accent (`#ed1c24`) |
+| Dark | `[theme.dark]` | White and red on black: charcoal page (`#21262b`), black panels and sidebar (`#000000`), white text, red accent (`#ed1c24`) |
 
-The app follows the browser's light or dark setting, and users can pick **System**, **Light** or **Dark** from the ⋮ menu at the top right. Every font in the UI is Arial in both themes: body text, headings and code (`font`, `headingFont` and `codeFont` in `config.toml`), the tab strip, the form editor and the network diagram. Arial is a system font, so nothing loads from a font CDN.
+Red is the single accent (buttons, selected states, focus). The palette's secondary colours (port and steel blue, azure, grain gold, forest green, mineral and aluminum grey) are used only for chart series, status colours and the network diagram's class types (fact, dimension, entity, bridge, external).
+
+The app follows the browser's light or dark setting, and users can pick **System**, **Light** or **Dark** from the ⋮ menu at the top right. Headings use **Raleway**, body text uses **Roboto** and code uses **Roboto Mono**, in both themes. The fonts are self-hosted in [`static/fonts/`](static/fonts/) (SIL Open Font License, served with `server.enableStaticServing`), so nothing loads from a font CDN.
 
 The app's own HTML follows the active theme too: the Chromium-style tab strip and the YAML form editor's step cards read their colours from `config.toml` ([`modules/theme.py`](modules/theme.py)), and the network diagram takes its canvas, card, text and accent colours from the theme Streamlit sends it. Streamlit doesn't rerun the script when someone switches theme, so a hidden helper ([`components/theme_watcher/`](components/theme_watcher/)) notices the switch and reruns once. To restyle the app, edit the colours in `config.toml`; nothing else needs to change.
 
@@ -876,7 +878,8 @@ requirements.txt                Python dependencies
 NOTICE                          Credits for the Apache-2.0 code adapted from auto-ontology-mcp and NVIDIA Auto Ontology
 components/ontology_graph/      Editable network diagram (D3.js, bundled)
 components/theme_watcher/       Hidden helper that reruns the app when the user switches light/dark
-.streamlit/config.toml          Light ([theme.light]) and dark ([theme.dark]) themes
+.streamlit/config.toml          Light ([theme.light]) and dark ([theme.dark]) themes, fonts
+static/fonts/                   Self-hosted Raleway, Roboto and Roboto Mono (OFL)
 modules/theme.py                Active theme and its colours for the app's own CSS and the diagram
 modules/db_connection.py        On-behalf-of-user SQL warehouse connection
 modules/uc.py                   Unity Catalog browse, extract (up to 100 objects), profile, lineage, query-history joins

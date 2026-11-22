@@ -106,6 +106,7 @@ def tab_css(c: dict) -> str:
     radial-gradient(circle at 0 0, transparent 9.5px, {active} 10px) left bottom / 10px 10px no-repeat,
     radial-gradient(circle at 100% 0, transparent 9.5px, {active} 10px) right bottom / 10px 10px no-repeat; }}
 .st-key-theme_watcher {{ display: none; }}
+h1, h2, h3, h4, h5, h6 {{ font-variant-numeric: lining-nums; }}  /* Raleway defaults to old-style figures */
 .st-key-section p, .st-key-section span, .st-key-section button {{ font-size: 16px; }}
 .stTabs [role="tabpanel"] {{
   background: {active}; border: 1px solid {border}; border-top: none; border-radius: 0 0 12px 12px;

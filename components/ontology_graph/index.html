@@ -5,12 +5,17 @@
 <title>Ontology network</title>
 <script src="./d3.v7.min.js"></script>
 <style>
-  :root { --bg:#ffffff; --fg:#1f2430; --muted:#6b7280; --line:#d6dae1; --panel:#f6f7f9; --accent:#2563eb;
-          --chip:#eef2ff; }
-  .dark { --bg:#0e1117; --fg:#e6e8eb; --muted:#9aa3ae; --line:#2c323c; --panel:#161a22; --accent:#60a5fa;
-          --chip:#1e2433; }
+  /* the app's body font (see .streamlit/config.toml), self-hosted in static/fonts */
+  @font-face { font-family:"Roboto"; font-style:normal; font-weight:100 900; font-display:swap;
+               src:url("../../app/static/fonts/roboto-latin-wght-normal.woff2") format("woff2"); }
+  @font-face { font-family:"Roboto"; font-style:italic; font-weight:100 900; font-display:swap;
+               src:url("../../app/static/fonts/roboto-latin-wght-italic.woff2") format("woff2"); }
+  :root { --bg:#ffffff; --fg:#21262b; --muted:#4f5254; --line:#d4d6d6; --panel:#f2f3f3; --accent:#ed1c24;
+          --chip:#fde4e5; }
+  .dark { --bg:#21262b; --fg:#ffffff; --muted:#a8abb0; --line:#4f5254; --panel:#000000; --accent:#ed1c24;
+          --chip:#4a2529; }
   html, body { margin:0; padding:0; background:var(--bg); color:var(--fg);
-               font-family:var(--font,Arial,Helvetica,sans-serif); font-size:13px; }
+               font-family:var(--font,Roboto,Arial,sans-serif); font-size:13px; }
   #wrap { display:flex; flex-direction:column; border:1px solid var(--line); border-radius:12px; overflow:hidden;
           background:var(--bg); }
   #wrap:fullscreen { border-radius:0; }
@@ -107,11 +112,11 @@
       <div class="hd" id="legHd">Legend ▾</div>
       <div class="body">
         <div class="row">
-          <span><span class="sw" style="background:#f59e0b"></span>Fact</span>
-          <span><span class="sw" style="background:#3b82f6"></span>Dimension</span>
-          <span><span class="sw" style="background:#64748b"></span>Entity</span>
-          <span><span class="sw" style="background:#8b5cf6"></span>Bridge</span>
-          <span><span class="sw" style="background:transparent;border:1px dashed #94a3b8"></span>External</span>
+          <span><span class="sw" style="background:#d89f3a"></span>Fact</span>
+          <span><span class="sw" style="background:#0088a8"></span>Dimension</span>
+          <span><span class="sw" style="background:#7b7b7b"></span>Entity</span>
+          <span><span class="sw" style="background:#557192"></span>Bridge</span>
+          <span><span class="sw" style="background:transparent;border:1px dashed #ababab"></span>External</span>
         </div>
         <div class="row">
           <span><svg width="34" height="12"><path d="M2 6H32M10 1L2 6L10 11M30 1V11" stroke="currentColor" fill="none" stroke-width="1.4"/></svg>many-to-one</span>
@@ -119,8 +124,8 @@
           <span><svg width="34" height="12"><path d="M2 6H32M10 1L2 6L10 11M24 1L32 6L24 11" stroke="currentColor" fill="none" stroke-width="1.4"/></svg>many-to-many</span>
         </div>
         <div class="row">
-          <span><svg width="30" height="12"><path d="M2 6H28" stroke="#f97316" stroke-dasharray="5 4" stroke-width="2"/></svg>suggested</span>
-          <span><svg width="30" height="12"><path d="M2 6H28" stroke="#10b981" stroke-dasharray="2 4" stroke-width="2.2" stroke-linecap="round"/></svg>lineage</span>
+          <span><svg width="30" height="12"><path d="M2 6H28" stroke="#b08137" stroke-dasharray="5 4" stroke-width="2"/></svg>suggested</span>
+          <span><svg width="30" height="12"><path d="M2 6H28" stroke="#618045" stroke-dasharray="2 4" stroke-width="2.2" stroke-linecap="round"/></svg>lineage</span>
         </div>
       </div>
     </div>
@@ -144,21 +149,21 @@
 
   // ------------------------------------------------------------------ constants
   const ROLE = {
-    fact:      { color: "#f59e0b", glyph: "F", label: "fact" },
-    dimension: { color: "#3b82f6", glyph: "D", label: "dimension" },
-    entity:    { color: "#64748b", glyph: "E", label: "entity" },
-    bridge:    { color: "#8b5cf6", glyph: "B", label: "bridge" },
-    external:  { color: "#94a3b8", glyph: "↗", label: "external" }
+    fact:      { color: "#d89f3a", glyph: "F", label: "fact" },        // palette accents: gold, azure,
+    dimension: { color: "#0088a8", glyph: "D", label: "dimension" },   // mineral grey, steel blue,
+    entity:    { color: "#7b7b7b", glyph: "E", label: "entity" },      // aluminum grey
+    bridge:    { color: "#557192", glyph: "B", label: "bridge" },
+    external:  { color: "#ababab", glyph: "↗", label: "external" }
   };
   const PALETTE = {
-    light: { bg: "#ffffff", card: "#ffffff", cardLine: "#d5dbe5", text: "#1f2430", sub: "#6b7280", edge: "#7c8796",
-             grid: "#e6eaf0", accent: "#2563eb", sel: "#ef4444", hit: "#eab308", sug: "#f97316", lin: "#10b981",
-             label: "#ffffff", labelLine: "#dfe3ea", shadow: "rgba(15,23,42,0.14)", connect: "#22c55e" },
-    dark:  { bg: "#0e1117", card: "#1a1f29", cardLine: "#323b4c", text: "#e6e8eb", sub: "#9aa3ae", edge: "#8d99ab",
-             grid: "#1a1f29", accent: "#60a5fa", sel: "#f87171", hit: "#facc15", sug: "#fb923c", lin: "#34d399",
-             label: "#161a22", labelLine: "#2c323c", shadow: "rgba(0,0,0,0.55)", connect: "#4ade80" }
+    light: { bg: "#ffffff", card: "#ffffff", cardLine: "#d4d6d6", text: "#21262b", sub: "#4f5254", edge: "#7b7b7b",
+             grid: "#e6e8e8", accent: "#ed1c24", sel: "#2b415c", hit: "#d89f3a", sug: "#b08137", lin: "#618045",
+             label: "#ffffff", labelLine: "#d4d6d6", shadow: "rgba(0,0,0,0.14)", connect: "#618045" },
+    dark:  { bg: "#21262b", card: "#2b3036", cardLine: "#4f5254", text: "#ffffff", sub: "#a8abb0", edge: "#a3a6ab",
+             grid: "#2b3036", accent: "#ed1c24", sel: "#54b8d9", hit: "#ffcf6b", sug: "#d89f3a", lin: "#809c66",
+             label: "#000000", labelLine: "#4f5254", shadow: "rgba(0,0,0,0.55)", connect: "#809c66" }
   };
-  const BASE_FONT = 'Arial,Helvetica,sans-serif';   // the whole app uses Arial (see .streamlit/config.toml)
+  const BASE_FONT = 'Roboto,Arial,sans-serif';   // the app's body font (see .streamlit/config.toml)
   let FONT = BASE_FONT;
 
   // ------------------------------------------------------------------ theme (Streamlit sends the active theme
@@ -184,7 +189,7 @@
     const t = theme || {};
     const bg = rgb(t.backgroundColor) ? t.backgroundColor : base.bg;
     const fg = rgb(t.textColor) ? t.textColor : base.text;
-    const panel = rgb(t.secondaryBackgroundColor) ? t.secondaryBackgroundColor : (dark ? "#161a22" : "#f6f7f9");
+    const panel = rgb(t.secondaryBackgroundColor) ? t.secondaryBackgroundColor : (dark ? "#000000" : "#f2f3f3");
     const accent = rgb(t.primaryColor) ? t.primaryColor : base.accent;
     const p = Object.assign({}, base, {
       bg: bg, text: fg, accent: accent, panel: panel,
@@ -919,7 +924,7 @@
     const flt = defs.append("filter").attr("id", "shadow").attr("x", "-20%").attr("y", "-30%")
       .attr("width", "140%").attr("height", "170%");
     flt.append("feDropShadow").attr("id", "shadowFx").attr("dx", 0).attr("dy", 1.5).attr("stdDeviation", 2.4)
-      .attr("flood-color", "#0f172a").attr("flood-opacity", 0.14);
+      .attr("flood-color", "#000000").attr("flood-opacity", 0.14);
     const pat = defs.append("pattern").attr("id", "gridPattern").attr("patternUnits", "userSpaceOnUse")
       .attr("width", 24).attr("height", 24);
     pat.append("circle").attr("class", "gridDot").attr("cx", 12).attr("cy", 12).attr("r", 1.1);
@@ -938,7 +943,7 @@
 
     mini = d3.select("#mini");
     miniRoot = mini.append("g");
-    miniView = mini.append("rect").attr("fill", "rgba(37,99,235,0.08)").attr("stroke", "#2563eb")
+    miniView = mini.append("rect").attr("fill", "rgba(237,28,36,0.08)").attr("stroke", "#ed1c24")
       .attr("stroke-width", 1.2).attr("rx", 2);
     mini.on("mousedown", (ev) => { miniNavigate(ev); mini.on("mousemove.nav", miniNavigate); })
       .on("mouseup", () => mini.on("mousemove.nav", null)).on("mouseleave", () => mini.on("mousemove.nav", null));
@@ -1014,7 +1019,7 @@
       st.themeSig = sig; st.dark = dark; st.pal = themedPalette(theme, dark); FONT = st.pal.font;
       applyChromeVars(st.pal);
       styleEl.text(svgCss()); buildMarkers();
-      svg.select("#shadowFx").attr("flood-color", dark ? "#000000" : "#0f172a").attr("flood-opacity", dark ? 0.55 : 0.14);
+      svg.select("#shadowFx").attr("flood-color", "#000000").attr("flood-opacity", dark ? 0.55 : 0.14);
       miniView.attr("stroke", st.pal.accent).attr("fill", st.pal.accent).attr("fill-opacity", 0.1);
       // card widths are measured with the theme font: measure again once the font file has arrived
       if (document.fonts && document.fonts.load) {

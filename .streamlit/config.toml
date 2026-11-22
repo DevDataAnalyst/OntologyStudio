@@ -1,70 +1,126 @@
 # Ontology Studio theme
 #
-# Two themes from the Streamlit theming guide
-# (https://docs.streamlit.io/develop/concepts/configuration/theming):
-#   [theme.light]  "Anthropic-inspired" light theme: warm off-white paper, clay accent
-#   [theme.dark]   "Spotify-inspired" dark theme: charcoal surfaces, green accent
-# Because both sections are defined, users can switch between them in the app menu
+# Light ([theme.light]) and dark ([theme.dark]) themes built from one corporate colour palette and type
+# system. Because both sections are defined, users can switch between them in the app menu
 # (Settings -> Theme: Light / Dark / Use system setting).
 #
-# Every font in the UI (body, headings, code) is Arial, in both themes; the colours and shapes
-# follow the two examples above.
+# Colour
+#   Core palette (favoured everywhere): red #ED1C24, black #000000, white #FFFFFF.
+#   Extended palette (secondary accents only): Port Blue #2B415C, Steel Blue #557192, Azure Blue #0088A8,
+#   Grain Gold #D89F3A, Forest Green #809C66, Petroleum Black #303030, Mineral Grey #7B7B7B,
+#   Aluminum Grey #ABABAB, plus their tints (e.g. #21262B, #035C7A, #54B8D9, #D4D6D6, #4F5254, #618045,
+#   #B08137, #FFCF6B).
+#   Red is the single accent (buttons, selected states, focus) and is never tinted toward pink or burgundy.
+#   Dark mode leans on black the way the palette's colour balance does (mostly black, some red, a little
+#   white). Text/background pairs meet WCAG AA contrast.
+#
+# Type
+#   Headings: Raleway (bold / semibold).  Body: Roboto.  Code: Roboto Mono (same family as the body).
+#   The fonts are self-hosted in static/fonts (SIL Open Font License), so nothing loads from a font CDN.
+
+[server]
+enableStaticServing = true
 
 # ---------------------------------------------------------------- options shared by both themes
 [theme]
 showSidebarBorder = true
-font = "Arial, Helvetica, sans-serif"
-headingFont = "Arial, Helvetica, sans-serif"
-codeFont = "Arial, Helvetica, sans-serif"
+font = "Roboto, Arial, sans-serif"
+headingFont = "Raleway, Roboto, Arial, sans-serif"
+codeFont = "'Roboto Mono', monospace"
 
-# ---------------------------------------------------------------- light: Anthropic-inspired
+[[theme.fontFaces]]
+family = "Roboto"
+url = "app/static/fonts/roboto-latin-wght-normal.woff2"
+weight = "100 900"
+style = "normal"
+
+[[theme.fontFaces]]
+family = "Roboto"
+url = "app/static/fonts/roboto-latin-wght-italic.woff2"
+weight = "100 900"
+style = "italic"
+
+[[theme.fontFaces]]
+family = "Raleway"
+url = "app/static/fonts/raleway-latin-wght-normal.woff2"
+weight = "100 900"
+style = "normal"
+
+[[theme.fontFaces]]
+family = "Raleway"
+url = "app/static/fonts/raleway-latin-wght-italic.woff2"
+weight = "100 900"
+style = "italic"
+
+[[theme.fontFaces]]
+family = "Roboto Mono"
+url = "app/static/fonts/roboto-mono-latin-wght-normal.woff2"
+weight = "100 700"
+style = "normal"
+
+# ---------------------------------------------------------------- light: red on white
 [theme.light]
-primaryColor = "#cb785c"
-backgroundColor = "#fdfdf8"
-secondaryBackgroundColor = "#ecebe3"
-textColor = "#3d3a2a"
-linkColor = "#3d3a2a"
-borderColor = "#d3d2ca"
+primaryColor = "#ed1c24"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f2f3f3"
+textColor = "#21262b"
+linkColor = "#035c7a"
+borderColor = "#d4d6d6"
 showWidgetBorder = true
-baseRadius = "0.75rem"
+baseRadius = "0.5rem"
 buttonRadius = "full"
-font = "Arial, Helvetica, sans-serif"
-headingFont = "Arial, Helvetica, sans-serif"
-headingFontWeights = [600, 500, 500, 500, 500, 500]
+font = "Roboto, Arial, sans-serif"
+headingFont = "Raleway, Roboto, Arial, sans-serif"
+headingFontWeights = [700, 600, 600, 600, 600, 600]
 headingFontSizes = ["3rem", "2rem"]
-codeFont = "Arial, Helvetica, sans-serif"
+codeFont = "'Roboto Mono', monospace"
 codeFontSize = ".8rem"
-codeBackgroundColor = "#ecebe4"
-chartCategoricalColors = ["#0ea5e9", "#059669", "#fbbf24", "#cb785c", "#8b5cf6", "#64748b"]
+codeBackgroundColor = "#f2f3f3"
+codeTextColor = "#035c7a"
+redColor = "#ed1c24"
+orangeColor = "#b08137"
+yellowColor = "#d89f3a"
+greenColor = "#618045"
+blueColor = "#0088a8"
+grayColor = "#7b7b7b"
+chartCategoricalColors = ["#ed1c24", "#2b415c", "#0088a8", "#d89f3a", "#809c66", "#7b7b7b", "#557192"]
 
 [theme.light.sidebar]
-backgroundColor = "#f0f0ec"
-secondaryBackgroundColor = "#ecebe3"
+backgroundColor = "#f2f3f3"
+secondaryBackgroundColor = "#e6e8e8"
+borderColor = "#d4d6d6"
 headingFontSizes = ["1.6rem", "1.4rem", "1.2rem"]
-dataframeHeaderBackgroundColor = "#e4e4e0"
+dataframeHeaderBackgroundColor = "#e6e8e8"
 
-# ---------------------------------------------------------------- dark: Spotify-inspired
+# ---------------------------------------------------------------- dark: white and red on black
 [theme.dark]
-primaryColor = "#1ed760"
-backgroundColor = "#2a2a2a"
-secondaryBackgroundColor = "#121212"
-codeBackgroundColor = "#121212"
+primaryColor = "#ed1c24"
+backgroundColor = "#21262b"
+secondaryBackgroundColor = "#000000"
+codeBackgroundColor = "#000000"
 textColor = "#ffffff"
-linkColor = "#1ed760"
-borderColor = "#7c7c7c"
+linkColor = "#54b8d9"
+borderColor = "#4f5254"
 showWidgetBorder = true
-baseRadius = "0.3rem"
+baseRadius = "0.5rem"
 buttonRadius = "full"
-font = "Arial, Helvetica, sans-serif"
-headingFont = "Arial, Helvetica, sans-serif"
-codeFont = "Arial, Helvetica, sans-serif"
-codeFontSize = ".8rem"
-headingFontWeights = [600, 500, 500, 500, 500, 500]
+font = "Roboto, Arial, sans-serif"
+headingFont = "Raleway, Roboto, Arial, sans-serif"
+headingFontWeights = [700, 600, 600, 600, 600, 600]
 headingFontSizes = ["3rem", "2.5rem", "2.25rem", "2rem", "1.5rem"]
-chartCategoricalColors = ["#ffc862", "#2d46b9", "#b49bc8", "#1ed760", "#f573a0", "#7c7c7c"]
+codeFont = "'Roboto Mono', monospace"
+codeFontSize = ".8rem"
+codeTextColor = "#a8dbed"
+redColor = "#ed1c24"
+orangeColor = "#d89f3a"
+yellowColor = "#ffcf6b"
+greenColor = "#809c66"
+blueColor = "#54b8d9"
+grayColor = "#ababab"
+chartCategoricalColors = ["#ed1c24", "#54b8d9", "#d89f3a", "#809c66", "#829ebf", "#ababab", "#ffcf6b"]
 
 [theme.dark.sidebar]
-backgroundColor = "#121212"
-secondaryBackgroundColor = "#000000"
-codeBackgroundColor = "#2a2a2a"
-borderColor = "#696969"
+backgroundColor = "#000000"
+secondaryBackgroundColor = "#21262b"
+codeBackgroundColor = "#21262b"
+borderColor = "#4f5254"

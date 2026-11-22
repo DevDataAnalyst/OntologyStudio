@@ -3,7 +3,7 @@
 ① pick the table the measures aggregate (facts first) · ② tick joins · ③ fields and ④ measures from
 suggestions that say why they fit (the model's metrics, profiled values, what colleagues query), add
 your own with quick helpers · ⑤ filter · ⑥ live checks and YAML preview, then add the view to the
-model (it is saved with the model's versions), download it or deploy it to Unity Catalog."""
+model (it is saved with the model's versions and deploys with Publish) or download it."""
 from __future__ import annotations
 
 import hashlib
@@ -65,7 +65,7 @@ def _lit(v) -> str:
     return "'" + str(v).replace("'", "''") + "'"
 
 
-def builder(onto: dict, commit: Callable[[str], None], deploy: Callable[[str], None] | None) -> None:
+def builder(onto: dict, commit: Callable[[str], None], deploy: Callable[[str], None] | None = None) -> None:
     classes = onto["classes"]
     facts = mv.fact_classes(onto)
     order = facts + sorted(c for c in classes if c not in facts)
@@ -168,23 +168,14 @@ def builder(onto: dict, commit: Callable[[str], None], deploy: Callable[[str], N
                    "joins in place).")
     st.code(y, language="yaml")
     saved = vname in (onto.get("metric_views") or {})
-    b1, b2, b3 = st.columns(3)
+    b1, b2, _ = st.columns(3)
     if b1.button("💾 Update in the model" if saved else "💾 Add to the model", type="primary",
                  disabled=bool(problems), use_container_width=True, key="mvb_save",
-                 help="Lists it under 📄 Views and saves it with the model (Ossie export, versions)."):
+                 help="Saves it with the model. Publish → Deploy creates it in Unity Catalog with the rest."):
         onto.setdefault("metric_views", {})[vname] = json.loads(json.dumps(
             {"fact": fact, "target": target, "view": view}))           # a plain copy: no shared objects
-        commit(f"Metric view {vname} {'updated' if saved else 'added'}: see 📄 Views")
+        commit(f"Metric view {vname} {'updated' if saved else 'added'}: it deploys with Publish")
     b2.download_button("⬇️ YAML", y, file_name=f"{vname}.yaml", mime="application/x-yaml",
                        disabled=bool(problems), use_container_width=True, key="mvb_dl")
-    if b3.button("🚀 Deploy to Unity Catalog", disabled=bool(problems) or deploy is None or target.count(".") != 2,
-                 use_container_width=True, key="mvb_deploy",
-                 help="Runs CREATE OR REPLACE VIEW … WITH METRICS as you (needs CREATE TABLE on the schema). "
-                      "Available when the model's tables are in Unity Catalog."):
-        try:
-            deploy(mv.ddl(y, target))
-            st.success(f"Created metric view {target}")
-        except Exception as e:  # noqa: BLE001
-            st.error(f"Deploy failed: {e}")
-    with st.expander("Deploy SQL"):
+    with st.expander("SQL that Publish will run"):
         st.code(mv.ddl(y, target), language="sql")

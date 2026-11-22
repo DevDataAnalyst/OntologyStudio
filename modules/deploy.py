@@ -12,8 +12,14 @@ A deployment is planned first (pure, no I/O: `plan()`), shown to the user, then 
                   GRANT USE CATALOG / USE SCHEMA / READ VOLUME, WRITE VOLUME … TO <app service principal>
                   COMMENT ON TABLE … / ALTER TABLE … ALTER COLUMN … COMMENT   (model descriptions)
                   ALTER TABLE … SET TAGS ('semantic_model' = …, 'semantic_model_version' = …)
-                  CREATE OR REPLACE VIEW … WITH METRICS LANGUAGE YAML         (one per fact)
+                  ALTER TABLE … SET TAGS ('ontology_domain' / '_certification' / '_owner' = …)
+                  CREATE OR REPLACE VIEW … WITH METRICS LANGUAGE YAML         (one per fact + the
+                                                                               builder's custom views)
                   ALTER TABLE … ADD CONSTRAINT … PRIMARY KEY / FOREIGN KEY …  (informational)
+  Genie (optional) a Genie space over the tables and metric views (modules/genie.py), created or,
+                  when an earlier deployment recorded its id, updated
+
+This is the only place the app writes to Unity Catalog or Genie.
 
 Each statement runs on its own; a failure is recorded and the rest continue. Statements on
 a table that turn out to be views get a fallback (ALTER VIEW / COMMENT ON TABLE).
@@ -75,6 +81,7 @@ class Plan:
     files: dict = field(default_factory=dict)        # path -> text (deployments.json added at run time)
     steps: list = field(default_factory=list)
     notes: list = field(default_factory=list)
+    genie: dict | None = None                       # {"definition", "title", "description", "space_id"}
 
     def counts(self) -> dict:
         out: dict[str, int] = {}
@@ -111,7 +118,8 @@ def _column_of(f: dict) -> str | None:
 def plan(doc: dict, onto: dict | None, catalog: str, schema: str, volume: str = "semantic_models",
          version: str | None = None, *, create_volume: bool = True, comments: bool = True, tags: bool = True,
          metric_views: bool = False, constraints: bool = False, overwrite_comments: bool = True,
-         model_name: str | None = None, yaml_text: str | None = None, grant_app: str | None = None) -> Plan:
+         model_name: str | None = None, yaml_text: str | None = None, grant_app: str | None = None,
+         genie: bool = False, genie_title: str | None = None, genie_space_id: str | None = None) -> Plan:
     from . import ossie
     model = store.slug(model_name or doc.get("name") or "model")
     version = version or store.stamp()
@@ -156,6 +164,13 @@ def plan(doc: dict, onto: dict | None, catalog: str, schema: str, volume: str = 
             tag_sql = f"SET TAGS ({lit(TAG_MODEL)} = {lit(model)}, {lit(TAG_VERSION)} = {lit(version)})"
             p.steps.append(Step("tag", f"ALTER TABLE {qn(fq)} {tag_sql}", target=fq,
                                 fallback=f"ALTER VIEW {qn(fq)} {tag_sql}"))
+    if tags and onto is not None:                  # domains, certification and owner from the model
+        from . import governance as gv
+        for sql_ in gv.uc_tag_statements(onto):
+            tgt = sql_.split(" SET TAGS", 1)[0].split(" ", 2)[2].replace("`", "")
+            p.steps.append(Step("tag", sql_, target=tgt,
+                                fallback=sql_.replace("ALTER TABLE", "ALTER VIEW", 1)
+                                if sql_.startswith("ALTER TABLE") else None))
 
     if constraints:
         by_name = {d.get("name"): d for d in ds_uc}
@@ -194,14 +209,39 @@ def plan(doc: dict, onto: dict | None, catalog: str, schema: str, volume: str = 
                 p.notes.append(f"Metric view for {f} skipped: {e}")
                 continue
             p.steps.append(Step("metric_view", mv.ddl(body, qn(target)), target=target))
-        if not facts:
+        for name, c in (onto.get("metric_views") or {}).items():      # made in the guided builder
+            target = str(c.get("target") or "")
+            if target.count(".") != 2:
+                target = f"{catalog}.{schema}.{mv._snake(name)}"
+            try:
+                p.steps.append(Step("metric_view", mv.ddl(mv.to_yaml(c["view"]), qn(target)), target=target))
+            except Exception as e:  # noqa: BLE001
+                p.notes.append(f"Metric view {name} skipped: {e}")
+        if not facts and not onto.get("metric_views"):
             p.notes.append("No fact datasets found, so there are no metric views to create.")
+
+    if genie:
+        from . import genie as gn
+        src = onto if onto is not None else None
+        if src is None:
+            p.notes.append("Genie space skipped: the model could not be read.")
+        else:
+            views = [s.target for s in p.steps if s.kind == "metric_view"]
+            defn = gn.space_definition(src, views)
+            issues = gn.problems(defn)
+            if issues:
+                p.notes += [f"Genie space skipped: {x}" for x in issues]
+            else:
+                desc = str((src.get("ontology") or {}).get("description") or doc.get("description") or "")[:16000]
+                p.genie = {"definition": defn, "title": genie_title or model.replace("_", " ").title(),
+                           "description": desc, "space_id": genie_space_id or None}
     return p
 
 
-def execute(p: Plan, run, token: str | None, author: str = "", progress=None) -> dict:
-    """Run the plan: SQL steps first (the volume must exist before files go in), then the files."""
-    total = len(p.steps) + len(p.files) + 1
+def execute(p: Plan, run, token: str | None, author: str = "", progress=None, genie_fn=None) -> dict:
+    """Run the plan: SQL steps first (the volume must exist before files go in), then the files, then Genie.
+    `genie_fn(definition, title, description, space_id) -> {"space_id", "url", "action"}`."""
+    total = len(p.steps) + len(p.files) + 1 + (1 if p.genie else 0)
     done = 0
 
     def tick(msg):
@@ -236,12 +276,23 @@ def execute(p: Plan, run, token: str | None, author: str = "", progress=None) ->
             file_errors.append(f"{path}: {str(e)[:2000]}")
         tick(f"file: {path.rsplit('/', 1)[-1]}")
 
+    genie_res = None
+    if p.genie and genie_fn is not None:
+        g = p.genie
+        try:
+            genie_res = {"status": "ok", **genie_fn(g["definition"], g["title"], g["description"], g["space_id"])}
+        except Exception as e:  # noqa: BLE001
+            genie_res = {"status": "failed", "message": str(e).splitlines()[0][:600] if str(e) else repr(e)}
+        tick("Genie space")
+
     log_path = f"{p.folder}/deployments.json"
     entry = {"version": p.version, "deployed_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
              "deployed_by": author, "model": p.model, "target": f"{p.catalog}.{p.schema}",
              "files": files_ok, "file_errors": file_errors,
              "steps": [{"kind": s.kind, "target": s.target, "status": s.status, "message": s.message}
                        for s in p.steps]}
+    if genie_res is not None:
+        entry["genie"] = genie_res
     if files_ok:
         try:
             prev = store.read_or_none(log_path, token)
@@ -257,7 +308,8 @@ def execute(p: Plan, run, token: str | None, author: str = "", progress=None) ->
             file_errors.append(f"{log_path}: {str(e)[:300]}")
     tick("deployment log")
     entry["written_as"] = who
-    entry["ok"] = not file_errors and all(s.status == "ok" for s in p.steps)
+    entry["ok"] = (not file_errors and all(s.status == "ok" for s in p.steps)
+                   and (genie_res is None or genie_res["status"] == "ok"))
     return entry
 
 
@@ -268,3 +320,12 @@ def read_log(catalog: str, schema: str, volume: str, model: str, token: str | No
     except ValueError:
         return []
     return list(reversed(log)) if isinstance(log, list) else []
+
+
+def last_genie_space(log: list[dict]) -> str | None:
+    """The Genie space id the newest deployment (in read_log order) created or updated."""
+    for e in log:
+        g = e.get("genie") or {}
+        if g.get("status") == "ok" and g.get("space_id"):
+            return g["space_id"]
+    return None

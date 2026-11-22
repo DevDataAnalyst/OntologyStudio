@@ -1,15 +1,15 @@
 """
 Streamlit views for the governed / learned side of the ontology:
-  home_tab       Ontology home: domains & subdomains, the assets in each, certification, UC tags
+  home_tab       Domains & subdomains, the assets in each, certification
   knowledge_tab  Pages (governed wiki), learned snippets with authority scores, experts
   review_tab     Review queue: promote, certify, settle conflicts, fix feedback hotspots
-  monitor_tab    Request traces, feedback, token cost per user / domain, budgets, warehouse spend
+  traces_view    Request traces, feedback, token cost per user / domain (Test step)
+  cost_settings  Model prices, budgets, stored traces, warehouse spend (Settings)
   ask_tab        Ask, scoped by domain, traced, with feedback that feeds learned knowledge
 """
 from __future__ import annotations
 
 import io
-import time
 import zipfile
 
 import pandas as pd
@@ -143,14 +143,14 @@ def home_tab(onto: dict, runner: dict, uc_runner, on_databricks: bool):
                                    by=current_user(), domains=_split(r.domains))
                     _commit(onto, "Metric governance updated")
                 st.caption("One certified definition per KPI: Ask prefers ✅ certified metrics and never sees ⛔ "
-                           "deprecated ones. Deploy them as Unity Catalog metric views from the Metric views tab.")
+                           "deprecated ones. They deploy as Unity Catalog metric views with **Publish → Deploy**.")
             else:
                 st.caption("No metrics in this domain.")
         with t3:
             for p in a["pages"]:
                 st.markdown(f"{_icon(p.get('status'))} **{p['title']}** — {p.get('owner') or 'no owner'}")
             if not a["pages"]:
-                st.caption("No pages yet — create one in the Knowledge tab.")
+                st.caption("No pages yet — create one in **Knowledge**.")
         with t4:
             for s in a["snippets"][:15]:
                 st.markdown(f"{KIND_ICON.get(s['kind'], '')} `{s['text'][:120]}` · authority **{s.get('authority', 0):.2f}**")
@@ -200,27 +200,9 @@ def home_tab(onto: dict, runner: dict, uc_runner, on_databricks: bool):
             gv.inherit_metric_domains(onto)
             _commit(onto, "Tables updated")
 
-    with st.expander("Unity Catalog tags"):
-        stmts = gv.uc_tag_statements(onto)
-        st.caption(f"Writes `{gv.TAG_DOMAIN}`, `{gv.TAG_STATUS}` and `{gv.TAG_OWNER}` tags on the source tables, so "
-                   "domains and certification are visible in Catalog Explorer and to other tools. "
-                   "Needs APPLY TAG on the tables.")
-        st.code(";\n".join(stmts) or "-- no tables with a 3-part name and domains yet", language="sql")
-        can = runner.get("kind") == "uc" and on_databricks
-        c1, c2 = st.columns(2)
-        if c1.button("🏷️ Apply tags in Unity Catalog", disabled=not (can and stmts)):
-            run, errs = uc_runner(), []
-            for s in stmts:
-                try:
-                    run(s)
-                except Exception as e:  # noqa: BLE001
-                    errs.append(str(e)[:200])
-            (st.error if errs else st.success)(f"{len(stmts) - len(errs)} of {len(stmts)} tables tagged."
-                                               + (" " + errs[0] if errs else ""))
-        if c2.button("⬇️ Read tags from Unity Catalog", disabled=not can):
-            fqns = [c["source_fqn"] for c in onto["classes"].values() if str(c.get("source_fqn", "")).count(".") == 2]
-            n = gv.apply_uc_tags(onto, gv.read_uc_tags(uc_runner(), fqns))
-            _commit(onto, f"Read tags for {n} table(s)")
+    st.caption(f"Domains, certification and owners are written to Unity Catalog as `{gv.TAG_DOMAIN}`, "
+               f"`{gv.TAG_STATUS}` and `{gv.TAG_OWNER}` tags by **Publish → Deploy**, and read back when a model "
+               "is built from Unity Catalog.")
 
 
 # =========================================================================== #
@@ -518,9 +500,10 @@ def _review_actions(onto, it):
 
 
 # =========================================================================== #
-# Monitor: traces, cost, budgets
+# Cost and budgets (Settings) · traces (Test)
 # =========================================================================== #
-def monitor_tab(uc_runner, on_databricks: bool):
+def cost_settings(uc_runner, on_databricks: bool):
+    """Settings: model prices, the daily token budget, stored traces and the SQL warehouse spend."""
     ss.setdefault("price_in", tm.DEFAULT_PRICE_IN)
     ss.setdefault("price_out", tm.DEFAULT_PRICE_OUT)
     ss.setdefault("token_budget", tm.DEFAULT_DAILY_TOKEN_BUDGET)
@@ -539,11 +522,42 @@ def monitor_tab(uc_runner, on_databricks: bool):
                 st.error(str(e)[:300])
     else:
         c4.caption("Set TELEMETRY_TABLE (catalog.schema.table) in app.yaml to keep traces in a Delta table.")
+    _warehouse_cost(uc_runner, on_databricks)
+
+
+def _warehouse_cost(uc_runner, on_databricks: bool):
+    st.markdown("**SQL warehouse spend** (system.billing.usage, split per user by query time)")
+    wid = __import__("os").getenv("SQL_WAREHOUSE_ID", "")
+    days = st.slider("Days", 7, 90, 30, key="wh_days")
+    if st.button("Load warehouse cost", disabled=not (on_databricks and wid)):
+        try:
+            with st.spinner("Reading system tables…"):
+                daily, per_user = tm.warehouse_cost(uc_runner(), wid, days)
+            ss.wh_cost = (daily, per_user)
+        except Exception as e:  # noqa: BLE001
+            st.error(f"Needs SELECT on system.billing.usage, system.billing.list_prices and system.query.history: "
+                     f"{str(e)[:250]}")
+    if ss.get("wh_cost"):
+        daily, per_user = ss.wh_cost
+        a, b = st.columns(2)
+        with a:
+            st.metric("Warehouse list-price cost", f'${float(daily["usd"].fillna(0).sum()):,.2f}',
+                      f'{float(daily["dbus"].fillna(0).sum()):,.1f} DBUs', delta_color="off")
+            if len(daily):
+                st.line_chart(daily.set_index("usage_date")["usd"])
+        with b:
+            st.dataframe(per_user, hide_index=True, width="stretch")
+
+
+def traces_view(uc_runner, on_databricks: bool):
+    """Test → 📈 Traces: every Ask and test request, with feedback and estimated cost."""
+    ss.setdefault("price_in", tm.DEFAULT_PRICE_IN)
+    ss.setdefault("price_out", tm.DEFAULT_PRICE_OUT)
     ts = traces()
     for t in ts:
         t["cost_usd"] = tm.price(t, ss.price_in, ss.price_out)
     if not ts:
-        st.info("No requests yet. Ask a question in the Ask tab; every request is traced here.")
+        st.info("No requests yet. Ask a question or run the test set; every request is traced here.")
     else:
         df = pd.DataFrame(ts)
         df["tokens"] = df["prompt_tokens"].fillna(0) + df["completion_tokens"].fillna(0)
@@ -601,28 +615,6 @@ def monitor_tab(uc_runner, on_databricks: bool):
             if t.get("feedback"):
                 st.caption(f"Feedback: {'👍' if t['feedback'] == 'up' else '👎'} {t.get('feedback_note') or ''}")
 
-    st.divider()
-    st.markdown("**SQL warehouse spend** (system.billing.usage, split per user by query time)")
-    wid = __import__("os").getenv("SQL_WAREHOUSE_ID", "")
-    days = st.slider("Days", 7, 90, 30, key="wh_days")
-    if st.button("Load warehouse cost", disabled=not (on_databricks and wid)):
-        try:
-            with st.spinner("Reading system tables…"):
-                daily, per_user = tm.warehouse_cost(uc_runner(), wid, days)
-            ss.wh_cost = (daily, per_user)
-        except Exception as e:  # noqa: BLE001
-            st.error(f"Needs SELECT on system.billing.usage, system.billing.list_prices and system.query.history: "
-                     f"{str(e)[:250]}")
-    if ss.get("wh_cost"):
-        daily, per_user = ss.wh_cost
-        a, b = st.columns(2)
-        with a:
-            st.metric("Warehouse list-price cost", f'${float(daily["usd"].fillna(0).sum()):,.2f}',
-                      f'{float(daily["dbus"].fillna(0).sum()):,.1f} DBUs', delta_color="off")
-            if len(daily):
-                st.line_chart(daily.set_index("usage_date")["usd"])
-        with b:
-            st.dataframe(per_user, hide_index=True, width="stretch")
 
 
 # =========================================================================== #
@@ -644,7 +636,7 @@ def ask_tab(onto: dict, runner: dict, uc_runner, on_databricks: bool):
         return
     st.markdown("Ask a business question; the Foundation Model writes SQL **from the ontology** "
                 "(optionally side by side with a schema-only baseline). Every query is checked against the model "
-                "and the data before you see it, and every request is traced in **Monitor**.")
+                "and the data before you see it, and every request is traced in **📈 Traces**.")
     if not on_databricks:
         st.info("Needs the Foundation Model endpoint — available when running on Databricks.")
     c1, c2, c3, c4 = st.columns([2, 1.1, 1.1, 1.1])
@@ -678,7 +670,7 @@ def ask_tab(onto: dict, runner: dict, uc_runner, on_databricks: bool):
             pass
     blocked = bool(budget) and used >= budget
     if blocked:
-        st.error(f"You have used your daily budget of {budget:,} tokens. An admin can raise it in Monitor.")
+        st.error(f"You have used your daily budget of {budget:,} tokens. An admin can raise it in Settings.")
     if st.button("Ask", type="primary", disabled=not (q and on_databricks) or blocked):
         from .llm_enrich import chat
         results = []

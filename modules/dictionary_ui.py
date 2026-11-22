@@ -1,12 +1,11 @@
-"""📘 Data dictionary tab: the ontology seen by a Power BI developer.
+"""Describe → 📖 Dictionary: every table, column, metric and page in one searchable place.
 
 Search every table, column, measure and page; open a table to see its grain, size, freshness, owner,
-certification, storage-mode advice, column-by-column modeling settings, relationships, DAX measures,
-Power Query M, how people actually query it, and a live referential-integrity check. Everything can be
-downloaded as a starter kit (dictionary, CSVs, DAX and M)."""
+certification, columns with their profile, relationships, how people actually query it, and a live
+referential-integrity check. The Power BI starter kit (DAX measures, Power Query M, CSVs) is a download in
+Publish → Exports (modules/powerbi.py)."""
 from __future__ import annotations
 
-import os
 import sqlite3
 
 import pandas as pd
@@ -39,10 +38,10 @@ def _num(v):
 
 def dictionary_tab(onto: dict, runner: dict, uc_runner, on_databricks: bool):
     ss = st.session_state
-    st.caption("Everything a Power BI developer needs about each data object: grain, size, freshness, owner, "
-               "certification, Power BI data types and column settings, relationships, DAX measures, Power Query, "
-               "data-quality notes and how people already query it. Names follow Power BI conventions "
-               "(Customer ID, Unit Price) and the DAX and M below use the same names.")
+    st.caption("Everything about each table in business terms: grain, size, freshness, owner, certification, "
+               "columns, relationships, data-quality notes and how people already query it. Edit descriptions and "
+               "synonyms in the Model step's inspector; the Power BI pack (DAX, Power Query) is in "
+               "**Publish → Exports**.")
     c1, c2 = st.columns([1, 2.2])
     doms = ["All domains"] + gv.domain_names(onto)
     dom = c1.selectbox("Domain", doms, key="dd_domain")
@@ -69,7 +68,7 @@ def dictionary_tab(onto: dict, runner: dict, uc_runner, on_databricks: bool):
     with st.expander(f"Model overview: {len(classes)} tables", expanded=not q):
         st.dataframe(pd.DataFrame([{
             "Table": f"{ICON.get(t['status'], '')} {t['table']}", "Role": t["role"], "Rows": t["rows"],
-            "Columns": t["columns"], "Grain": t["grain"], "Storage mode": t["storage_mode"],
+            "Columns": t["columns"], "Grain": t["grain"],
             "Last changed": t["last_altered"], "Owner": t["owner"], "Domains": ", ".join(t["domains"]),
             "Source": t["source"]} for t in sorted(cards.values(), key=lambda t: (t["role"] != "fact", t["table"]))]),
             hide_index=True, width="stretch",
@@ -86,27 +85,6 @@ def dictionary_tab(onto: dict, runner: dict, uc_runner, on_databricks: bool):
                        format_func=lambda c: f"{ICON.get(cards[c]['status'], '')} {cards[c]['table']}  "
                                              f"({cards[c]['role']}, {cards[c]['source']})")
     _table_detail(onto, cid, cards[cid], runner, uc_runner, on_databricks)
-
-    # ---------------- downloads ----------------
-    st.divider()
-    st.markdown("**Take it to Power BI**")
-    host = os.getenv("DATABRICKS_HOST", "").replace("https://", "").rstrip("/") or "<workspace-host>"
-    wid = os.getenv("SQL_WAREHOUSE_ID", "")
-    path = f"/sql/1.0/warehouses/{wid}" if wid and not wid.startswith("REPLACE") else "/sql/1.0/warehouses/<id>"
-    d1, d2, d3 = st.columns(3)
-    name = ((onto.get("ontology") or {}).get("name") or "model").replace(" ", "_").lower()
-    d1.download_button("⬇️ Power BI starter kit (.zip)", pb.starter_kit(onto, classes, host, path,
-                                                                       _dialect(runner)),
-                       file_name=f"{name}_powerbi_kit.zip", mime="application/zip", width="stretch",
-                       help="Data dictionary, columns/relationships/measures CSVs, measures.dax for DAX query view, "
-                            "a Date table and one Power Query script per table.")
-    d2.download_button("⬇️ Data dictionary (.md)", pb.dictionary_markdown(onto, classes, _dialect(runner)),
-                       file_name=f"{name}_data_dictionary.md", mime="text/markdown", width="stretch")
-    d3.download_button("⬇️ All columns (.csv)", pd.DataFrame([dict({"Table": cards[c]["table"]}, **r)
-                                                               for c in classes for r in pb.column_rows(onto, c)])
-                       .to_csv(index=False), file_name=f"{name}_columns.csv", mime="text/csv", width="stretch")
-    with st.expander("Date table (DAX)"):
-        st.code(pb.date_table_dax(onto), language="sql")
 
 
 def _dialect(runner: dict) -> str:
@@ -127,8 +105,7 @@ def _table_detail(onto, cid, card, runner, uc_runner, on_databricks):
     facts = [("Source", f"`{card['source']}`" + (f" ({card['table_type']})" if card["table_type"] else "")),
              ("Grain", card["grain"]), ("Role", card["role"]),
              ("Domains", ", ".join(card["domains"]) or "not assigned"),
-             ("Certification", card["status"] + (f" by {card['certified_by']}" if card.get("certified_by") else "")),
-             ("Storage mode", f"**{card['storage_mode']}**. {card['storage_why']}")]
+             ("Certification", card["status"] + (f" by {card['certified_by']}" if card.get("certified_by") else ""))]
     if card["upstream"] or card["downstream"]:
         facts.append(("Lineage", f"fed by {', '.join(card['upstream']) or 'nothing recorded'}; "
                                  f"feeds {', '.join(card['downstream']) or 'nothing recorded'}"))
@@ -138,20 +115,14 @@ def _table_detail(onto, cid, card, runner, uc_runner, on_databricks):
     if card["status"] == "deprecated":
         st.error("This table is deprecated: don't build new reports on it.")
 
-    t_cols, t_rel, t_meas, t_m, t_use = st.tabs(["Columns", "Relationships", "Measures (DAX)",
-                                                 "Power Query (M)", "Usage and docs"])
+    t_cols, t_rel, t_use = st.tabs(["Columns", "Relationships", "Usage and docs"])
     with t_cols:
         rows = pb.column_rows(onto, cid)
-        show = st.radio("Show", ["Modeling", "Profile", "Everything"], horizontal=True, key=f"dd_view_{cid}",
-                        label_visibility="collapsed")
-        cols = {"Modeling": ["Column", "Power BI type", "Kind", "Summarize by", "Hide", "Format", "Data category",
-                             "References", "Q&A synonyms", "Notes"],
-                "Profile": ["Column", "Source column", "SQL type", "Nullable", "Null %", "Distinct", "Min", "Max",
-                            "Sample values", "Description"]}.get(show)
+        cols = ["Column", "Description", "Kind", "Source column", "SQL type", "Null %", "Distinct", "Min", "Max",
+                "Sample values", "References", "Q&A synonyms", "Notes"]
         df = pd.DataFrame(rows)
-        st.dataframe(df[cols] if cols else df, hide_index=True, width="stretch",
-                     column_config={"Hide": st.column_config.CheckboxColumn(help="Hide in report view"),
-                                    "Null %": st.column_config.NumberColumn(format="%.1f %%"),
+        st.dataframe(df[[c for c in cols if c in df.columns]], hide_index=True, width="stretch",
+                     column_config={"Null %": st.column_config.NumberColumn(format="%.1f %%"),
                                     "Distinct": st.column_config.NumberColumn(format="localized")})
         flagged = [r for r in rows if r["Notes"]]
         if flagged:
@@ -193,32 +164,6 @@ def _table_detail(onto, cid, card, runner, uc_runner, on_databricks):
             if res:
                 st.dataframe(pd.DataFrame(res), hide_index=True, width="stretch")
 
-    with t_meas:
-        ti = st.toggle("Add time intelligence (YTD, prior year, YoY %)", key=f"dd_ti_{cid}")
-        ms = [r for r in pb.measures(onto, _dialect(runner), time_intelligence=ti) if r["Home table"] == card["table"]]
-        if ms:
-            st.dataframe(pd.DataFrame(ms)[["Measure", "DAX", "Format", "Display folder", "Status", "Description",
-                                           "SQL", "Notes"]], hide_index=True, width="stretch")
-            st.code(pb.measures_dax_query(ms), language="sql")
-            st.caption("Paste into Power BI Desktop's DAX query view and click 'Update model with changes'. "
-                       "Measures come from the ontology's metrics; certify them in the Review queue.")
-        else:
-            st.info("No metrics are based on this table. Add one in the Network inspector or promote a learned "
-                    "expression in the Review queue.")
-
-    with t_m:
-        host = os.getenv("DATABRICKS_HOST", "").replace("https://", "").rstrip("/") or "<workspace-host>"
-        wid = os.getenv("SQL_WAREHOUSE_ID", "")
-        path = f"/sql/1.0/warehouses/{wid}" if wid and not wid.startswith("REPLACE") else "/sql/1.0/warehouses/<id>"
-        inc = st.toggle("Incremental refresh filter", value=card["storage_mode"].startswith("Import + incremental"),
-                        key=f"dd_inc_{cid}", disabled=not card["main_date"],
-                        help="Adds the RangeStart/RangeEnd filter on " + (pb.friendly(card["main_date"])
-                                                                         if card["main_date"] else "a date column"))
-        st.code(pb.power_query_m(onto, cid, host, path, incremental=inc), language="powerquery")
-        st.caption("Home > Get data > Blank query > Advanced editor. It keeps only the useful columns, renames them "
-                   "to the business names and sets the Power BI data types. Server and HTTP path come from this "
-                   "app's SQL warehouse.")
-
     with t_use:
         snips = sorted([s for s in onto.get("snippets", []) if cid in (s.get("classes") or [])
                         and s.get("status") != "dismissed"], key=lambda s: -s.get("authority", 0))
@@ -233,7 +178,7 @@ def _table_detail(onto, cid, card, runner, uc_runner, on_databricks):
             if ex:
                 st.markdown("**Who to ask:** " + ", ".join(f"{e['person']} ({e['snippet_uses']} uses)" for e in ex))
         else:
-            st.caption("No learned usage yet: learn from query history in the Knowledge tab.")
+            st.caption("No learned usage yet: learn from query history in **Describe → Knowledge**.")
         words = {cid.lower(), card["table"].lower(), str(onto["classes"][cid].get("label", "")).lower()}
         pages = [p for p in onto.get("pages", []) if p.get("status") != "deprecated" and
                  (cid in (p.get("classes") or []) or any(w and w in f"{p.get('title', '')} {p.get('body', '')}".lower()

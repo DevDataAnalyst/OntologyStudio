@@ -167,12 +167,23 @@ First pick the **source type** in the sidebar. **Databricks** reads Unity Catalo
 | Step | What it does |
 |---|---|
 | **Objects** | Reads `information_schema` in each catalog: tables, views, columns, comments, and primary key, unique and foreign key constraints. Declared foreign keys resolve across schemas and catalogs. |
-| **Profiling** | Row counts, distinct counts (`approx_count_distinct` on Unity Catalog), non-null counts, up to 5 sample values per column, and the distinct values of low-cardinality text columns (enumerations). On Unity Catalog it profiles 8 tables in parallel and skips complex types (`ARRAY`, `MAP`, `STRUCT`, `VARIANT`, …). |
+| **Profiling** | Row counts, distinct counts (`approx_count_distinct` on Unity Catalog), non-null counts, the 5 most common values per column, and the distinct values of low-cardinality text columns (enumerations). On Unity Catalog it profiles 8 tables in parallel and skips complex types (`ARRAY`, `MAP`, `STRUCT`, `VARIANT`, …). The rules below come from [NVIDIA Auto Ontology](https://github.com/NVIDIA/auto-ontology). |
 | **Primary keys** | Uses declared keys. Where there are none, it infers one from a unique, non-null column with a key-like name (`*_id`, `*_key`, `*_sk`, `*_code`, …) or a name that starts with the table's entity. Needs profiling, which is on by default. |
 | **Relationships** | Scores every candidate join from five signals (below). Strong joins are accepted; the rest become suggestions for you to review. |
 | **Lineage** | Reads `system.access.table_lineage` and `system.access.column_lineage` (last 180 days by default). Upstream and downstream tables outside your selection appear as external nodes. |
 | **Semantics** | Classifies each class as **fact**, **dimension** or **entity**, and each column as **key**, **time**, **measure** or **dimension**. Measures get a default aggregation: `AVG` for prices, rates and ratios, otherwise `SUM`. Every fact gets base metrics: a row count plus one metric per measure. |
 | **LLM enrichment** (optional) | Fills in descriptions, synonyms, code meanings, business rules and metrics, grounded in documents you upload (below). |
+
+#### What profiling keeps, skips and infers
+
+| Rule | What happens |
+|---|---|
+| **Personal data** | Columns whose names mark personal data are tagged `pii: <category>` (`email_address`, `phone_number`, `government_id`, `date_of_birth`, `payment_card`, `banking`, `credential`, …). Names, addresses, ids, age, gender and salary count only in a table of people (`customers`, `employees`, `users`, also `dim_customer` or `silver_customers`). Their values are never read: no samples, no list of values, no min/max, only counts. A model opened from a file or edited by hand gets the same treatment, so personal values never reach the LLM, an Ossie export or a saved version. The rules read names only: a column they cannot place, such as `contact_name` or `employee_name`, keeps its values until you tag it (`pii: person_name` in the YAML), and `pii: false` stops the tagging for a column. |
+| **Text dates** | A text column whose values all read as one date notation gets `date_format` (`YYYY-MM-DD`, `MM/DD/YYYY`, `YYYYMMDD`, `YYYY-MM`, …). `13/07/2011` settles day-first; when every value reads both ways, nothing is claimed. Ask is told to write literals in that notation and to parse the column with it. |
+| **Samples** | The 5 most common values (of a 200-row sample on Unity Catalog), keeping numbers, dates and flags, and text of 30 characters or less (longer text is prose, not a useful example). |
+| **Key columns to other tables** | A foreign key to a table outside the model stays a column, with `references: table.column` and the key role, instead of vanishing. |
+| **Circuit breaker** | After 3 tables in a row time out or cannot reach the SQL warehouse, profiling stops and says how many tables it skipped; overlap checks stop the same way. |
+| **Descriptions** | A description that only repeats the name (`customer_id`: "Customer ID") counts as missing in the worklist and readiness, and LLM enrichment may replace it when it was copied from a database comment. What a person wrote is never replaced. |
 
 #### How relationships are found
 
@@ -182,8 +193,9 @@ Unity Catalog constraints are informational and often missing, so each candidate
 |---|---|
 | Declared foreign key | Taken as given (1.0). |
 | Naming | Same name as the target's key, e.g. `fact_sales.customer_key = dim_customer.customer_key` (0.60). A column that names the entity, e.g. `cust_id → customers` (0.55). A column that ends with the key's name (0.40). |
+| Same key | Two tables keyed by the same specific column, e.g. `customer_scores.customer_id` and `customers.customer_id`, hold one row per customer each: a one-to-one join to the table with more rows (0.60). Generic key names (`id`, `key`, `code`, …) never count, and copies of one table (`stg_customers`, `customers_2024`) are left apart. |
 | Type check | −0.30 when one side is numeric and the other is text. |
-| Value overlap | A sampled `LEFT JOIN` for the top 80 candidates: what share of up to 5,000 distinct child values exist in the parent key. ≥ 98% adds 0.35, ≥ 90% adds 0.25, ≥ 70% adds 0.10, anything lower subtracts 0.50. |
+| Value overlap | A sampled `LEFT JOIN` for the top 80 candidates: what share of up to 5,000 distinct child values exist in the parent key. ≥ 98% adds 0.35, ≥ 90% adds 0.25, ≥ 70% adds 0.10, anything lower subtracts 0.50. For a same-key join whose key values are all shorter than 3 characters (1, 2, 3 sit inside any key), are labels, or are withheld as personal data and number under 100, a high overlap adds nothing, so the join stays a suggestion. |
 | Query history | Equality joins that people actually ran, parsed with sqlglot from finished `SELECT`s in `system.query.history` (last 90 days, up to 3,000 statements). Raises the score to at least 0.45, plus up to 0.30 more the more often the join appears. |
 
 The best target per child column wins. Joins at or above the threshold (0.75 by default, adjustable in the sidebar) become relationships. Joins between 0.30 and the threshold become **suggestions**, with their evidence attached, which you accept or reject. Nothing is added silently.
@@ -810,7 +822,7 @@ python -m pip install -r requirements.txt pytest
 python -m pytest tests -q
 ```
 
-49 tests, no workspace needed (Databricks calls are faked):
+69 tests, no workspace needed (Databricks calls are faked):
 
 | File | Covers |
 |---|---|
@@ -821,6 +833,8 @@ python -m pytest tests -q
 | `tests/test_answering.py` | The SQL checker (guard, unknown names, joins, fan-out, values, scale, dry run, Unity Catalog names), join paths, the coverage check, verified examples and glossary through Ossie, Ask's repair loop, value lookups, readiness |
 | `tests/test_modeling.py` | Re-scan drift and table filters, roles and default joins (paths, checker, Ossie, edits), unlinked id columns, observed joins, filter rules tested on data, model checks, the change log, one-table LLM drafts and tolerant JSON parsing |
 | `tests/test_lifecycle.py` | The versioned store (save, history, diff, restore, legacy files), the SQL warehouse fallback statements, deployment plans and grants, execute with fallbacks, the source registry, the metric view spec (`fields`, `rely`, aggregate-only measures) |
+| `tests/test_powerbi.py` | The data dictionary: Power BI types, column settings, relationships, DAX, M, the starter kit |
+| `tests/test_profiling.py` | Personal-data rules and value withholding (SQLite, Unity Catalog, Ossie, hand edits), text date formats, samples, FK columns to tables outside the model, same-key one-to-one joins and the short-value guard, name-only descriptions, the profiling circuit breaker |
 
 ## Troubleshooting
 
@@ -868,6 +882,7 @@ modules/db_connection.py        On-behalf-of-user SQL warehouse connection
 modules/uc.py                   Unity Catalog browse, extract (up to 100 objects), profile, lineage, query-history joins
 modules/extractors.py           SQLite and SQL-script extractors
 modules/schema_model.py         Source-neutral relational model
+modules/profiling.py            Personal-data rules, text date formats, samples, the circuit breaker (from NVIDIA Auto Ontology)
 modules/discovery.py            Primary key inference, relationship discovery and scoring
 modules/ontology_builder.py     Relational → ontology mapping, YAML, validation, synonyms index
 modules/semantics.py            Fact/dimension and measure/dimension classification, base metrics
@@ -903,6 +918,7 @@ tests/test_ask.py               Ask engine: Decimal-safe prompts, focus, JSON an
 tests/test_powerbi.py           Data dictionary: Power BI types, settings, relationships, DAX, M, starter kit
 tests/test_answering.py         SQL checker, join paths, coverage check, verified examples, glossary, readiness
 tests/test_modeling.py          Re-scan, worklist, roles and default joins, relationship review, model checks, change log
+tests/test_profiling.py         Personal data, text dates, samples, unmatched FK columns, same-key joins, circuit breaker
 samples/                        Sample databases, scripts, docs and their generated outputs
 docs/images/                    Screenshots and the network diagram used in this README
 ```
@@ -928,6 +944,7 @@ docs/images/                    Screenshots and the network diagram used in this
 - **No credentials in the code or config.** The app uses the identity the Apps runtime injects, plus the user's forwarded token. The warehouse ID comes from an app resource.
 - **Parameterized SQL.** Values go through named parameters. Catalog, schema and table names are checked against `[A-Za-z0-9_-]` and back-quoted.
 - **Read-only Ask.** Generated SQL runs only if it is a single `SELECT` or `WITH` statement.
+- **Personal data stays out of the model.** Columns named like personal data (emails, phones, names and addresses of people, …) are never sampled; the model keeps their counts and a `pii` tag, not their values, so the LLM, exports and saved versions never see them.
 - **What the LLM sees.** Enrichment sends class, column and relationship names, comments, sample values and enumerations, plus the documents you upload, to the serving endpoint in your workspace. Turn off profiling for tables whose values should not be in a prompt.
 - **Provenance.** Classes, columns, relationships, code meanings, rules and metrics carry a `provenance` tag: `schema`, `profile`, `inferred`, `discovered`, `heuristic`, `manual`, `docs/<file>`, `llm`, `learned` (promoted from a snippet) or `review` (drafted from the review queue).
 - **Learned snippets keep names.** Snippets store who ran each query (`executed_by`) and where. They are saved with the ontology, so treat saved versions and Ossie exports like query history.

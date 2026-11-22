@@ -13,9 +13,14 @@ Pure functions; the caller passes `answer_fn(question) -> {"sql", "status", "err
 """
 from __future__ import annotations
 
+import hashlib
+import itertools
+import json
 from datetime import datetime, timezone
 
 import pandas as pd
+
+from .ask import is_read_only
 
 MAX_RUNS = 10
 
@@ -45,12 +50,43 @@ def results_match(got: pd.DataFrame | None, expected: pd.DataFrame | None) -> tu
     if got.shape[1] != expected.shape[1]:
         return False, f"{got.shape[1]} column(s), expected {expected.shape[1]}"
 
-    def rows(df):
-        return sorted((tuple(sorted((_norm(v) for v in r), key=repr)) for r in df.itertuples(index=False)),
-                      key=repr)
-    if rows(got) == rows(expected):
-        return True, "same result"
+    def cols(df):
+        return [[_norm(v) for v in df.iloc[:, i]] for i in range(df.shape[1])]
+
+    def rows(cs, order):
+        return sorted(zip(*(cs[i] for i in order)), key=repr)
+    g, e = cols(got), cols(expected)
+    want = rows(e, range(len(e)))
+    # Ignore column order with ONE column mapping for the whole result, so values stay with their column.
+    # Only columns holding the same values (as a multiset) can map to each other, which keeps the search small.
+    sig = [sorted(c, key=repr) for c in g]
+    options = [[j for j in range(len(g)) if sig[j] == sorted(c, key=repr)] for c in e]
+    if any(not o for o in options):
+        return False, "different values"
+    for order in itertools.islice(itertools.product(*options), 5000):
+        if len(set(order)) == len(order) and rows(g, order) == want:
+            return True, "same result"
     return False, "different values"
+
+
+def _sql_ok(sql: str) -> bool:
+    return is_read_only(str(sql or "").strip().rstrip(";"))
+
+
+VOLATILE = ("test_runs", "changes", "examples")
+
+
+def fingerprint(onto: dict) -> dict:
+    """What a run tested: the model, as its Apache Ossie export without layout or history (so a saved and
+    reopened model keeps the same fingerprint), and the question / SQL pairs."""
+    from . import ossie
+
+    def h(x):
+        return hashlib.sha1(json.dumps(x, sort_keys=True, default=str).encode("utf-8")).hexdigest()[:16]
+    doc, _ = ossie.from_ontology({k: v for k, v in onto.items() if k not in VOLATILE},
+                                 include_studio=True, include_layout=False)
+    return {"model": h(doc),
+            "questions": h(sorted((e["question"], " ".join(e["sql"].split())) for e in questions(onto)))}
 
 
 def run_set(onto: dict, answer_fn, run=None, baseline_fn=None, by: str = "", progress=None) -> dict:
@@ -62,7 +98,9 @@ def run_set(onto: dict, answer_fn, run=None, baseline_fn=None, by: str = "", pro
             progress(i / max(len(qs), 1), e["question"][:80])
         item = {"question": e["question"], "expected_sql": e["sql"]}
         expected = None
-        if run is not None:
+        if run is not None and not _sql_ok(e["sql"]):
+            item["expected_error"] = "not a single read-only query (SELECT or WITH), so it was not run"
+        elif run is not None:
             try:
                 expected = run(e["sql"])
             except Exception as ex:  # noqa: BLE001
@@ -84,6 +122,10 @@ def run_set(onto: dict, answer_fn, run=None, baseline_fn=None, by: str = "", pro
                 res["passed"], res["why"] = False, "the expected SQL failed: " + item["expected_error"]
             else:
                 got = a.get("result")
+                if got is None and not _sql_ok(a["sql"]):
+                    res["passed"], res["why"] = False, "the generated SQL is not a single read-only query"
+                    item[mode] = res
+                    continue
                 if got is None:
                     try:
                         got = run(a["sql"])
@@ -100,7 +142,7 @@ def run_set(onto: dict, answer_fn, run=None, baseline_fn=None, by: str = "", pro
            "total": len(items), "passed": sum(1 for x in items if (x.get("ontology") or {}).get("passed")),
            "baseline_passed": (sum(1 for x in items if (x.get("baseline") or {}).get("passed"))
                                if baseline_fn is not None else None),
-           "items": items}
+           "fingerprint": fingerprint(onto), "items": items}
     runs = onto.setdefault("test_runs", [])
     runs.insert(0, out)
     del runs[MAX_RUNS:]
@@ -119,9 +161,15 @@ def status(onto: dict) -> dict:
         return {"total": 0, "passed": 0, "stale": False, "verdict": "no test questions yet"}
     if not r:
         return {"total": len(qs), "passed": 0, "stale": True, "verdict": f"{len(qs)} question(s), not run yet"}
-    stale = {x["question"] for x in r["items"]} != {e["question"] for e in qs}
+    fp, now = r.get("fingerprint"), fingerprint(onto)
+    if fp:
+        why = [w for w, k in (("questions", "questions"), ("model", "model")) if fp.get(k) != now[k]]
+    else:                                                        # runs saved before fingerprints existed
+        why = ["questions"] if {x["question"] for x in r["items"]} != {e["question"] for e in qs} else []
+    stale = bool(why)
     return {"total": r["total"], "passed": r["passed"], "stale": stale,
-            "verdict": f"{r['passed']} of {r['total']} pass" + (" (questions changed since)" if stale else "")}
+            "verdict": f"{r['passed']} of {r['total']} pass"
+                       + (f" ({' and '.join(why)} changed since, run again)" if stale else "")}
 
 
 def regressions(onto: dict) -> list[str]:

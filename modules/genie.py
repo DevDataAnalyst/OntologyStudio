@@ -41,6 +41,20 @@ def _fqn(c: dict) -> str | None:
     return fq if fq.count(".") == 2 and all(fq.split(".")) else None
 
 
+def _aliases(classes: dict) -> dict:
+    """One alias per class: the table name, widened to schema_table (then catalog_schema_table) on a clash."""
+    fqs = {cid: _fqn(c) for cid, c in classes.items() if _fqn(c)}
+    out: dict = {}
+    for depth in (1, 2, 3):
+        cand = {cid: re.sub(r"\W+", "_", "_".join(fq.split(".")[-depth:])) for cid, fq in fqs.items()
+                if cid not in out}
+        taken = list(out.values()) + list(cand.values())
+        for cid, a in cand.items():
+            if taken.count(a) == 1 or depth == 3:
+                out[cid] = a
+    return out
+
+
 def _lines(sql: str) -> list[str]:
     rows = str(sql or "").strip().splitlines()
     return [r + "\n" for r in rows[:-1]] + rows[-1:] if rows else []
@@ -117,11 +131,7 @@ def space_definition(onto: dict, metric_views: list[str] | None = None) -> dict:
     if mvs:
         data_sources["metric_views"] = [{"identifier": m} for m in mvs]
 
-    alias = {}
-    for cid, c in classes.items():
-        fq = _fqn(c)
-        if fq:
-            alias[cid] = re.sub(r"\W+", "_", fq.rsplit(".", 1)[1]) or cid
+    alias = _aliases(classes)
     joins = []
     for pid, p in (onto.get("object_properties") or {}).items():
         j = p.get("join") or {}

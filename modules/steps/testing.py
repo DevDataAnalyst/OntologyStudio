@@ -79,7 +79,7 @@ def _test_set(onto: dict) -> None:
         reg = ts.regressions(onto)
         m[3].metric("Regressions", len(reg))
         if status["stale"]:
-            st.warning("The questions changed since the last run. Run the set again.")
+            st.warning("The model or its questions changed since the last run. Run the set again.")
         for q in reg:
             st.error(f"Passed before, fails now: {q}")
     by_q = {x["question"]: x for x in (r or {}).get("items", [])}

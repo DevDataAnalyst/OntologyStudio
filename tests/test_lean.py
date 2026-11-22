@@ -130,15 +130,15 @@ def test_run_set_scores_and_regressions():
     _, onto = _model()
     data = {"SELECT SUM(ss_net_paid)\nFROM store_sales": pd.DataFrame({"s": [10]}),
             "SELECT c_state, COUNT(*) FROM customer GROUP BY 1": pd.DataFrame({"st": ["CA"], "n": [3]}),
-            "GOOD": pd.DataFrame({"x": [10]}), "BAD": pd.DataFrame({"x": [11]})}
+            "SELECT good": pd.DataFrame({"x": [10]}), "SELECT bad": pd.DataFrame({"x": [11]})}
     run = data.__getitem__
-    first = testset.run_set(onto, lambda q: {"status": "ok", "sql": "GOOD"}, run,
+    first = testset.run_set(onto, lambda q: {"status": "ok", "sql": "SELECT good"}, run,
                             baseline_fn=lambda q: {"status": "error", "error": "no idea"})
     assert first["total"] == 2 and first["passed"] == 1 and first["baseline_passed"] == 0
     assert testset.status(onto)["verdict"] == "1 of 2 pass"
-    testset.run_set(onto, lambda q: {"status": "ok", "sql": "BAD"}, run)
+    testset.run_set(onto, lambda q: {"status": "ok", "sql": "SELECT bad"}, run)
     assert testset.regressions(onto) == ["Total store sales"]
-    onto["examples"].append({"question": "New one", "sql": "GOOD"})
+    onto["examples"].append({"question": "New one", "sql": "SELECT good"})
     assert testset.status(onto)["stale"]
 
 
@@ -176,3 +176,47 @@ def test_test_runs_survive_the_ossie_save():
     back = ossie.to_ontology(ossie.validate_text(ossie.dump_yaml(doc), "m.yaml").document, "m.yaml")
     assert back.get("test_runs") and back["test_runs"][0]["total"] == 2
     assert [e["question"] for e in back["examples"]] == [e["question"] for e in onto["examples"]]
+
+
+def test_results_match_keeps_values_with_their_columns():
+    exp = pd.DataFrame({"c": ["US", "CA"], "n": [1, 2]})
+    assert testset.results_match(pd.DataFrame({"n": [2, 1], "c": ["CA", "US"]}), exp)[0]
+    assert not testset.results_match(pd.DataFrame({"a": [1, "CA"], "b": ["US", 2]}), exp)[0]
+
+
+def test_run_set_never_runs_write_sql():
+    _, onto = _model()
+    onto["examples"] = [{"question": "Oops", "sql": "DELETE FROM store_sales"}]
+    ran = []
+    out = testset.run_set(onto, lambda q: {"status": "ok", "sql": "DROP TABLE customer"},
+                          lambda sql: ran.append(sql) or pd.DataFrame({"x": [1]}))
+    assert ran == [] and out["passed"] == 0 and "read-only" in out["items"][0]["expected_error"]
+
+
+def test_status_goes_stale_when_the_model_or_sql_changes():
+    _, onto = _model()
+    testset.run_set(onto, lambda q: {"status": "ok", "sql": "x"}, None)
+    assert not testset.status(onto)["stale"]
+    onto["examples"][0]["sql"] = "SELECT 1"
+    assert testset.status(onto)["stale"]
+    testset.run_set(onto, lambda q: {"status": "ok", "sql": "x"}, None)
+    next(iter(onto["classes"].values()))["description"] = "edited"
+    assert "model" in testset.status(onto)["verdict"]
+
+
+def test_genie_aliases_are_unique_across_schemas():
+    _, onto = _model()
+    a, b = list(onto["classes"])[:2]
+    onto["classes"][a]["source_fqn"] = "main.bronze.customer"
+    onto["classes"][b]["source_fqn"] = "main.silver.customer"
+    al = genie._aliases(onto["classes"])
+    assert al[a] == "bronze_customer" and al[b] == "silver_customer"
+    assert len(set(al.values())) == len(al)
+
+
+def test_a_reopened_model_keeps_its_test_run_current():
+    _, onto = _model()
+    testset.run_set(onto, lambda q: {"status": "ok", "sql": "x"}, None)
+    doc, _ = ossie.from_ontology(onto, include_studio=True, include_layout=False)
+    back = ossie.to_ontology(ossie.validate_text(ossie.dump_yaml(doc), "m.yaml").document, "m.yaml")
+    assert not testset.status(back)["stale"]

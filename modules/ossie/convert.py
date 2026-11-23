@@ -59,7 +59,8 @@ GOVERNANCE_KEYS = ("domains", "status", "owner", "certified_by", "certified_at",
 MODEL_GOVERNANCE_KEYS = ("domains", "pages", "snippets", "trusted_authors", "review_dismissed",
                          "metric_views",                # views made in the guided builder
                          "glossary", "examples",        # glossary and verified question + SQL pairs
-                         "changes")                     # change log
+                         "changes",                     # change log
+                         "test_runs")                   # test set results (modules/testset.py)
 
 
 def _list(v) -> list:
@@ -454,7 +455,7 @@ def _class_from_dataset(ds: dict, cid: str) -> dict:
             p["synonyms"] = syn
         p["provenance"] = "ossie"
         for k in ("semantic_role", "aggregation", "allowed_values", "samples", "sql_type", "required", "unique",
-                  "provenance"):
+                  "provenance", "pii", "date_format", "references"):
             if k in fx:
                 p[k] = _jsonable(fx[k])
         stash = {k: copy.deepcopy(v) for k, v in f.items() if k not in ("name", "description") + EXT_KEYS}
@@ -855,7 +856,7 @@ def _field_from_property(pid: str, p: dict, vm: dict | None, include_studio: boo
     exts = copy.deepcopy(_list(st.get("nonportable_extensions")))
     if include_studio:
         sx = {k: p.get(k) for k in ("semantic_role", "aggregation", "allowed_values", "sql_type", "required", "unique",
-                                    "provenance") if p.get(k) not in (None, [], "")}
+                                    "provenance", "pii", "date_format", "references") if p.get(k) not in (None, [], "")}
         if sx:
             exts.append({"vendor_name": STUDIO_VENDOR, "data": _jsonable(sx)})
     if exts:

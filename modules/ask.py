@@ -217,13 +217,21 @@ How to write the query:
   each in its own subquery, then join on the parent. A ratio of totals is not a mean of ratios.
 - If something the question needs is NOT COVERED BY THE MODEL, do not substitute a similar measure: answer the
   rest and say what is missing in assumptions.
+- When two tables are joined by more than one relationship (roles such as ordered by / shipped by), use the one
+  marked default unless the question names another role.
+- In derived formulas wrap a nullable input in COALESCE(x, 0) when a missing value means zero, not when it means
+  unknown.
+- A column with date_format stores its dates as text in exactly that notation (YYYY year, MM month, DD day; M or D
+  without a leading zero): write literals in that notation and parse the column with that pattern before date
+  functions or range comparisons.
 - Dates: {date_hints}
 {qualify}
 {context_intro}"""
 
 DATE_HINTS = {
     "databricks": "use year(col), month(col), date_trunc('MONTH', col) and date_format(col, 'yyyy-MM'); "
-                  "if a date column is a STRING, wrap it in to_date(col) or to_timestamp(col).",
+                  "if a date column is a STRING, wrap it in to_date(col) or to_timestamp(col), with the pattern of "
+                  "its date_format when it has one (MM/DD/YYYY: to_date(col, 'MM/dd/yyyy')).",
     "sqlite": "dates are TEXT like '1997-07-04 00:00:00'; use strftime('%Y', col), strftime('%Y-%m', col) "
               "or substr(col, 1, 7); compare with strings such as col >= '1997-01-01'.",
     "postgres": "use date_trunc('month', col), extract(year from col), to_char(col, 'YYYY-MM').",
@@ -238,7 +246,7 @@ Previous query:
 {sql}
 
 Fix it. Check table and column names against the model, quoting, date handling and filters (use the sample
-values to match case and format). Answer with the same JSON object (reasoning, assumptions, sql)."""
+values and date_format to match case and format). Answer with the same JSON object (reasoning, assumptions, sql)."""
 SQLGLOT_DIALECT = {"databricks": "databricks", "sqlite": "sqlite", "mysql": "mysql", "postgres": "postgres",
                    "tsql": "tsql", "oracle": "oracle", "snowflake": "snowflake", "bigquery": "bigquery",
                    "redshift": "redshift", "duckdb": "duckdb", "teradata": "teradata"}

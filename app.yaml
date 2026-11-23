@@ -1,11 +1,12 @@
 command: ["streamlit", "run", "app.py"]
 
 env:
-  # SQL Warehouse used for Unity Catalog browsing, profiling, discovery, lineage and deploys.
-  # Add it as an app resource with ON-BEHALF-OF-USER authorization.
+  # SQL Warehouse used for Unity Catalog browsing, profiling, discovery, lineage, deploys and the Genie space.
+  # Add it as an app resource with ON-BEHALF-OF-USER authorization. User authorization scopes: sql, files,
+  # and genie (to create / update the Genie space from Publish → Deploy).
   - name: SQL_WAREHOUSE_ID
     valueFrom: sql-warehouse
-  # Foundation Model endpoint for the optional LLM enrichment and the Ask tab (resource, CAN_QUERY).
+  # Foundation Model endpoint for AI descriptions, Ask and the test set (resource, CAN_QUERY).
   - name: FM_ENDPOINT_NAME
     value: "databricks-meta-llama-3-3-70b-instruct"
   # Pre-selected catalog / schema in the picker (optional)
@@ -13,7 +14,7 @@ env:
     value: "main"
   - name: TARGET_SCHEMA
     value: "default"
-  # Unity Catalog Volume for versioned semantic models (sections ① and ②). Empty = versioning off.
+  # Unity Catalog Volume for versioned semantic models (Publish → Save & versions). Empty = versioning off.
   # Grant the app's service principal READ VOLUME and WRITE VOLUME on it.
   - name: ONTOLOGY_STORE
     value: "/Volumes/main/ontology/store"

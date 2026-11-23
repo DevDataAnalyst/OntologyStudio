@@ -526,7 +526,9 @@ def context_for(question: str, onto: dict, classes: list[str], dialect: str | No
 def readiness(onto: dict, runner_kind: str | None) -> dict:
     classes = onto.get("classes", {})
     n = len(classes)
-    described = sum(1 for c in classes.values() if c.get("description"))
+    from .llm_enrich import lacks_description
+    described = sum(1 for cid, c in classes.items()
+                    if not lacks_description(c, cid, c.get("label"), c.get("source_table")))
     certified = sum(1 for c in classes.values() if (c.get("certification") or {}).get("status") == "certified")
     metrics = [m for m in onto.get("metrics", []) if m.get("status") != "deprecated"]
     cert_m = sum(1 for m in metrics if m.get("status") == "certified")

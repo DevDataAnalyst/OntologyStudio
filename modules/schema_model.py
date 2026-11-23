@@ -26,6 +26,7 @@ class Column:
     non_null_count: int | None = None
     min_value: object | None = None       # numbers and dates only
     max_value: object | None = None
+    date_format: str | None = None        # text holding dates: the notation they are stored in (MM/DD/YYYY)
 
 
 @dataclass

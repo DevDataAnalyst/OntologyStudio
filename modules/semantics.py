@@ -54,8 +54,8 @@ def classify(onto: dict, overwrite: bool = False, add_metrics: bool = True) -> d
                 continue
             col = (p.get("source_column") or pid).lower()
             rng = p.get("range")
-            if p.get("identifier") or col in fk_cols.get(cid, set()):
-                role = "key"
+            if p.get("identifier") or col in fk_cols.get(cid, set()) or p.get("references"):
+                role = "key"                 # references: an FK column whose target table is not in the model
             elif rng in TIME_RANGES or re.search(r"(^|_)(date|dt|ts|time|timestamp)$", col):
                 role = "time"
             elif (rng in NUMERIC_RANGES and not NOT_MEASURE.search(col) and not p.get("allowed_values")

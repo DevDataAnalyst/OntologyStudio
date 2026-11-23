@@ -28,4 +28,16 @@ catalog.schema.table names; some rule and message texts follow the originals clo
 - modules/llm_enrich.py: the grain, column-description and variant-table rules in the enrichment prompt (from
   auto-ontology-mcp guidance.py TERM_RULES, which follow Auto Ontology's term extractor).
 
+Adapted directly from NVIDIA Auto Ontology (auto_ontology/, Apache-2.0):
+- modules/profiling.py: the personal-data rules (pii_detection/rules.py; their patterns are kept as they are,
+  table-name prefixes such as dim_ and silver_ were added), the date-format inference (semantic/date_format.py;
+  YYYY-MM was added), the sample rules (semantic/visit_enter.py: the 5 most common values, text of 30 characters or
+  less) and the sampling circuit breaker with its connectivity markers (visit_enter.py, connectors/db_errors.py; markers of the
+  Databricks SQL connector were added).
+- modules/discovery.py: the same-key (vertical split) join and the value-search ambiguity guard
+  (semantic/concepts.py, semantic/fk_values.py), without the LLM confirmation step.
+- modules/llm_enrich.py: a description that only repeats the name counts as missing (semantic/deterministic.py).
+- modules/ask.py: the default-join, NULL and date-format rules in the answer prompt (react/prompts.py,
+  semantic/date_format.py).
+
 The Apache Ossie schemas under modules/ossie/schemas/ carry their own LICENSE and NOTICE.

@@ -1,18 +1,10 @@
 # Ontology Studio
 
-**Turn a set of tables into a governed, portable semantic layer: an editable ontology, an [Apache Ossie](https://github.com/apache/ossie) semantic model, Databricks metric views, and a versioned model store, deployed next to the data in Unity Catalog.**
+**Turn your Unity Catalog tables into a governed, tested semantic model, and publish it where your team already works in Databricks: table and column comments, tags, metric views and a Genie space, plus a portable [Apache Ossie](https://github.com/apache/ossie) model kept next to the data.**
 
-Ontology Studio (`sql2ontology`) is a Streamlit app that runs on [Databricks Apps](https://docs.databricks.com/aws/en/dev-tools/databricks-apps/) (including **Databricks Free Edition**). Point it at up to 100 tables and views in Unity Catalog, or at a SQLite file or a SQL script. It works out how the tables fit together, even when no foreign keys are declared. You fix what it got wrong on an interactive diagram or in plain forms, then keep what you built:
+Ontology Studio (`sql2ontology`) is a Streamlit app that runs on [Databricks Apps](https://docs.databricks.com/aws/en/dev-tools/databricks-apps/) (including **Databricks Free Edition**). Point it at up to 100 tables and views in Unity Catalog, or at a SQLite file or a SQL script. It works out how the tables fit together, even when no foreign keys are declared. You fix what it got wrong, describe what only people know, prove the model with your own questions, and publish it.
 
-1. **An ontology YAML file.** Classes, properties, relationships, code meanings, business rules, metrics, synonyms and lineage, with provenance on every element.
-2. **An [Apache Ossie](https://github.com/apache/ossie) semantic model** (`0.3.0.dev0`), the vendor-neutral exchange format, checked against the official specification before you download, save or deploy it.
-3. **Databricks metric views** (YAML spec 1.1, following the current [YAML reference](https://docs.databricks.com/aws/en/uc-semantics/metric-views/yaml-reference)), one per fact table.
-4. **Versions** of every model in a Unity Catalog Volume (`ONTOLOGY_STORE`): who saved what, when and why; compare and restore.
-5. **A deployment inside Unity Catalog**: the Ossie YAML in a volume in the same schema as its tables, plus table and column comments, tags, metric views and informational keys if you want them.
-
-Every SQL statement runs **as the signed-in user** (on-behalf-of-user authorization), so Unity Catalog grants, row filters and column masks still apply. The app never reads data the user couldn't already read.
-
-On top of the modeled ontology, the studio keeps it governed and learning: **domains** that narrow what Ask searches, **certified** metrics and tables, governed wiki **pages**, **learned snippets** mined from query history with an authority score, a **review queue** that proposes what to promote or certify, and a **monitor** with request traces, feedback, cost and per-user budgets. An **Ask** tab shows whether the ontology actually helps an LLM: it writes SQL for the same question with and without the ontology, side by side. Before any SQL it checks that the model covers the question, and a **SQL checker** tests every query against the model and the data (unknown columns, joins the model does not know, double counting, misspelled values, percent vs fraction) before you see it.
+Every SQL statement runs **as the signed-in user** (on-behalf-of-user authorization), so Unity Catalog grants, row filters and column masks still apply. The app never reads data the user couldn't already read, and nothing is copied out of Databricks.
 
 No Databricks workspace handy? The same engine runs locally on a SQLite file or a `.sql` script, in the app or from a [command-line interface](#command-line-interface).
 
@@ -23,11 +15,10 @@ No Databricks workspace handy? The same engine runs locally on a SQLite file or 
 
 ## Contents
 
-- [The three sections: the lifecycle of a semantic model](#the-three-sections-the-lifecycle-of-a-semantic-model)
-- [Source types: Databricks and Non-Databricks](#source-types-databricks-and-non-databricks)
-- [Walkthrough](#walkthrough)
-- [Features](#features): [Connect](#1-connect) · [Analyze](#2-analyze) · [Edit](#3-edit) · [Export](#4-export) · [Ask](#5-ask-test-the-ontology) · [Apache Ossie](#6-apache-ossie-validation-import-and-export) · [Govern and learn](#7-govern-and-learn-domains-certification-pages-learned-snippets) · [Monitor](#8-monitor-traces-feedback-cost-and-budgets)
-- [Model lifecycle: versions and deployment](#model-lifecycle-versions-and-deployment)
+- [One journey, six steps](#one-journey-six-steps)
+- [A business user's path on an existing Databricks setup](#a-business-users-path-on-an-existing-databricks-setup)
+- [Features](#features): [Connect](#1-connect) · [Analyze](#2-analyze) · [Edit](#3-edit) · [Export](#4-export) · [Ask](#5-ask-test-the-ontology) · [Apache Ossie](#6-apache-ossie-validation-import-and-export) · [Govern and learn](#7-govern-and-learn-domains-certification-pages-learned-snippets) · [Traces, cost and budgets](#8-traces-feedback-cost-and-budgets)
+- [Model lifecycle: versions and deployment](#model-lifecycle-versions-and-deployment) · [Genie space](#genie-space)
 - [Architecture](#architecture) and [who runs what](#who-runs-what)
 - [Deploy to Databricks Apps](#deploy-to-databricks-apps), [Databricks Free Edition](#databricks-free-edition) and [permissions](#permissions-users-need)
 - [Configuration](#configuration) and [themes](#light-and-dark-themes)
@@ -36,117 +27,118 @@ No Databricks workspace handy? The same engine runs locally on a SQLite file or 
 
 ---
 
-## The three sections: the lifecycle of a semantic model
+## One journey, six steps
 
-The page opens with a switcher with three sections. The sidebar and the tabs below change with the section; the open model stays loaded when you switch, so you can build in ②, save, and deploy in ③ without reloading anything.
+A row of buttons at the top of the page takes you through the work from left to right. Every feature lives in exactly one step, and only the step you are on runs, so each click is quick even on a large model.
 
-| Section | Use it to | Sidebar | Main panel |
-|---|---|---|---|
-| **① Update existing model** | change a semantic model you already have | **0 · Source type**, **1 · Open model** (*Volume store*, *Upload* or *Paste*), **2 · Semantic layer (optional)**, then **Open version** / **Load Ossie model** / **Open pasted YAML** | Before anything is open: a list of every model and version in the store. After: the same tabs as ②, including **🕘 Versions**. |
-| **② Create new model** | build a new model from tables | **0 · Source type**, **1 · Connect**, **2 · Analyze**, **3 · Semantic layer (optional)**, then **Analyze & build** | The full editor: Network, Domains, ✏️ YAML form editor, Ontology YAML, Apache Ossie (with **💾 Publish to the Volume store**), 🕘 Versions, Metric views, Semantic layer, Knowledge, Review queue, Tables, Data preview, Ask, Monitor. |
-| **③ Deploy to Databricks** | put a model into Unity Catalog next to its tables | a short note | The deploy page: pick the model, set the target, tick the options, preview every file and SQL statement, **🚀 Deploy**, then see the result and earlier deployments. |
+| Step | Use it to | Inside |
+|---|---|---|
+| **1 · Connect** | get a model into the studio | **🏛️ Unity Catalog tables** (catalog, schemas, up to 100 tables or views) · **📂 Saved model** (a version from the store) · **📥 Import a file** (Apache Ossie YAML/JSON, a studio model, a SQLite database, a `.sql` script, or pasted YAML) · **✏️ Start from scratch** (the form editor). *Options*: profiling, join checks on the data, query history and lineage, AI descriptions from your documents. |
+| **2 · Model** | see and fix the structure | **🕸️ Diagram** (the editable network with its inspector) · **📋 List** (tables and joins, re-scan Unity Catalog) · **🔎 Data preview** (read-only pages of table data) · **✏️ Form** (the step-by-step form editor) · **🧾 Source** (Advanced: the studio YAML) |
+| **3 · Describe** | add what only people know | **📖 Dictionary** (search everything, one table in business terms) · **🧠 Meanings** (code values, glossary, rules, synonyms) · **📐 Metrics** (metrics, metric views and the guided builder) · **🏠 Domains** (domains, owners, certification) · **📊 Governance clarity** (coverage of key governance details) · **📚 Knowledge** (pages, learned snippets, experts) |
+| **4 · Review** | settle everything that needs a decision | readiness line · **🚧 Blockers** · **🔗 Suggested joins** (accept or reject in bulk) · **✅ Queue** · **🧭 Worklist** · **📝 Change log** |
+| **5 · Test** | prove the model answers real questions | **🎯 Test set** (golden questions, ontology vs schema-only, regressions) · **💬 Ask** (one question, plus Check SQL, Join path, Look up values, Verified examples) · **📈 Traces** |
+| **6 · Publish** | keep it and put it to work | **💾 Save & versions** (the one save) · **🚀 Deploy** (one plan: YAML in a volume, comments, tags, metric views, keys, Genie space) · **⬇️ Exports** (Ossie YAML/JSON, metric views, Power BI starter kit, data dictionary) |
+| **⚙️ Settings** | check how the app is set up | configuration from `app.yaml`, Ask prices and per-user token budgets, stored traces, SQL warehouse spend |
 
-### ① Update existing model
+The sidebar shows the open model at a glance: its name, whether it has unsaved changes, its readiness, its test result, and a **💾 Save or publish** shortcut. **Advanced mode** in the sidebar shows expert options: the ontology IRI and prefix, naming, discovery thresholds and the studio model YAML.
 
-1. In the sidebar under **1 · Open model**, pick where the model comes from:
-   - **Volume store**: pick a **Model** (a folder under `ONTOLOGY_STORE`) and a **Version** (newest first, labelled with time, kind, author and note). **Refresh list** re-reads the store.
-   - **Upload**: an Ossie `.yaml`, `.yml` or `.json` file. The validation report appears at once; a file with several models (`0.1.1`) lets you pick one.
-   - **Paste**: an Ossie model *or* a studio ontology YAML; the app tells them apart (`classes` + `object_properties` means a studio ontology).
-2. Ossie models are validated against the official spec first. A model with errors does not open unless you tick **Open even if it has validation errors** (or **Load it even though it has errors** for uploads); the report shows each finding with its line number and a fix.
-3. The model opens in the editors: the network diagram, the ✏️ YAML form editor, the Ontology YAML text, Tables, Metric views and so on.
-4. In **🕘 Versions**, write what changed and click **💾 Save as new version**. It goes into the same model folder it came from, so the history stays in one place. The tab also shows **unsaved changes** against the version you opened, as a diff.
+### One home per job
 
-### ② Create new model
+| Job | Where |
+|---|---|
+| Open, import or validate a model file | **Connect → Import a file** (the only upload of model files; the report shows every finding with its line and a fix) |
+| Save a version | **Publish → Save & versions** (always Apache Ossie; older studio-format versions still open) |
+| Write anything to Unity Catalog or Genie | **Publish → Deploy** (comments, all tags, metric views, keys, Genie space in one previewed plan) |
+| Read `system.query.history` | once, during the build: the same queries give join evidence and learned snippets (you can learn again later in **Describe → Knowledge**) |
+| Decide on suggestions, certification, gaps | **Review** |
+| Download | **Publish → Exports** |
 
-1. Pick the **source type** (see [below](#source-types-databricks-and-non-databricks)) and the tables or file.
-2. Adjust **Analyze** (profiling, join verification, query history, lineage, thresholds, naming) and optionally the LLM **Semantic layer** with your documents.
-3. **Analyze & build**, then edit in the network, the inspector, the form editor or the YAML.
-4. Save it: **💾 Publish to the Volume store** in the 🧩 Apache Ossie tab or **💾 Save as new version** in 🕘 Versions. Both save the model as Ossie YAML (studio-only details kept as extensions, so nothing is lost).
+## A business user's path on an existing Databricks setup
 
-### ③ Deploy to Databricks
+*You work in finance or operations. Your data is already in Unity Catalog (often bronze / silver / gold), you have a SQL warehouse, and your team uses or wants Genie and AI/BI dashboards.*
+
+1. **Connect.** Pick the catalog and the schema (say `gold`), **Select all**, **Build the model**. The app reads the tables with your permissions, profiles them, finds the joins and learns from the queries people already run.
+2. **Model.** Look at the diagram. Drag a wrong join to the right column, mark a table as fact or dimension.
+3. **Describe.** Fill in what the app couldn't know: what *operating ratio* means, what status code `H` stands for, that "carloads" means "units". Put the tables in a *Finance* domain and name their owner. Build a metric view with the guided builder if the generated one isn't enough.
+4. **Review.** Work the inbox until there are no blockers, and accept or reject the suggested joins.
+5. **Test.** Add ten questions your CFO actually asks, each with the SQL that answers it, and click **Run**. Fix the ones that fail (usually a missing synonym or join) and run again.
+6. **Publish.** Save version 1 with a note, open **Deploy**, keep the defaults, tick **Genie space**, check the preview and click **🚀 Deploy**.
+
+Afterwards your team asks questions in the **Genie space**, builds AI/BI dashboards on the **metric views**, and sees the descriptions and owners in **Catalog Explorer**. When the tables change, open the saved model in **Connect**, re-scan it in **Model → List**, work the new items in **Review**, run the **Test** set again and publish version 2.
+
+### Deploy to Databricks
 
 <p align="center">
-  <img src="docs/images/deploy-to-databricks.png" width="900" alt="Left: Catalog Explorer showing the volume adventureworks.dbo.semantic_models with folder cnf_v3 holding a timestamped .ossie.yaml, deployments.json and latest.ossie.yaml. Right: the app's Deploy to Databricks page with a saved version cnf_v2 picked, target adventureworks / dbo / semantic_models, the options ticked (create the volume, comments, tags, let the app write the files), the preview (3 files, 92 comments, 10 tags) and the message 'Deployed cnf_v3 version 2026-11-19 08:39:28 UTC to adventureworks.dbo'">
+  <img src="docs/images/deploy-to-databricks.png" width="900" alt="Left: Catalog Explorer showing the volume adventureworks.dbo.semantic_models with folder cnf_v3 holding a timestamped .ossie.yaml, deployments.json and latest.ossie.yaml. Right: the app's Deploy page with a saved version cnf_v2 picked, target adventureworks / dbo / semantic_models, the options ticked, the preview and the message 'Deployed cnf_v3 version 2026-11-19 08:39:28 UTC to adventureworks.dbo'">
 </p>
 
-*A saved version deployed as `cnf_v3` into `adventureworks.dbo.semantic_models`: the app (right) and the result in Catalog Explorer (left).*
+*A saved version deployed as `cnf_v3` into `adventureworks.dbo.semantic_models`: the app (right, from an earlier layout) and the result in Catalog Explorer (left).*
 
-1. **What to deploy:** the model open in the studio, **A saved version** from the store, or **Paste or upload Ossie YAML**. The YAML is validated; a model with errors can't be deployed (open it in ① to fix it).
-2. **Target:** **Model name** (the folder), **Catalog**, **Schema** and **Volume** (default `semantic_models`). Catalog and schema default to where most of the model's datasets live, and the page says how many datasets are Unity Catalog tables.
-3. **What to deploy** (options): create the volume if missing · descriptions → table & column comments · tag tables with the model and version · create metric views (one per fact) · **let the app write the files** · informational PK / FK constraints. Options that need Unity Catalog tables are greyed out when the model has none.
-4. **Preview:** counts of files, comments, tags, metric views and constraints; the list of files; every SQL statement (also downloadable as **⬇️ SQL script**); the YAML (**⬇️ YAML**).
-5. **🚀 Deploy** runs it with a progress bar and reports the outcome: a success line, or each failed file with its full error and a table of every statement with its status.
-6. **Previous deployments of this model here** lists what `deployments.json` recorded: version, time, who, failed steps, files.
+1. **What to deploy:** the model open in the studio or **A saved version** from the store. The YAML is validated; a model with errors can't be deployed (they are listed in **Review → Blockers**).
+2. **Target:** **Model name** (the folder), **Catalog**, **Schema** and **Volume** (default `semantic_models`). Catalog and schema default to where most of the model's datasets live.
+3. **Options:** create the volume if missing · descriptions → table & column comments · tags (model, version, domain, certification, owner) · metric views (one per fact plus the ones you built) · **let the app write the files** · informational PK / FK constraints · **Genie space**. Options that need Unity Catalog tables are greyed out when the model has none.
+4. **Preview:** counts, the files, every SQL statement (**⬇️ SQL script**), the YAML, the Genie space definition (**⬇️ .json**) and the test-set result.
+5. **🚀 Deploy** runs it with a progress bar and reports each step: files, statements and the Genie space with a link to open it.
+6. **Previous deployments of this model here** lists what `deployments.json` recorded, including the Genie space, which the next deployment updates instead of creating a new one.
 
-Full details in [Model lifecycle](#model-lifecycle-versions-and-deployment).
+### Genie space
 
-## Source types: Databricks and Non-Databricks
+Ticking **Create or update a Genie space** turns the model into a [Genie](https://docs.databricks.com/aws/en/genie/) space through the Genie spaces API (`POST /api/2.0/genie/spaces`, [`modules/genie.py`](modules/genie.py)):
 
-The sidebar starts with **0 · Source type**. It decides which sources section ② offers; sections ① and ③ work with either.
+| Genie space | From the model |
+|---|---|
+| tables | every dataset with a `catalog.schema.table` source, its description, and the descriptions and synonyms of its columns |
+| metric views | the metric views the same deployment creates |
+| text instruction | the model description, business rules, glossary, code values, metrics (certified ones marked) and certified pages |
+| join specs | the modeled many-to-one and one-to-one joins, with their relationship type |
+| example SQL, sample questions, benchmarks | the test set (verified examples) |
 
-| Source type | Source | Status | What it reads |
-|---|---|---|---|
-| **Databricks** | Unity Catalog tables & views | available (inside Databricks Apps) | up to 100 tables and views from any catalog and schemas you can read, with your permissions |
-| **Non-Databricks** | SQLite database or `.sql` script | available | a SQLite file, or DDL in MySQL, Postgres, T-SQL, Oracle, Snowflake, Databricks, BigQuery, Redshift, DuckDB or Teradata |
-| Non-Databricks | Snowflake | *coming soon* (placeholder) | planned: `INFORMATION_SCHEMA` through a connection stored as an app secret |
-| Non-Databricks | PostgreSQL | *coming soon* (placeholder) | planned: the catalog of a Postgres database (or Lakebase) through a secret |
-| Non-Databricks | Informatica CDGC (glossary overlay) | *coming soon* (placeholder) | planned: glossary terms, owners and certification from Informatica Cloud Data Governance & Catalog, layered on top of the tables |
+The space runs on the app's SQL warehouse (`SQL_WAREHOUSE_ID`). Its id is kept in `deployments.json`, so the next deploy **updates** the same space. The call runs with your token, so the app needs the **`genie`** user authorization scope (add it next to `sql` in the app's *User authorization* settings). Without it the step fails with a clear message and the preview still offers the space definition as JSON plus a `curl` command an admin can run.
 
-Picking a *coming soon* source shows what it will do and keeps **Analyze & build** disabled. Outside Databricks Apps the Databricks type has no sources and says so. The list lives in [`modules/sources.py`](modules/sources.py): each `Source` has a `key` (what `app.py` branches on), a `label`, a `family`, `available` and a `note`. A new connector is a new entry plus an extractor that returns the source-neutral `DatabaseSchema` ([`modules/schema_model.py`](modules/schema_model.py)).
+### Source types
 
-A model built from a Non-Databricks source can still be versioned and deployed: its YAML goes into the volume, and the options that change tables (comments, tags, metric views, keys) cover only datasets whose `source` is a `catalog.schema.table` name.
+| Source | Status | What it reads |
+|---|---|---|
+| Unity Catalog tables & views | available (inside Databricks Apps) | up to 100 tables and views from any catalog and schemas you can read, with your permissions |
+| SQLite database or `.sql` script | available | a SQLite file, or DDL in MySQL, Postgres, T-SQL, Oracle, Snowflake, Databricks, BigQuery, Redshift, DuckDB or Teradata |
+| Snowflake, PostgreSQL, Informatica CDGC | planned, not shown in the app | see [`modules/sources.py`](modules/sources.py) and the multi-source plan; a new connector is an extractor that returns the source-neutral `DatabaseSchema` ([`modules/schema_model.py`](modules/schema_model.py)) and becomes one more card in **Connect** |
+
+A model built from a file can still be versioned and deployed: its YAML goes into the volume, and the options that change tables (comments, tags, metric views, keys, Genie) cover only datasets whose `source` is a `catalog.schema.table` name.
 
 ## Walkthrough
 
-Every step below happens in section ② except the last, which uses ③. These screenshots use the AdventureWorks sample tables (`adventureworks.dbo`) in Unity Catalog; the network diagram uses the bundled `retail_star.db` sample. Click an image to see it full size.
+These screenshots come from earlier versions of the app, when these views were separate tabs; the content is the same, now reached through the steps. The network diagram uses the bundled `retail_star.db` sample.
 
-### 1. Pick tables, build, and edit the network
+### 1. Build and fix the model (Connect, Model)
 
-Pick **② Create new model** at the top. In the sidebar, choose the source type **Databricks**, then **Unity Catalog**, a catalog, one or more schemas and up to 100 tables, then click **Analyze & build**. The **Network** tab draws every class as a card (**F** amber for facts, **D** blue for dimensions, **E** grey for entities) with its row, column and measure counts, and every relationship with crow's-foot ends on the many side. Click a class to edit its role, description, synonyms, column roles and metrics in the inspector on the right.
+In **Connect**, choose **🏛️ Unity Catalog tables**, a catalog, one or more schemas and up to 100 tables, then **Build the model**. **Model → Diagram** draws every table as a card (**F** amber for facts, **D** blue for dimensions, **E** grey for entities) with its row, column and measure counts, and every relationship with crow's-foot ends on the many side. Click a table to edit its role, description, synonyms, domains, certification, column roles and metrics in the inspector on the right.
 
-![Network tab: the D3.js ontology diagram for the retail sample, with facts, dimensions and labelled many-to-one relationships](docs/images/network.svg)
+![Network diagram for the retail sample, with facts, dimensions and labelled many-to-one relationships](docs/images/network.svg)
 
-### 2. Review the ontology YAML
+**Model → Form** changes the model without touching YAML: **Model info → Datasets → Fields → Relationships → Metrics → Review & submit**. Renaming a dataset or field updates the keys and relationships that use it, and anything the form does not show (dialect variants, vendor extensions) is kept. **Model → List** lists every table with its source, row count and key, and every relationship with its join columns and confidence. **Model → Data preview** browses a selected table read-only with configurable page size and previous/next navigation. In Advanced mode, **Model → Source** shows and edits the whole model as YAML.
 
-The **Ontology YAML** tab shows the whole ontology, with validation notes at the top. Edit the YAML and click **Apply YAML edits** to update the diagram, or download it.
+![Studio model YAML with validation notes](docs/images/ontology-yaml.png)
 
-![Ontology YAML tab with validation notes and the generated YAML](docs/images/ontology-yaml.png)
+### 2. Describe it (Describe)
 
-### 2b. Edit the model in plain forms (YAML form editor)
+**Describe → Metrics** shows one metric view per fact, with joins nested for snowflake schemas; **➕ New metric view** builds your own (see [Guided metric view builder](#guided-metric-view-builder)). **Describe → Meanings** lists code meanings, the glossary and business rules, each with its provenance. **Describe → Governance clarity** shows a donut of recorded versus missing descriptions, owners, domains and review statuses across modeled tables and metrics. It measures documentation coverage, not governance quality or certification approval.
 
-The **✏️ YAML form editor** tab lets business users change an Apache Ossie semantic model without touching YAML. Start from the current studio model, an uploaded Ossie YAML/JSON file, or an empty model, then work through six steps: **Model info → Datasets → Fields → Relationships → Metrics → Review & submit**. Each step is a form with **Save & continue**; renaming a dataset or field updates the keys and relationships that use it, and anything the form does not show (dialect variants, vendor extensions) is kept as is. The last step validates the whole model with the same checks as the Apache Ossie tab, shows a before/after diff, and lets you download the YAML or JSON or submit it to load it into the studio. The editor is also on the start page, before anything is loaded.
+![A generated metric view for the Order fact](docs/images/metric-views.png)
 
-### 3. Generate metric views
+![Code meanings, metrics and business rules](docs/images/semantic-layer.png)
 
-The **Metric views** tab builds one metric view per fact, with joins nested for snowflake schemas. Download it, or deploy it to Unity Catalog. To make your own, switch to **➕ New metric view** (see [Guided metric view builder](#guided-metric-view-builder)).
+### 3. Test it (Test)
 
-![Metric views tab showing the YAML for the Order fact](docs/images/metric-views.png)
+**Test → Test set** runs every golden question. **Test → Ask** writes SQL for one business question from the model and runs it as you; with **Compare with schema-only** ticked it also shows a baseline written from the bare table and column names. Its other modes: **Check SQL** checks any query against the model and the data, runs it with a row cap, and saves it as a verified example (a test question). **Join path** gives the chain of joins between two tables as a ready `FROM ... JOIN` clause. **Look up values** shows the real values in a column.
 
-### 4. Check the semantic layer
-
-The **Semantic layer** tab lists code meanings, metrics and business rules, each with its provenance. Here the LLM filled in the code meanings and the business rules.
-
-![Semantic layer tab with value meanings, metrics and business rules](docs/images/semantic-layer.png)
-
-### 5. Review tables and relationships
-
-The **Tables** tab lists every class with its source table, row count and key (ticked when the key was inferred), and every relationship with its join columns and confidence.
-
-![Tables tab with classes and relationships](docs/images/tables.png)
-
-### 6. Ask a question
-
-The **Ask (Text-to-SQL)** tab writes SQL for a business question from the ontology and runs it as you. With **Compare with schema-only** ticked, it also shows a baseline written from the bare table and column names.
-
-![Ask tab with a question and the SQL generated from the ontology](docs/images/ask.png)
-
-The same tab has four more modes. **Check SQL** checks any query you paste against the model and the data, runs it with a row cap, and saves it as a **verified example** that Ask reuses. **Join path** gives the chain of joins between two classes as a ready `FROM ... JOIN` clause. **Look up values** shows the real values in a column. **Verified examples** lists the confirmed question and SQL pairs.
+![Ask with a question and the SQL generated from the ontology](docs/images/ask.png)
 
 ![Check SQL flags double counting, a misspelled value and a percent written against a 0 to 1 column](docs/images/check-sql.png)
 
-### 7. Save a version and deploy it
+### 4. Publish it (Publish)
 
-Publish the model to the Volume store from the **Apache Ossie** tab (or the **🕘 Versions** tab) with a note. Then pick **③ Deploy to Databricks**, choose the version, the target catalog, schema and volume, tick what to create, check the preview and click **Deploy**. The result shows each SQL step, the files written, who wrote them, and the deployment log. The screenshot under [③ Deploy to Databricks](#the-three-sections-the-lifecycle-of-a-semantic-model) shows a real run: `cnf_v3` deployed to `adventureworks.dbo.semantic_models`.
+Save the model in **Publish → Save & versions** with a note. Then open **Publish → Deploy**, choose the target, tick what to create, check the preview and click **Deploy** (see [Deploy to Databricks](#deploy-to-databricks)).
 
 ---
 
@@ -154,25 +146,37 @@ Publish the model to the Volume store from the **Apache Ossie** tab (or the **�
 
 ### 1. Connect
 
-First pick the **source type** in the sidebar. **Databricks** reads Unity Catalog. **Non-Databricks** takes files today; Snowflake, PostgreSQL and Informatica CDGC are listed as *coming soon* placeholders (see `modules/sources.py`, the registry new connectors plug into).
+**1 · Connect** offers four ways to start. Models come into the studio only here.
 
 - **Unity Catalog** (on Databricks): pick a catalog, one or more of its schemas, and up to 100 tables and views from those schemas. Declared foreign keys that point into another schema or catalog are resolved too.
 - **Upload a file**: a SQLite database (`.db`, `.sqlite`, `.sqlite3`) or a SQL script (`.sql`, `.ddl`, `.txt`). With the dialect on **auto**, a script first runs in an in-memory SQLite database, so dumps with `INSERT`s get profiled too. Otherwise, or if that fails, the DDL is parsed with [sqlglot](https://github.com/tobymao/sqlglot) in the dialect you pick: MySQL, Postgres, T-SQL, Oracle, Snowflake, Databricks, BigQuery, Redshift, DuckDB or Teradata.
-- **Ossie YAML** (section ①, *Upload*): an [Apache Ossie](https://github.com/apache/ossie) semantic model (`.yaml`, `.yml` or `.json`). It is validated first (see [Apache Ossie](#6-apache-ossie-validation-import-and-export)) and loads into the editor when it passes.
-- **Saved version** (section ①, *Volume store*): open any version saved to the Volume store (needs [`ONTOLOGY_STORE`](#configuration)).
-- **Paste** (section ①): paste an Ossie model or a studio ontology YAML. The **Ontology YAML** tab also accepts a pasted Ossie model: it is validated, then opened.
+- **Import an Apache Ossie model** (*📥 Import a file*): an [Apache Ossie](https://github.com/apache/ossie) semantic model (`.yaml`, `.yml` or `.json`). It is validated first (see [Apache Ossie](#6-apache-ossie-validation-import-and-export)) and opens when it passes. A studio model (`.ontology.yaml`) opens as is.
+- **📂 Saved model**: open any version saved to the Volume store (needs [`ONTOLOGY_STORE`](#configuration)).
+- **Paste** (*📥 Import a file*, with no file picked): an Ossie model or a studio model YAML.
+- **✏️ Start from scratch**: a blank model in the form editor.
 
 ### 2. Analyze
 
 | Step | What it does |
 |---|---|
 | **Objects** | Reads `information_schema` in each catalog: tables, views, columns, comments, and primary key, unique and foreign key constraints. Declared foreign keys resolve across schemas and catalogs. |
-| **Profiling** | Row counts, distinct counts (`approx_count_distinct` on Unity Catalog), non-null counts, up to 5 sample values per column, and the distinct values of low-cardinality text columns (enumerations). On Unity Catalog it profiles 8 tables in parallel and skips complex types (`ARRAY`, `MAP`, `STRUCT`, `VARIANT`, …). |
+| **Profiling** | Row counts, distinct counts (`approx_count_distinct` on Unity Catalog), non-null counts, the 5 most common values per column, and the distinct values of low-cardinality text columns (enumerations). On Unity Catalog it profiles 8 tables in parallel and skips complex types (`ARRAY`, `MAP`, `STRUCT`, `VARIANT`, …). The rules below come from [NVIDIA Auto Ontology](https://github.com/NVIDIA/auto-ontology). |
 | **Primary keys** | Uses declared keys. Where there are none, it infers one from a unique, non-null column with a key-like name (`*_id`, `*_key`, `*_sk`, `*_code`, …) or a name that starts with the table's entity. Needs profiling, which is on by default. |
 | **Relationships** | Scores every candidate join from five signals (below). Strong joins are accepted; the rest become suggestions for you to review. |
 | **Lineage** | Reads `system.access.table_lineage` and `system.access.column_lineage` (last 180 days by default). Upstream and downstream tables outside your selection appear as external nodes. |
 | **Semantics** | Classifies each class as **fact**, **dimension** or **entity**, and each column as **key**, **time**, **measure** or **dimension**. Measures get a default aggregation: `AVG` for prices, rates and ratios, otherwise `SUM`. Every fact gets base metrics: a row count plus one metric per measure. |
 | **LLM enrichment** (optional) | Fills in descriptions, synonyms, code meanings, business rules and metrics, grounded in documents you upload (below). |
+
+#### What profiling keeps, skips and infers
+
+| Rule | What happens |
+|---|---|
+| **Personal data** | Columns whose names mark personal data are tagged `pii: <category>` (`email_address`, `phone_number`, `government_id`, `date_of_birth`, `payment_card`, `banking`, `credential`, …). Names, addresses, ids, age, gender and salary count only in a table of people (`customers`, `employees`, `users`, also `dim_customer` or `silver_customers`). Their values are never read: no samples, no list of values, no min/max, only counts. A model opened from a file or edited by hand gets the same treatment, so personal values never reach the LLM, an Ossie export or a saved version. The rules read names only: a column they cannot place, such as `contact_name` or `employee_name`, keeps its values until you tag it (`pii: person_name` in the YAML), and `pii: false` stops the tagging for a column. |
+| **Text dates** | A text column whose values all read as one date notation gets `date_format` (`YYYY-MM-DD`, `MM/DD/YYYY`, `YYYYMMDD`, `YYYY-MM`, …). `13/07/2011` settles day-first; when every value reads both ways, nothing is claimed. Ask is told to write literals in that notation and to parse the column with it. |
+| **Samples** | The 5 most common values (of a 200-row sample on Unity Catalog), keeping numbers, dates and flags, and text of 30 characters or less (longer text is prose, not a useful example). |
+| **Key columns to other tables** | A foreign key to a table outside the model stays a column, with `references: table.column` and the key role, instead of vanishing. |
+| **Circuit breaker** | After 3 tables in a row time out or cannot reach the SQL warehouse, profiling stops and says how many tables it skipped; overlap checks stop the same way. |
+| **Descriptions** | A description that only repeats the name (`customer_id`: "Customer ID") counts as missing in the worklist and readiness, and LLM enrichment may replace it when it was copied from a database comment. What a person wrote is never replaced. |
 
 #### How relationships are found
 
@@ -182,11 +186,12 @@ Unity Catalog constraints are informational and often missing, so each candidate
 |---|---|
 | Declared foreign key | Taken as given (1.0). |
 | Naming | Same name as the target's key, e.g. `fact_sales.customer_key = dim_customer.customer_key` (0.60). A column that names the entity, e.g. `cust_id → customers` (0.55). A column that ends with the key's name (0.40). |
+| Same key | Two tables keyed by the same specific column, e.g. `customer_scores.customer_id` and `customers.customer_id`, hold one row per customer each: a one-to-one join to the table with more rows (0.60). Generic key names (`id`, `key`, `code`, …) never count, and copies of one table (`stg_customers`, `customers_2024`) are left apart. |
 | Type check | −0.30 when one side is numeric and the other is text. |
-| Value overlap | A sampled `LEFT JOIN` for the top 80 candidates: what share of up to 5,000 distinct child values exist in the parent key. ≥ 98% adds 0.35, ≥ 90% adds 0.25, ≥ 70% adds 0.10, anything lower subtracts 0.50. |
+| Value overlap | A sampled `LEFT JOIN` for the top 80 candidates: what share of up to 5,000 distinct child values exist in the parent key. ≥ 98% adds 0.35, ≥ 90% adds 0.25, ≥ 70% adds 0.10, anything lower subtracts 0.50. For a same-key join whose key values are all shorter than 3 characters (1, 2, 3 sit inside any key), are labels, or are withheld as personal data and number under 100, a high overlap adds nothing, so the join stays a suggestion. |
 | Query history | Equality joins that people actually ran, parsed with sqlglot from finished `SELECT`s in `system.query.history` (last 90 days, up to 3,000 statements). Raises the score to at least 0.45, plus up to 0.30 more the more often the join appears. |
 
-The best target per child column wins. Joins at or above the threshold (0.75 by default, adjustable in the sidebar) become relationships. Joins between 0.30 and the threshold become **suggestions**, with their evidence attached, which you accept or reject. Nothing is added silently.
+The best target per child column wins. Joins at or above the threshold (0.75 by default, adjustable in Connect → Options in Advanced mode) become relationships. Joins between 0.30 and the threshold become **suggestions**, with their evidence attached, which you accept or reject. Nothing is added silently.
 
 If the query text in `system.query.history` is redacted for the user, the app skips that signal and says so.
 
@@ -229,25 +234,24 @@ Classes go to the model in batches of 25, with up to 60,000 characters of your d
 - **Relationship:** name, cardinality, the join columns on both sides, a **role** (billing vs delivery) and description, and whether it is the **default** join between its two classes, or delete it.
 - **Suggestion:** confidence and evidence, then accept or reject.
 - **Lineage edge:** event count, when it was last seen, and the column mappings.
-- **Nothing selected:** add a relationship from a form, accept every suggestion at 60% or more, reject them all, or re-run the classification.
+- **Nothing selected:** add a relationship from a form, or re-run the classification. Suggested joins are settled one by one on the diagram or in bulk in **Review → Suggested joins**.
 
-**Other tabs:**
+**Other views:**
 
-- **Apache Ossie:** the validation report of the uploaded file, the export of the current ontology, and a box to validate any pasted document. See [below](#6-apache-ossie-validation-import-and-export).
-- **Ontology YAML:** edit the YAML and click **Apply YAML edits** to redraw the diagram. Validation notes flag relationships that point at missing classes, inverses that don't point back, classes without an identifier, and coded values that still have no meaning.
-- **📊 Governance clarity:** a donut chart shows the share of table and metric governance details recorded in the model, with a breakdown for descriptions, owners, business domains and review status. This measures documentation coverage, not governance quality or certification approval.
-- **Semantic layer:** search the model (classes, columns, metrics, rules, pages, glossary, stored values) and open a **Term card** with a class's definition, columns and samples, unmapped columns, joins, metrics and pages; edit value meanings and the glossary; review metrics, business rules and the synonyms index.
-- **Tables:** classes (with unmapped and new columns), relationships and suggestions as plain tables, and **🔄 Re-scan the tables in Unity Catalog** (below).
-- **🔎 Data preview:** choose any modeled source table and browse its rows in read-only pages. Choose 10–500 rows per page and use **← Previous** / **Next →** to navigate; each page reads only the requested rows. Available for live Unity Catalog and SQLite sources.
+- **Model → Source** (Advanced mode): edit the YAML and click **Apply YAML edits** to redraw the diagram; a pasted Ossie model is validated and opened. Validation notes flag relationships that point at missing classes, inverses that don't point back, classes without an identifier, and coded values that still have no meaning.
+- **Describe → Meanings:** search the model (classes, columns, metrics, rules, pages, glossary, stored values) and open a **Term card** with a class's definition, columns and samples, unmapped columns, joins, metrics and pages; edit value meanings and the glossary; review metrics, business rules and the synonyms index.
+- **Model → List:** classes (with unmapped and new columns) and relationships as plain tables, and **🔄 Re-scan the tables in Unity Catalog** (below).
+- **Model → Data preview:** select a modeled source table and browse its rows in read-only pages. Choose 10–500 rows per page and use **← Previous** / **Next →** to navigate. Available for live Unity Catalog and SQLite sources.
+- **Describe → Governance clarity:** compare recorded and missing business descriptions, owners, domains and review statuses across modeled tables and metrics. The donut is a coverage indicator, not an assessment of governance quality.
 
 #### Modeling assistant: re-scan, worklist and relationship review
 
-- **Re-scan** (🗂️ Tables tab, models built from Unity Catalog): reads the model's tables again and lists new, dropped and retyped columns and tables that are gone. **Apply** adds the new columns, removes the dropped ones, updates types, row counts and profiles, and keeps descriptions, synonyms, roles, certification, joins and metrics; it names relationships that used a dropped column. **List tables** finds tables in the same schemas that the model does not have, with filters such as `SALES_*, HR.EMP*, !*_LOG`; **Add selected** reads them, adds them as classes and proposes their joins with the model (declared keys first, then name and value-overlap evidence) for review in the Network tab.
-- **🧭 Modeling worklist** (✅ Review queue tab): tables with new columns, no description, a description that does not say what one row is, or undescribed columns, most urgent first. **✨ Draft with the LLM** fills only what is empty for one table, with descriptions that state the grain ("One row per order line"); drafts stay drafts until a person certifies them.
+- **Re-scan** (Model → List, models built from Unity Catalog): reads the model's tables again and lists new, dropped and retyped columns and tables that are gone. **Apply** adds the new columns, removes the dropped ones, updates types, row counts and profiles, and keeps descriptions, synonyms, roles, certification, joins and metrics; it names relationships that used a dropped column. **List tables** finds tables in the same schemas that the model does not have, with filters such as `SALES_*, HR.EMP*, !*_LOG`; **Add selected** reads them, adds them as classes and proposes their joins with the model (declared keys first, then name and value-overlap evidence) for review in the diagram and in Review.
+- **🧭 Worklist** (Review): tables with new columns, no description, a description that does not say what one row is, or undescribed columns, most urgent first. **✨ Draft with the LLM** fills only what is empty for one table, with descriptions that state the grain ("One row per order line"); drafts stay drafts until a person certifies them.
 - **Relationship review** (same page): pairs of classes joined more than once, where you pick the **default** join; identifier columns with no relationship and the classes their values could point at (with a value check); and joins people run in Ask, 🧪 Check SQL or verified examples that the model does not have, each one click from becoming a relationship.
 - **Filters to save as rules**: named filters from short value lists (`dim_customer.segment = 'Retail'`), tested on the data before they are saved.
 - **🧹 Model checks** in the review queue: tables that do not say what one row is, multi-role joins without a default, unlinked identifier columns, measure columns without a metric, and metrics whose SQL fails the checker (including metrics that read a table no modeled join reaches).
-- **Change log** (🕘 Versions tab): every edit with who made it and when, saved with each version.
+- **Change log** (Review): every edit with who made it and when, saved with each version.
 
 Join paths, Ask and the SQL checker use the default join of a pair; the checker notes when a query uses another role.
 
@@ -310,15 +314,11 @@ measures:
   display_name: Sum Net Amount
 ```
 
-In the **Metric views** tab you can:
-
-- download one view as YAML,
-- download a zip with every view, its `CREATE OR REPLACE VIEW … WITH METRICS LANGUAGE YAML` statement, and the ontology,
-- or click **🚀 Deploy to Unity Catalog**. This runs the `CREATE` statement as you, so you need `CREATE TABLE` on the target schema. It is available when the source is Unity Catalog. The target defaults to `<fact's catalog>.<fact's schema>.<fact>_metrics`, and you can change it.
+**Describe → Metrics** shows every view. **Publish → Exports** downloads a zip with every view and its `CREATE OR REPLACE VIEW … WITH METRICS LANGUAGE YAML` statement, and **Publish → Deploy** (tick *metric views*) creates them all in Unity Catalog as you, so you need `CREATE TABLE` on the target schema. Generated views are named `<catalog>.<schema>.<fact>_metrics` in the deploy target; views you build keep the name you gave them.
 
 #### Guided metric view builder
 
-**➕ New metric view** (in the Metric views tab) builds a metric view step by step. Every step is pre-filled and each suggestion says why it is there:
+**➕ New metric view** (Describe → Metrics) builds a metric view step by step. Every step is pre-filled and each suggestion says why it is there:
 
 | Step | What you get |
 |---|---|
@@ -327,11 +327,11 @@ In the **Metric views** tab you can:
 | ③ Fields | The generated view's fields, time columns first, with profiled values (`3 values: Store, Web, Catalog`) and how often colleagues' queries use the column. Month and year versions of date fields are offered unticked. |
 | ④ Measures | The model's metrics, ticked. Offered unticked: a row count, a distinct count per joined table, and the aggregates your team actually runs (learned query snippets, ranked by authority). Metrics a metric view can't hold (window functions, tables the view doesn't join) stay unticked with the reason. **Quick add** makes `SUM` / `AVG` / `MIN` / `MAX` / `COUNT DISTINCT` of a column, or a ratio of two measures (`MEASURE(a) / NULLIF(MEASURE(b), 0)`), without writing SQL; you can also type your own rows. |
 | ⑤ Filter | Conditions your team often filters on, or **Keep rows where** a column is one of its profiled values. |
-| ⑥ Name, check and save | Live checks (unique names, aggregating measures, joins in place, no tables outside the view) and the YAML. **💾 Add to the model** lists the view under **📄 Views** with a ★ and saves it with the model (it travels in the Apache Ossie export and versions); you can also download it or deploy it to Unity Catalog. |
+| ⑥ Name, check and save | Live checks (unique names, aggregating measures, joins in place, no tables outside the view) and the YAML. **💾 Add to the model** lists the view with a ★ and saves it with the model (it travels in the Apache Ossie export and versions, and **Publish → Deploy** creates it); you can also download it. |
 
-**Apache Ossie.** The **Apache Ossie** tab exports the ontology as an Ossie `0.3.0.dev0` document (YAML or JSON) and validates it before you download it. See [below](#6-apache-ossie-validation-import-and-export).
+**Apache Ossie.** **Publish → Exports** exports the model as an Ossie `0.3.0.dev0` document (YAML or JSON) and validates it before you download it. See [below](#6-apache-ossie-validation-import-and-export).
 
-**Versions.** With `ONTOLOGY_STORE` set, **💾 Publish to the Volume store** (Apache Ossie tab) or **💾 Save as new version** (🕘 Versions tab) saves the model as Ossie YAML; **💾 Save version to Volume** in the Ontology YAML tab saves the studio ontology. See [Model lifecycle](#model-lifecycle-versions-and-deployment).
+**Versions.** With `ONTOLOGY_STORE` set, **💾 Save as new version** (Publish → Save & versions) saves the model as Ossie YAML, the one save in the app. See [Model lifecycle](#model-lifecycle-versions-and-deployment).
 
 ### 5. Ask: test the ontology
 
@@ -359,16 +359,16 @@ The SQL checker (`modules/sqlcheck.py`) reads a query without returning rows and
 - with live data: text values that match no row, with the closest real values (`'retail'` → `'Retail'`); thresholds on the wrong scale (`discount_pct > 5` on a 0 to 1 column, or "below 0.18%" written as `0.18`); a dry run,
 - which classes and metrics the query relies on, and which of them are not certified yet.
 
-Probes are small read-only queries with the viewer's permissions, capped per check. The Ask tab's other modes use the same engine:
+Probes are small read-only queries with the viewer's permissions, capped per check. Ask's other modes (Test → Ask) use the same engine:
 
 | Mode | What it does |
 |---|---|
-| 🧪 Check SQL | Check any query, run it with a 200-row cap (traced in Monitor), save it as a verified example |
+| 🧪 Check SQL | Check any query, run it with a 200-row cap (traced in Test → Traces), save it as a verified example |
 | 🔗 Join path | The shortest chain of modeled joins between two classes, its `FROM ... JOIN` clause, fan-out and shared-parent notes, other roles for the same hop |
 | 🔎 Look up values | Real values in a column: matches for a word with row counts, close spellings, or the most common values |
-| ✅ Verified examples | The confirmed question and SQL pairs: open one in Check SQL or delete it |
+| ✅ Verified examples | The confirmed question and SQL pairs, which are also the test set: open one in Check SQL or delete it |
 
-A 👍 on an Ask answer also keeps it as a verified example. Verified examples and the **glossary** (abbreviations and jargon, edited in the 🧠 Semantic layer tab) are saved with the model: in Ossie, the example questions go to the model's `ai_context.examples` and the rest travels in the `ONTOLOGY_STUDIO` extension. A **readiness** line under the header metrics says whether SQL can run on the model's data, how much is described, joined and certified, and what to do next.
+A 👍 on an Ask answer also keeps it as a verified example. Verified examples and the **glossary** (abbreviations and jargon, edited in Describe → Meanings) are saved with the model: in Ossie, the example questions go to the model's `ai_context.examples` and the rest travels in the `ONTOLOGY_STUDIO` extension. A **readiness** line (sidebar and Review) says whether SQL can run on the model's data, how much is described, joined and certified, and what to do next.
 
 ![Join path from Customer to Date through Sale, with the one-to-many note](docs/images/join-path.png)
 
@@ -378,7 +378,7 @@ These checks, the coverage check, join paths and the modeling rules in the promp
 
 [Apache Ossie](https://github.com/apache/ossie) (incubating, formerly Open Semantic Interchange) is a vendor-neutral YAML/JSON format for one semantic model: datasets, relationships, fields and metrics, with per-dialect SQL and AI context.
 
-**Validation.** Choose **Ossie YAML** in the sidebar and upload a file. It is checked against the official JSON Schema of the version it declares, bundled from apache/ossie in [`modules/ossie/schemas/`](modules/ossie/schemas/):
+**Validation.** In **Connect → 📥 Import a file**, upload a file or paste it. It is checked against the official JSON Schema of the version it declares, bundled from apache/ossie in [`modules/ossie/schemas/`](modules/ossie/schemas/):
 
 | Declared `version` | Status | Notes |
 |---|---|---|
@@ -403,15 +403,15 @@ Tick **Require the current spec version** to treat anything older than `0.3.0.de
 
 As in the reference validator, the semantic checks run once the schema errors are fixed. The report lists each finding with its path, line number and a fix, and downloads as Markdown. Older documents get an **Upgrade to 0.3.0.dev0** button that rewrites them in the current shape (unwraps `semantic_model`, renames `custom_extensions`, turns JSON-string data into objects, declares fields that keys name) and re-validates the result.
 
-**Import.** **Load Ossie model** turns datasets into classes, fields into properties (`datatype` → XSD range, `is_time` → time role, computed expressions kept), relationships into many-to-one joins, and metrics into metrics whose SQL is rewritten to source columns, so metric views and the Ask tab work on imported models. When every dataset source is a `catalog.schema.table` name, Ask and metric view deploys run against Unity Catalog.
+**Import.** **Open** turns datasets into classes, fields into properties (`datatype` → XSD range, `is_time` → time role, computed expressions kept), relationships into many-to-one joins, and metrics into metrics whose SQL is rewritten to source columns, so metric views and Ask work on imported models. When every dataset source is a `catalog.schema.table` name, Ask and metric view deploys run against Unity Catalog.
 
-**Export.** The **Apache Ossie** tab exports any ontology as `0.3.0.dev0`. Join columns become declared fields, many-to-many relationships become their junction dataset plus two relationships, and code meanings go into `ai_context`. Studio-only details (roles, aggregations, rules, provenance, optionally the layout) travel in `nonportable_extensions` under `ONTOLOGY_STUDIO`, so a round trip through Ossie loses nothing. The export is validated before you download it.
+**Export.** **Publish → Exports** exports any model as `0.3.0.dev0`. Join columns become declared fields, many-to-many relationships become their junction dataset plus two relationships, and code meanings go into `ai_context`. Studio-only details (roles, aggregations, rules, provenance, optionally the layout) travel in `nonportable_extensions` under `ONTOLOGY_STUDIO`, so a round trip through Ossie loses nothing. The export is validated before you download it.
 
 ### 7. Govern and learn: domains, certification, pages, learned snippets
 
 These features follow the ideas in Databricks' Genie ontology (a curated, *modeled* head plus a *learned* tail), built from what a Databricks App can reach: Unity Catalog, system tables and the SQL warehouse.
 
-**🏠 Domains (ontology home).** A domain is a tag for a logical group of assets: Sales, Finance, Supply chain, a region. Subdomains have a parent (`Supply chain/Logistics`), and a table can live in several domains. **✨ Suggest domains** guesses them from table names and joins (a fact takes the domain of the dimensions it references); metrics and rules inherit their base class's domains. The home tab shows a domain map with the tables, metrics, pages and snippets of each domain, and lets you assign tables, certify them and set owners. **Unity Catalog tags** writes `ontology_domain`, `ontology_certification` and `ontology_owner` tags on the source tables (`ALTER TABLE … SET TAGS`, needs `APPLY TAG`), and **Read tags** loads them back; analysis also reads them, so domains tagged once show up in every new ontology.
+**🏠 Domains (ontology home).** A domain is a tag for a logical group of assets: Sales, Finance, Supply chain, a region. Subdomains have a parent (`Supply chain/Logistics`), and a table can live in several domains. **✨ Suggest domains** guesses them from table names and joins (a fact takes the domain of the dimensions it references); metrics and rules inherit their base class's domains. **Describe → Domains** shows a domain map with the tables, metrics, pages and snippets of each domain, and lets you assign tables, certify them and set owners. **Publish → Deploy** writes them as `ontology_domain`, `ontology_certification` and `ontology_owner` tags on the source tables (`ALTER TABLE … SET TAGS`, needs `APPLY TAG`) together with the model and version tags; building from Unity Catalog reads them back, so domains tagged once show up in every new model.
 
 **Governed metrics.** Every metric, rule, page and table has a status: `draft`, `certified` or `deprecated`, with an owner and who certified it when. Ask marks certified definitions `certified: true` so the model prefers them, and never sends deprecated ones. Editing a certified metric sets it back to draft.
 
@@ -451,28 +451,30 @@ Snippets with authority ≥ 0.35 (or promoted ones) go into the Ask prompt as ex
 
 Drafted pages use the Foundation Model when **Draft pages with the LLM** is on, otherwise a template filled with the evidence. They arrive as drafts, so they come back to the queue for certification.
 
-### 8. Monitor: traces, feedback, cost and budgets
+### 8. Traces, feedback, cost and budgets
 
-**Ask** has a **domain scope**: only that domain's tables (plus the tables they join to), metrics, rules, pages and snippets go to the model, and the tab shows how much smaller the prompt is. Every request is traced; rate answers with 👍 / 👎 and a note.
+**Ask** has a **domain scope**: only that domain's tables (plus the tables they join to), metrics, rules, pages and snippets go to the model, and Ask shows how much smaller the prompt is. Every request is traced; rate answers with 👍 / 👎 and a note.
 
-**📈 Monitor** lists the traces with filters (user, domain, status, feedback), and opens any request step by step: scope, the assets in the prompt, model call (tokens, time), warehouse run (rows, time), result. It charts model cost per user and tokens per domain, using editable prices per million input and output tokens. A **daily token budget per user** makes Ask refuse new questions once a user has spent it. **Load warehouse cost** reads `system.billing.usage` and `system.billing.list_prices` for the app's SQL warehouse and splits the spend per user by their share of query time in `system.query.history`.
+**Test → 📈 Traces** lists the traces with filters (user, domain, status, feedback), and opens any request step by step: scope, the assets in the prompt, model call (tokens, time), warehouse run (rows, time), result. It charts model cost per user and tokens per domain. **⚙️ Settings** holds the prices per million input and output tokens, a **daily token budget per user** (Ask refuses new questions once a user has spent it), **Load stored traces**, and **Load warehouse cost**, which reads `system.billing.usage` and `system.billing.list_prices` for the app's SQL warehouse and splits the spend per user by their share of query time in `system.query.history`.
 
 Traces live in the session. Set `TELEMETRY_TABLE` to a `catalog.schema.table` and every trace is also written to that Delta table as the user (created if missing), so traces survive restarts, budgets hold across sessions and you can build dashboards on them.
 
+#### Test set
+
+**Test → 🎯 Test set** holds the model's golden questions: each a business question plus the SQL a person confirmed (the same list as the verified examples, so a 👍 in Ask or a save from Check SQL adds to it). **▶ Run** asks every question again through Ask with that question's own SQL held back, runs the generated SQL and the expected SQL on the data, and compares the results (same rows and values, ignoring column names and row order). With **Also run schema-only** it shows how many the bare tables would get right, which is the model's value in one number. The last ten runs are saved with the model; questions that passed before and fail now are flagged as regressions, the sidebar shows the result, and **Publish → Deploy** warns when the set has not been run or does not pass. The questions also become the Genie space's sample questions, example SQL and benchmarks.
+
 **Not built, because a Databricks App can't do it:** Genie Search (the managed enterprise search index over Gmail, SharePoint, Confluence and Google Drive), learning from Power BI / Tableau / SharePoint documents, the Workday connector and org chart, Unity AI Gateway tool policies and hard budget caps for Genie itself, and traces of Genie's own agents. The studio's versions cover its own Ask requests and the data in Unity Catalog and system tables.
 
-### 9. 📘 Data dictionary for Power BI developers
+### 9. Dictionary and the Power BI starter kit
 
-The **📘 Data dictionary** tab shows each data object the way a Power BI developer needs it. Search finds tables, columns, measures and pages by business word ("country", "freight", "ship date"). The model overview lists every table with its role, rows, grain, recommended storage mode, last change and owner. Opening a table shows:
+**Describe → 📖 Dictionary** shows each table in business terms. Search finds tables, columns, measures and pages by business word ("country", "freight", "ship date"). The overview lists every table with its role, rows, grain, last change and owner. Opening a table shows:
 
-- **The table:** source (`catalog.schema.table`, table or view), grain ("one row per order and product combination"), role, rows, size and last change (from `DESCRIBE DETAIL` and `information_schema.tables`), owner, domains, certification, lineage, and a storage-mode recommendation (Import, Import + incremental refresh, or DirectQuery/composite, by size). Modeling warnings cover multi-column keys, missing or inferred keys, views, self-referencing hierarchies and always-empty columns.
-- **Columns:** Power BI name, SQL type → Power BI data type (Fixed decimal for money, Date for text dates), kind (key, foreign key, date, measure source, attribute), Summarize by, Hide, format string, data category (Country/Region, City, Postal Code…), the column it references, Q&A synonyms, and the profile: null %, distinct count, min/max and samples. Notes flag foreign keys with blanks, 0/1 flags, codes that look like amounts, high-cardinality text, money stored as floating point and date/time columns to split.
-- **Relationships:** the Power BI relationships to create (*:1, single direction), role-playing tables and dates set inactive with the `USERELATIONSHIP` pattern, many-to-many through a bridge, suggested keys, and a **Check now** button that counts rows with an empty or unmatched key (the rows that turn into (Blank)).
-- **Measures (DAX):** the ontology's metrics translated from SQL to DAX (`SUM`/`SUMX`, `RELATED` across *:1 joins, `DIVIDE`, `COUNTROWS`, `DISTINCTCOUNT`, `SWITCH`), with format strings, display folders and optional YTD / prior year / YoY %. The script pastes into DAX query view ("Update model with changes"). Metrics that can't be translated, or that add up a key, are flagged.
-- **Power Query (M):** a script for the Databricks connector that navigates to the table, keeps the useful columns, renames them and sets types, with an optional incremental-refresh filter.
+- **The table:** source (`catalog.schema.table`, table or view), grain ("one row per order and product combination"), role, rows, size and last change (from `DESCRIBE DETAIL` and `information_schema.tables`), owner, domains, certification and lineage. Warnings cover multi-column keys, missing or inferred keys, views, self-referencing hierarchies and always-empty columns.
+- **Columns:** business name, description, kind (key, foreign key, date, measure source, attribute), source column and type, the column it references, synonyms, and the profile: null %, distinct count, min/max and samples. Notes flag foreign keys with blanks, 0/1 flags, codes that look like amounts, high-cardinality text, money stored as floating point and date/time columns to split.
+- **Relationships:** the joins of the table, and a **Check now** button that counts rows with an empty or unmatched key.
 - **Usage and docs:** how people query the table (learned snippets by authority), who to ask, pages, code values and business rules.
 
-**Take it to Power BI** downloads a starter kit (data dictionary in Markdown, tables/columns/relationships/measures CSVs, `measures.dax`, a Date table and one `.pq` script per table). Profiling (row counts, nulls, distinct values, min/max) needs the build's profiling option; without it the dictionary still shows types, keys, relationships and measures.
+**Publish → Exports → Power BI starter kit** keeps everything a Power BI developer needs, as files: the data dictionary in Markdown, tables/columns/relationships/measures CSVs with Power BI data types, Summarize by, Hide, format strings and data categories, `measures.dax` (the metrics translated from SQL to DAX: `SUM`/`SUMX`, `RELATED` across *:1 joins, `DIVIDE`, `COUNTROWS`, `DISTINCTCOUNT`, `SWITCH`), a Date table, one Power Query (`.pq`) script per table and a storage-mode recommendation per table ([`modules/powerbi.py`](modules/powerbi.py)). Profiling (row counts, nulls, distinct values, min/max) needs the build's profiling option.
 
 ---
 
@@ -496,7 +498,7 @@ GRANT READ VOLUME, WRITE VOLUME ON VOLUME main.ontology.store TO `<app service p
 
 ```
 <ONTOLOGY_STORE>/<model>/versions/<UTC stamp>.ossie.yaml      Apache Ossie model
-<ONTOLOGY_STORE>/<model>/versions/<UTC stamp>.ontology.yaml   studio ontology (Ontology YAML tab)
+<ONTOLOGY_STORE>/<model>/versions/<UTC stamp>.ontology.yaml   studio model (saved by earlier versions; still opens)
 <ONTOLOGY_STORE>/<model>/latest.ossie.yaml                    newest Ossie version
 <ONTOLOGY_STORE>/<model>/history.jsonl                        one JSON line per save
 ```
@@ -511,15 +513,9 @@ GRANT READ VOLUME, WRITE VOLUME ON VOLUME main.ontology.store TO `<app service p
 | `spec_version`, `errors`, `warnings` | Ossie version and validation counts at save time |
 | `restored_from` | for a restore, the path of the version it copied |
 
-Where you save from:
+There is one save: **Publish → Save & versions → 💾 Save as new version** writes the open model as Apache Ossie YAML, with studio details (roles, aggregations, code values, governance, test set, change log) kept as `ONTOLOGY_STUDIO` extensions so nothing is lost. The sidebar's **💾 Save or publish** button goes there.
 
-| Place | Saves | Kind |
-|---|---|---|
-| 🕘 Versions → **💾 Save as new version** | the open model, exported to Ossie (studio details kept as `ONTOLOGY_STUDIO` extensions) | `ossie` |
-| 🧩 Apache Ossie → **💾 Publish to the Volume store** | the same export | `ossie` |
-| 🧾 Ontology YAML → **💾 Save version to Volume** | the studio ontology as is (layout, suggestions, lineage, snippets…) | `ontology` |
-
-The **🕘 Versions** tab:
+**Publish → Save & versions**:
 
 - **Save the open model** with a model folder and a note, plus a validation headline of what will be saved.
 - **Unsaved changes since version …**: a diff between the version you opened (or last saved) and the open model.
@@ -536,7 +532,7 @@ Saves from the older layout (`<model>/<stamp>.yaml`, before versions had their o
 
 When all three fail, the error lists each attempt and a hint on what to grant.
 
-### Deploy to Databricks (section ③)
+### Deploy to Databricks (Publish → Deploy)
 
 The idea: a semantic model should live **next to the data it describes**, inherit its permissions, and be findable from Catalog Explorer. A deployment therefore writes the Ossie YAML into a volume inside the tables' own schema and, if you ask for it, annotates the tables themselves.
 
@@ -575,14 +571,15 @@ How it behaves:
 flowchart LR
     U(["Signed-in user"])
     subgraph APP["Databricks App · Streamlit (app.py)"]
-        SEC["① Update · ② Create · ③ Deploy"]
-        UI["Sidebar: Source type · Connect / Open model · Analyze<br/>Tabs: Network · Domains · Form editor · YAML · Apache Ossie<br/>Versions · Metric views · Semantic layer · Knowledge<br/>Review queue · Tables · Ask · Monitor"]
+        SEC["Steps: Connect · Model · Describe · Review · Test · Publish · Settings"]
+        UI["Only the open step runs<br/>(modules/steps/)"]
         ENG["Engine (modules/)"]
         SEC --> UI --> ENG
     end
     U --> SEC
     ENG -- "SQL as the user" --> WH[("SQL warehouse")]
     WH --> UCT["Unity Catalog<br/>information_schema · your tables<br/>comments · tags · metric views · keys"]
+    ENG -- "Genie spaces API as the user" --> GEN["Genie space"]
     WH --> SYS["System tables<br/>access.table_lineage · access.column_lineage<br/>query.history · billing.usage"]
     WH --> TEL[("Delta table<br/>Ask traces (optional)")]
     ENG -- "app service principal" --> FM["Foundation Model endpoint"]
@@ -593,7 +590,7 @@ flowchart LR
 The engine is a pipeline over one source-neutral model ([`modules/schema_model.py`](modules/schema_model.py)), so a new source only needs a new extractor:
 
 ```
-sources.py              source types offered in the sidebar (Databricks / Non-Databricks)
+pipeline.py             build from tables, or open a saved / imported / pasted model
 uc.py / extractors.py  →  DatabaseSchema
   → discovery.py         keys, join candidates, confidence scores
   → ontology_builder.py  classes, properties, relationships, YAML, validation
@@ -603,7 +600,8 @@ uc.py / extractors.py  →  DatabaseSchema
   → metric_views.py                         Databricks metric views (YAML 1.1)
 ossie/validator.py + ossie/convert.py       Apache Ossie checks, import and export
 store.py      versioned model store (history, diff, restore)      deploy.py   plan + run a deployment
-lifecycle_ui.py  Versions tab, publish box, Deploy page
+genie.py      Genie space definition + create / update          testset.py  golden questions, runs, regressions
+lifecycle_ui.py  Save & versions, Deploy (Publish step)
 governance.py  domains, certification, pages, UC tags      snippets.py  learned snippets + authority
 review.py      review queue, promotion, page drafts         telemetry.py traces, cost, budgets
 ```
@@ -614,7 +612,7 @@ review.py      review queue, promotion, page drafts         telemetry.py traces,
 |---|---|---|
 | Browsing, profiling, discovery, lineage, query history, Ask queries, metric view deploys | **The signed-in user.** Databricks Apps forwards the user's token (`X-Forwarded-Access-Token`) and the app connects to the SQL warehouse with it. | The `sql` user authorization scope, and the user's own grants. |
 | LLM enrichment and Ask SQL generation | **The app's service principal** | `CAN_QUERY` on the serving endpoint (the `serving-endpoint` app resource). |
-| Deploying a model (section ③): every SQL statement, including the grants to the app | **The signed-in user** | `USE CATALOG` / `USE SCHEMA`, `CREATE VOLUME`, `MODIFY` (comments), `APPLY TAG`, `CREATE TABLE` (metric views), and the right to grant on the volume (owner or `MANAGE`) for *Let the app write the files* — as ticked. |
+| Deploying a model (Publish → Deploy): every SQL statement, including the grants to the app | **The signed-in user** | `USE CATALOG` / `USE SCHEMA`, `CREATE VOLUME`, `MODIFY` (comments), `APPLY TAG`, `CREATE TABLE` (metric views), and the right to grant on the volume (owner or `MANAGE`) for *Let the app write the files* — as ticked. |
 | Saving and loading versions, writing deployed model files | **The user first** (Files API with the `files` scope, then the SQL warehouse), **then the app's service principal** | The user's `READ VOLUME` / `WRITE VOLUME`; for the service principal, the same grants (set once for `ONTOLOGY_STORE`, and by *Let the app write the files* for deploy targets). |
 
 ---
@@ -645,7 +643,7 @@ review.py      review queue, promotion, page drafts         telemetry.py traces,
    | Resource | Key (must match `app.yaml`) | Permission | Used for |
    |---|---|---|---|
    | SQL warehouse | `sql-warehouse` | Can use | Required. Every SQL statement. Injected as `SQL_WAREHOUSE_ID`. |
-   | Serving endpoint | `serving-endpoint` | Can query | Optional. LLM enrichment and the Ask tab. |
+   | Serving endpoint | `serving-endpoint` | Can query | Optional. AI descriptions, Ask and the test set. |
 
    Under **User authorization**, add the **`sql`** scope, and **`files`** so the app can read and write volume files as the user. (`files.files` is the deprecated name of the same scope; use `files`.) Users are asked to consent again whenever the scope list changes.
 
@@ -712,7 +710,7 @@ The app runs on [Free Edition](https://docs.databricks.com/aws/en/getting-starte
 | Up to **3 apps** per account | Ontology Studio uses one. |
 | An app **stops 24 hours** after it was started, updated or redeployed | Start it again from **Compute → Apps** (or `databricks apps start ontology-studio`); a redeploy also restarts the 24-hour clock. Saved versions and deployments are in volumes, so nothing is lost. |
 | Serverless Starter Warehouse | Use it as the `sql-warehouse` resource. |
-| User authorization scopes | Use `sql` and `files` (not the deprecated `files.files`). If writes as the user still fail with *"Provided OAuth token does not have required scopes: files"*, keep **Let the app write the files** ticked in ③: the app's service principal then writes the YAML. |
+| User authorization scopes | Use `sql` and `files` (not the deprecated `files.files`), plus `genie` for the Genie space. If writes as the user still fail with *"Provided OAuth token does not have required scopes: files"*, keep **Let the app write the files** ticked in Publish → Deploy: the app's service principal then writes the YAML. |
 
 ### Permissions users need
 
@@ -720,6 +718,7 @@ The app runs on [Free Edition](https://docs.databricks.com/aws/en/getting-starte
 |---|---|
 | Run anything | `CAN USE` on the SQL warehouse |
 | See table size and last change in the data dictionary | `SELECT` on the table (for `DESCRIBE DETAIL`) |
+| Create or update the Genie space | the app's `genie` user authorization scope, `CAN USE` on the SQL warehouse, `SELECT` on the tables, and `CAN EDIT` on an existing space |
 | Analyze tables | `USE CATALOG`, `USE SCHEMA` and `SELECT` on them |
 | See lineage | `SELECT` on `system.access.table_lineage` and `system.access.column_lineage` |
 | Mine joins and learned snippets from query history | `SELECT` on `system.query.history`. The SQL text is redacted unless the user is an account admin or in the `databricks_pii_access` group. |
@@ -727,7 +726,7 @@ The app runs on [Free Edition](https://docs.databricks.com/aws/en/getting-starte
 | Keep Ask traces in a table | `CREATE TABLE` on the schema of `TELEMETRY_TABLE` the first time, then `MODIFY` and `SELECT` on the table |
 | See warehouse cost | `SELECT` on `system.billing.usage` and `system.billing.list_prices` |
 | Deploy metric views | `CREATE TABLE` on the target schema |
-| Deploy a model (section ③) | `CREATE VOLUME` on the schema (or `WRITE VOLUME` on an existing volume), `MODIFY` for comments, `APPLY TAG` for tags, `CREATE TABLE` for metric views, ownership or `MANAGE` on the volume for *Let the app write the files* |
+| Deploy a model (Publish → Deploy) | `CREATE VOLUME` on the schema (or `WRITE VOLUME` on an existing volume), `MODIFY` for comments, `APPLY TAG` for tags, `CREATE TABLE` for metric views, ownership or `MANAGE` on the volume for *Let the app write the files* |
 | Save and open versions as themselves | `READ VOLUME` / `WRITE VOLUME` on the `ONTOLOGY_STORE` volume (with the `files` scope on the app) |
 
 A missing grant only switches off that signal or step. The app shows a warning and carries on.
@@ -743,28 +742,30 @@ A missing grant only switches off that signal or step. The app shows a warning a
 | `SQL_WAREHOUSE_ID` | `valueFrom: sql-warehouse` | Warehouse for every SQL statement. Required on Databricks. |
 | `FM_ENDPOINT_NAME` | `databricks-meta-llama-3-3-70b-instruct` | Serving endpoint for LLM enrichment and Ask. To use whatever endpoint you picked as the resource instead, replace its `value:` line with `valueFrom: serving-endpoint`. |
 | `TARGET_CATALOG` / `TARGET_SCHEMA` | `main` / `default` | Catalog and schema pre-selected in the picker. Optional. |
-| `ONTOLOGY_STORE` | `/Volumes/main/ontology/store` | Volume path for the versioned model store (sections ① and ②). Empty switches versioning off. Grant the app's service principal `READ VOLUME` / `WRITE VOLUME` on it. Locally, any folder (e.g. `./store`). |
+| `ONTOLOGY_STORE` | `/Volumes/main/ontology/store` | Volume path for the versioned model store (Publish → Save & versions, Connect → Saved model). Empty switches versioning off. Grant the app's service principal `READ VOLUME` / `WRITE VOLUME` on it. Locally, any folder (e.g. `./store`). |
 | `DATABRICKS_CLIENT_ID` | set by the Apps runtime | The app's service principal. Shown on the Deploy page and used by *Let the app write the files* for its grants, and as the last way to read and write volume files. |
 | `STREAMLIT_SERVER_MAX_UPLOAD_SIZE` | `500` | Upload limit in MB. |
 | `TELEMETRY_TABLE` | empty (off) | `catalog.schema.table` to keep Ask traces and feedback in a Delta table. Optional. |
-| `ASK_DAILY_TOKEN_BUDGET` | `0` (no cap) | Default daily token budget per user for Ask; editable in the Monitor tab. Optional. |
+| `ASK_DAILY_TOKEN_BUDGET` | `0` (no cap) | Default daily token budget per user for Ask; editable in ⚙️ Settings. Optional. |
 | `FM_PRICE_PER_M_INPUT` / `FM_PRICE_PER_M_OUTPUT` | `0.50` / `1.50` | USD per million tokens used for cost estimates. Optional. |
 
-The app knows it is on Databricks when the Apps runtime sets `DATABRICKS_APP_NAME` (or `DATABRICKS_HOST`). Without them, the Unity Catalog source, lineage, query history, LLM enrichment and the Ask tab are switched off.
+The app knows it is on Databricks when the Apps runtime sets `DATABRICKS_APP_NAME` (or `DATABRICKS_HOST`). Without them, the Unity Catalog source, lineage, query history, AI descriptions, Ask and the test set are switched off.
 
 
 ### Light and dark themes
 
-[`.streamlit/config.toml`](.streamlit/config.toml) defines two themes, taken from the examples in Streamlit's [theming guide](https://docs.streamlit.io/develop/concepts/configuration/theming):
+[`.streamlit/config.toml`](.streamlit/config.toml) defines two themes built from one corporate colour palette and type system:
 
 | Mode | Section | Look |
 |---|---|---|
-| Light | `[theme.light]` | Anthropic-inspired: warm off-white paper (`#fdfdf8`), clay accent (`#cb785c`) |
-| Dark | `[theme.dark]` | Spotify-inspired: charcoal surfaces (`#2a2a2a` / `#121212`), green accent (`#1ed760`) |
+| Light | `[theme.light]` | Red on white: white page (`#ffffff`), light grey panels (`#f2f3f3`), near-black text (`#21262b`), red accent (`#ed1c24`) |
+| Dark | `[theme.dark]` | White and red on black: charcoal page (`#21262b`), black panels and sidebar (`#000000`), white text, red accent (`#ed1c24`) |
 
-The app follows the browser's light or dark setting, and users can pick **System**, **Light** or **Dark** from the ⋮ menu at the top right. Every font in the UI is Arial in both themes: body text, headings and code (`font`, `headingFont` and `codeFont` in `config.toml`), the tab strip, the form editor and the network diagram. Arial is a system font, so nothing loads from a font CDN.
+Red is the single accent (buttons, selected states, focus). The palette's secondary colours (port and steel blue, azure, grain gold, forest green, mineral and aluminum grey) are used only for chart series, status colours and the network diagram's class types (fact, dimension, entity, bridge, external).
 
-The app's own HTML follows the active theme too: the Chromium-style tab strip and the YAML form editor's step cards read their colours from `config.toml` ([`modules/theme.py`](modules/theme.py)), and the network diagram takes its canvas, card, text and accent colours from the theme Streamlit sends it. Streamlit doesn't rerun the script when someone switches theme, so a hidden helper ([`components/theme_watcher/`](components/theme_watcher/)) notices the switch and reruns once. To restyle the app, edit the colours in `config.toml`; nothing else needs to change.
+The app follows the browser's light or dark setting, and users can pick **System**, **Light** or **Dark** from the ⋮ menu at the top right. Headings use **Raleway**, body text uses **Roboto** and code uses **Roboto Mono**, in both themes. The fonts are self-hosted in [`static/fonts/`](static/fonts/) (SIL Open Font License, served with `server.enableStaticServing`), so nothing loads from a font CDN.
+
+The app's own HTML follows the active theme too: the Chromium-style tab strip (still used inside some views) and the form editor's step cards read their colours from `config.toml` ([`modules/theme.py`](modules/theme.py)), and the network diagram takes its canvas, card, text and accent colours from the theme Streamlit sends it. Streamlit doesn't rerun the script when someone switches theme, so a hidden helper ([`components/theme_watcher/`](components/theme_watcher/)) notices the switch and reruns once. To restyle the app, edit the colours in `config.toml`; nothing else needs to change.
 
 ---
 
@@ -812,7 +813,7 @@ python -m pip install -r requirements.txt pytest
 python -m pytest tests -q
 ```
 
-49 tests, no workspace needed (Databricks calls are faked):
+69 tests, no workspace needed (Databricks calls are faked):
 
 | File | Covers |
 |---|---|
@@ -823,6 +824,8 @@ python -m pytest tests -q
 | `tests/test_answering.py` | The SQL checker (guard, unknown names, joins, fan-out, values, scale, dry run, Unity Catalog names), join paths, the coverage check, verified examples and glossary through Ossie, Ask's repair loop, value lookups, readiness |
 | `tests/test_modeling.py` | Re-scan drift and table filters, roles and default joins (paths, checker, Ossie, edits), unlinked id columns, observed joins, filter rules tested on data, model checks, the change log, one-table LLM drafts and tolerant JSON parsing |
 | `tests/test_lifecycle.py` | The versioned store (save, history, diff, restore, legacy files), the SQL warehouse fallback statements, deployment plans and grants, execute with fallbacks, the source registry, the metric view spec (`fields`, `rely`, aggregate-only measures) |
+| `tests/test_powerbi.py` | The data dictionary: Power BI types, column settings, relationships, DAX, M, the starter kit |
+| `tests/test_profiling.py` | Personal-data rules and value withholding (SQLite, Unity Catalog, Ossie, hand edits), text date formats, samples, FK columns to tables outside the model, same-key one-to-one joins and the short-value guard, name-only descriptions, the profiling circuit breaker |
 
 ## Troubleshooting
 
@@ -830,11 +833,11 @@ python -m pytest tests -q
 |---|---|
 | `Provided OAuth token does not have required scopes: files` when saving or deploying | The app's user authorization lacks the `files` scope. Add `files` (not the deprecated `files.files`) under **User authorization**, then reload the app and consent again. Until then, keep **Let the app write the files** ticked in ③ and grant the app's service principal access to `ONTOLOGY_STORE`: the service principal writes the files instead. |
 | Deploy shows ✅ for the SQL steps but ❌ for the files | The volume exists but neither you nor the app could write to it. Tick **Let the app write the files** (you need to own the volume or have `MANAGE` on it), or ask the volume owner to grant the service principal `READ VOLUME, WRITE VOLUME`. The full error is shown in the result box. |
-| `GRANT … TO <service principal>` fails in ③ | You can't grant on that catalog, schema or volume. Ask its owner to run the three grants shown in the plan preview, or untick the option and rely on your own `files` scope. |
+| `GRANT … TO <service principal>` fails in Publish → Deploy | You can't grant on that catalog, schema or volume. Ask its owner to run the three grants shown in the plan preview, or untick the option and rely on your own `files` scope. |
 | `CREATE VOLUME` fails | You lack `CREATE VOLUME` on the schema. Pick a schema you can create in, or ask for an existing volume and untick **Create the volume**. |
 | A metric view fails with a YAML error | Your warehouse may predate metric view YAML 1.1. Use a current serverless or Pro warehouse. Non-aggregate metrics are skipped on purpose and named in the view's comment. |
 | `ADD CONSTRAINT` fails | The constraint already exists, or the primary key columns are nullable. The other steps still run. |
-| *Versioning is off* in sections ① / ② | `ONTOLOGY_STORE` is empty, or the volume doesn't exist. Create it (see [Versioned store](#versioned-store-ontology_store)) and redeploy. |
+| *Versioning is off* in Publish or Connect | `ONTOLOGY_STORE` is empty, or the volume doesn't exist. Create it (see [Versioned store](#versioned-store-ontology_store)) and redeploy. |
 | The app shows old screens after a deploy | Reload the tab with Ctrl+F5. |
 | The app is *Stopped* on Free Edition | Free Edition stops apps 24 hours after a start or deploy. Start it again. |
 | `SQL_WAREHOUSE_ID` looks like a placeholder after a redeploy | Keep `valueFrom: sql-warehouse` in `app.yaml` and add the warehouse as the `sql-warehouse` app resource. |
@@ -857,35 +860,41 @@ python -m pytest tests -q
 ## Project layout
 
 ```
-app.py                          Streamlit UI: sections ①②③ · connect · analyze · network + inspector · exports · Ask
+app.py                          Streamlit shell: the six steps, the sidebar, Advanced mode (runs only the open step)
+modules/steps/                  One module per step: connect, model, describe, review, testing, publish, settings, common
+modules/pipeline.py             Build from tables (one query-history read), open saved / imported / pasted models
 app.yaml                        Databricks Apps start command and environment
 cli.py                          The same engine from the command line
 requirements.txt                Python dependencies
 NOTICE                          Credits for the Apache-2.0 code adapted from auto-ontology-mcp and NVIDIA Auto Ontology
 components/ontology_graph/      Editable network diagram (D3.js, bundled)
 components/theme_watcher/       Hidden helper that reruns the app when the user switches light/dark
-.streamlit/config.toml          Light ([theme.light]) and dark ([theme.dark]) themes
+.streamlit/config.toml          Light ([theme.light]) and dark ([theme.dark]) themes, fonts
+static/fonts/                   Self-hosted Raleway, Roboto and Roboto Mono (OFL)
 modules/theme.py                Active theme and its colours for the app's own CSS and the diagram
 modules/db_connection.py        On-behalf-of-user SQL warehouse connection
 modules/uc.py                   Unity Catalog browse, extract (up to 100 objects), profile, lineage, query-history joins
 modules/extractors.py           SQLite and SQL-script extractors
 modules/schema_model.py         Source-neutral relational model
+modules/profiling.py            Personal-data rules, text date formats, samples, the circuit breaker (from NVIDIA Auto Ontology)
 modules/discovery.py            Primary key inference, relationship discovery and scoring
 modules/ontology_builder.py     Relational → ontology mapping, YAML, validation, synonyms index
 modules/semantics.py            Fact/dimension and measure/dimension classification, base metrics
 modules/ontology_edit.py        Edits: add, repoint and delete relationships, rename, roles, metrics
 modules/graph_component.py      Diagram ⇄ ontology bridge
 modules/metric_views.py         Databricks metric view YAML 1.1 and DDL; suggestions and checks for the builder
-modules/mv_builder_ui.py        Metric views tab → ➕ New metric view (guided builder)
+modules/mv_builder_ui.py        Describe → Metrics → ➕ New metric view (guided builder)
 modules/store.py                Versioned model store in a Unity Catalog Volume (history, diff, restore)
-modules/deploy.py               Section ③: plan and run a deployment next to the tables
-modules/lifecycle_ui.py         🕘 Versions tab, publish box and the Deploy page
-modules/sources.py              Source types (Databricks / Non-Databricks) and planned connectors
+modules/deploy.py               The one deploy plan: files, comments, tags, metric views, keys, Genie space
+modules/genie.py                Genie space definition (serialized_space v2) and create / update
+modules/testset.py              Test set: golden questions, result comparison, runs, regressions
+modules/lifecycle_ui.py         Publish → Save & versions and Publish → Deploy
+modules/sources.py              Planned connectors (not shown in the app yet)
 modules/llm_enrich.py           Optional LLM semantic layer
 modules/ask.py                  Text-to-SQL test bench (ontology vs. baseline)
 modules/sqlcheck.py             SQL checker: guard, model names, joins, fan-out, value and scale probes; value lookups
 modules/answering.py            Join paths, coverage check, verified examples, glossary, readiness, prompt context
-modules/workbench_ui.py         Ask tab modes (Check SQL, Join path, Look up values, Verified examples), glossary, readiness
+modules/workbench_ui.py         Ask modes (Check SQL, Join path, Look up values, Verified examples), glossary, readiness
 modules/modeling.py             Re-scan drift, new tables, worklist, relationship review, filter rules, model checks, change log
 modules/modeling_ui.py          Re-scan box, Modeling worklist, search and Term card, change log
 modules/ossie/                  Apache Ossie validator, converter and bundled official schemas
@@ -894,9 +903,9 @@ modules/governance.py           Domains and subdomains, certification, pages, Un
 modules/snippets.py             Learned snippets from query history / logs, authority score, experts
 modules/review.py               Review queue, promotion of snippets, page drafts
 modules/telemetry.py            Ask traces, feedback, token cost, budgets, warehouse spend
-modules/governance_ui.py        Domains, Knowledge, Review queue, Ask and Monitor tabs
-modules/powerbi.py              Power BI view: types, column settings, grain, relationships, SQL→DAX, M, starter kit
-modules/dictionary_ui.py        📘 Data dictionary tab
+modules/governance_ui.py        Domains, Knowledge, Review queue, Ask, Traces and the cost settings
+modules/powerbi.py              Dictionary cards and search; Power BI starter kit (types, settings, SQL→DAX, M)
+modules/dictionary_ui.py        Describe → Dictionary
 tests/test_ossie.py             Ossie checks and round trip (python tests/test_ossie.py)
 tests/test_ossie_form.py        YAML form editor
 tests/test_governance.py        Domains, snippets, review queue, governance round trip through Ossie
@@ -905,6 +914,8 @@ tests/test_ask.py               Ask engine: Decimal-safe prompts, focus, JSON an
 tests/test_powerbi.py           Data dictionary: Power BI types, settings, relationships, DAX, M, starter kit
 tests/test_answering.py         SQL checker, join paths, coverage check, verified examples, glossary, readiness
 tests/test_modeling.py          Re-scan, worklist, roles and default joins, relationship review, model checks, change log
+tests/test_profiling.py         Personal data, text dates, samples, unmatched FK columns, same-key joins, circuit breaker
+tests/test_lean.py              Genie space definition, the one deploy plan, the test set, one home per job
 samples/                        Sample databases, scripts, docs and their generated outputs
 docs/images/                    Screenshots and the network diagram used in this README
 ```
@@ -924,17 +935,19 @@ docs/images/                    Screenshots and the network diagram used in this
 | [#10](https://github.com/DevDataAnalyst/OntologyStudio/pull/10) | 2026-11-19 | Metric views follow the current Databricks YAML 1.1 reference (`fields`, `rely`, aggregate-only measures, synonyms, display names) |
 | [#11](https://github.com/DevDataAnalyst/OntologyStudio/pull/11) | 2026-11-19 | README: full rewrite with lifecycle, deploy, Free Edition and troubleshooting |
 | [#12](https://github.com/DevDataAnalyst/OntologyStudio/pull/12) | 2026-11-19 | Metric views: guided ➕ New metric view builder |
+| next | 2026-11-22 | Lean layout: six steps instead of 3 sections and 14 tabs, one save / deploy / validator / query-history read, Review inbox, Test set, Genie space in Deploy, Power BI kit moved to Exports, Advanced mode |
 
 ## Security and governance notes
 
 - **No credentials in the code or config.** The app uses the identity the Apps runtime injects, plus the user's forwarded token. The warehouse ID comes from an app resource.
 - **Parameterized SQL.** Values go through named parameters. Catalog, schema and table names are checked against `[A-Za-z0-9_-]` and back-quoted.
 - **Read-only Ask.** Generated SQL runs only if it is a single `SELECT` or `WITH` statement.
+- **Personal data stays out of the model.** Columns named like personal data (emails, phones, names and addresses of people, …) are never sampled; the model keeps their counts and a `pii` tag, not their values, so the LLM, exports and saved versions never see them.
 - **What the LLM sees.** Enrichment sends class, column and relationship names, comments, sample values and enumerations, plus the documents you upload, to the serving endpoint in your workspace. Turn off profiling for tables whose values should not be in a prompt.
 - **Provenance.** Classes, columns, relationships, code meanings, rules and metrics carry a `provenance` tag: `schema`, `profile`, `inferred`, `discovered`, `heuristic`, `manual`, `docs/<file>`, `llm`, `learned` (promoted from a snippet) or `review` (drafted from the review queue).
 - **Learned snippets keep names.** Snippets store who ran each query (`executed_by`) and where. They are saved with the ontology, so treat saved versions and Ossie exports like query history.
 - **Uploaded Ossie files are data.** They are read with a safe YAML loader, their SQL is only parsed (never run), and their text is escaped before the diagram shows it.
-- **Deploys run as you.** Every statement in ③ runs with your token, so it can only do what your grants allow. The only grants it makes are the three on the target catalog, schema and volume for the app's own service principal, and only when **Let the app write the files** is ticked; the preview lists them before anything runs.
+- **Deploys run as you.** Every statement in Publish → Deploy runs with your token, so it can only do what your grants allow. The only grants it makes are the three on the target catalog, schema and volume for the app's own service principal, and only when **Let the app write the files** is ticked; the preview lists them before anything runs.
 - **What the service principal can touch.** It writes model files only to `ONTOLOGY_STORE` and to volumes it was granted, and every write is recorded (who saved it, `written_as`) in `history.jsonl` or `deployments.json`.
 - **No CDN.** D3.js ships with the app, so the diagram loads nothing from the internet.
 
@@ -942,7 +955,8 @@ docs/images/                    Screenshots and the network diagram used in this
 
 Ideas the current design leaves room for, none of them built yet:
 
-- a golden question set that re-runs the Ask comparison on every ontology change,
+- running the test set through the published Genie space (Genie conversation API) and comparing it with Ask,
+- more sources in Connect: Informatica CDGC as a glossary overlay on Unity Catalog, then Snowflake and PostgreSQL,
 - a clarifying question when the coverage check finds a gap (today Ask names the gap and answers the rest),
 - converters from Ossie to other semantic layers (dbt, LookML, Power BI),
 - MCP tools so external agents can query the ontology.

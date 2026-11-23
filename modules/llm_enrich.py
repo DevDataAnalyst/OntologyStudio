@@ -3,7 +3,8 @@ Optional LLM pass (Databricks Foundation Model endpoint) that turns the
 structural ontology into a business semantic layer, grounded in docs the user
 uploads (data dictionary, KPI definitions, code lists, wiki pages...).
 
-Fills — never overwrites anything that came from the schema:
+Fills — never overwrites what a person wrote or what came from the schema (except a database comment that only
+repeats the name, which Auto Ontology counts as missing):
   classes / properties : description, synonyms
   value_meanings       : code -> business meaning   (e.g. line_cd  M -> Mountain)
   rules                : business rules + SQL hint  (e.g. fiscal year starts 1 July)
@@ -105,7 +106,7 @@ def _compact(onto: dict, class_names: list[str]) -> dict:
             "properties": {
                 pid: {k: v for k, v in {
                     "column": p.get("source_column"), "type": p.get("range"),
-                    "samples": p.get("samples") or p.get("allowed_values"),
+                    "samples": p.get("samples") or p.get("allowed_values"), "date_format": p.get("date_format"),
                     "description": p.get("description")}.items() if v}
                 for pid, p in c["data_properties"].items()},
         }
@@ -152,13 +153,25 @@ def enrich(onto: dict, docs: dict[str, str] | None = None, batch_size: int = 25,
     return refresh_index(onto)
 
 
+def lacks_description(item: dict, *names) -> bool:
+    """No description, or one that only repeats the item's name (Auto Ontology's check): a column customer_id
+    described as "Customer ID" is as undocumented as one with none, so enrichment may replace it."""
+    def bare(text) -> str:
+        return re.sub(r"[^a-z0-9]", "", str(text or "").lower())
+    d = bare(item.get("description"))
+    return not d or any(d == bare(n) for n in names if n)
+
+
 def _merge(onto: dict, r: dict) -> None:
     classes, ops = onto["classes"], onto["object_properties"]
 
-    def fill(target: dict, src: dict):
+    def fill(target: dict, src: dict, names: tuple = (), comment: str | None = None):
+        """Synonyms always; the description when there is none, or when it is a database comment that only
+        repeats the name (`comment` is the source comment it was copied from), never what a person wrote."""
         if not src:
             return
-        if src.get("description") and not target.get("description"):
+        if src.get("description") and (not target.get("description") or (
+                target["description"] == comment and lacks_description(target, *names))):
             target["description"] = src["description"]
         if src.get("synonyms"):
             target["synonyms"] = sorted({*target.get("synonyms", []),
@@ -169,11 +182,15 @@ def _merge(onto: dict, r: dict) -> None:
 
     for cid, src in (r.get("classes") or {}).items():
         if cid in classes:
-            fill(classes[cid], src)
+            c = classes[cid]
+            fill(c, src, (cid, c.get("label"), c.get("source_table")),
+                 c.get("description") if "comment" in str(c.get("provenance") or "") else None)
     for key, src in (r.get("data_properties") or {}).items():
         cid, _, pid = key.partition(".")
         if pid in classes.get(cid, {}).get("data_properties", {}):
-            fill(classes[cid]["data_properties"][pid], src)
+            p = classes[cid]["data_properties"][pid]
+            prof = (classes[cid].get("column_profile") or {}).get(str(p.get("source_column") or pid)) or {}
+            fill(p, src, (pid, p.get("label"), p.get("source_column")), prof.get("comment"))
     for pid, src in (r.get("object_properties") or {}).items():
         if pid in ops and src.get("description") and not ops[pid].get("description"):
             ops[pid]["description"] = src["description"]

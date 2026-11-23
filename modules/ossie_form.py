@@ -425,10 +425,11 @@ def _go_after(i: int, back: bool, nxt: bool, notes: list[str], saved: bool) -> N
     _bump(msg, step=i - 1 if back else (i + 1 if nxt else i))
 
 
-def _start_panel(onto: dict | None) -> None:
+def _start_panel(onto: dict | None, allow_upload: bool = True) -> None:
     s = _ss()
     st.markdown("Pick the model to edit. Nothing in the studio changes until you **submit** on the last step.")
-    opts = (["Current studio model"] if onto else []) + ["Upload an Ossie YAML / JSON file", "Start a new model"]
+    opts = (["Current studio model"] if onto else []) + (["Upload an Ossie YAML / JSON file"] if allow_upload else []) \
+        + ["Start a new model"]
     choice = st.radio("Start from", opts, horizontal=True, key=f"fe_src_{bool(onto)}", label_visibility="collapsed")
     doc, name, notes = None, "", []
     if choice == "Current studio model":
@@ -465,17 +466,18 @@ def _start_panel(onto: dict | None) -> None:
         _bump(notes or None, step=0)
 
 
-def editor_tab(onto: dict | None, on_submit: Callable[[dict, str], None] | None) -> None:
-    """The guided editor. on_submit(doc, file_name) loads the finished model into the studio."""
+def editor_tab(onto: dict | None, on_submit: Callable[[dict, str], None] | None, allow_upload: bool = True) -> None:
+    """The guided editor. on_submit(doc, file_name) loads the finished model into the studio.
+    allow_upload=False hides the editor's own file upload (the app imports files in ① Connect)."""
     s = _ss()
     st.markdown(_css(), unsafe_allow_html=True)
     head_l, head_r = st.columns([4, 1.2])
-    head_l.markdown("#### ✏️ YAML form editor")
+    head_l.markdown("#### ✏️ Form editor")
     head_l.caption("Edit an Apache Ossie semantic model step by step, no YAML knowledge needed. "
                    "Each step saves when you press its button; the last step checks everything.")
     doc = s.get("fe_doc")
     if doc is None:
-        _start_panel(onto)
+        _start_panel(onto, allow_upload)
         return
     if head_r.button("↺ Start over", use_container_width=True, help="Close this model and pick another"):
         for k in ("fe_doc", "fe_orig", "fe_name", "fe_step", "fe_seen", "fe_msg"):

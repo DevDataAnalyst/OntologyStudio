@@ -235,6 +235,7 @@ Classes go to the model in batches of 25, with up to 60,000 characters of your d
 
 - **Apache Ossie:** the validation report of the uploaded file, the export of the current ontology, and a box to validate any pasted document. See [below](#6-apache-ossie-validation-import-and-export).
 - **Ontology YAML:** edit the YAML and click **Apply YAML edits** to redraw the diagram. Validation notes flag relationships that point at missing classes, inverses that don't point back, classes without an identifier, and coded values that still have no meaning.
+- **📊 Governance clarity:** a donut chart shows the share of table and metric governance details recorded in the model, with a breakdown for descriptions, owners, business domains and review status. This measures documentation coverage, not governance quality or certification approval.
 - **Semantic layer:** search the model (classes, columns, metrics, rules, pages, glossary, stored values) and open a **Term card** with a class's definition, columns and samples, unmapped columns, joins, metrics and pages; edit value meanings and the glossary; review metrics, business rules and the synonyms index.
 - **Tables:** classes (with unmapped and new columns), relationships and suggestions as plain tables, and **🔄 Re-scan the tables in Unity Catalog** (below).
 - **🔎 Data preview:** choose any modeled source table and browse its rows in read-only pages. Choose 10–500 rows per page and use **← Previous** / **Next →** to navigate; each page reads only the requested rows. Available for live Unity Catalog and SQLite sources.

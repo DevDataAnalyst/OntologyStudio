@@ -35,7 +35,7 @@ import yaml
 
 from modules import (
     data_preview_ui, discovery, governance as gv, governance_ui as gui, guide_ui, ontology_edit as ed, ossie,
-    ossie_form, ossie_ui,
+    governance_visualization, ossie_form, ossie_ui,
 )
 from modules.dictionary_ui import dictionary_tab
 from modules import lifecycle_ui as lc, semantics, store, theme
@@ -606,11 +606,11 @@ wb.readiness_line(onto, ss.get("runner", {}))
 for w in onto.get("warnings", [])[:8]:
     st.warning(w)
 
-(tab_net, tab_home, tab_dict, tab_form, tab_yaml, tab_ossie, tab_ver, tab_mv, tab_sem, tab_know, tab_review,
- tab_tables, tab_preview, tab_ask, tab_mon) = st.tabs(
-    ["🕸️ Network", "🏠 Domains", "📘 Data dictionary", "✏️ YAML form editor", "🧾 Ontology YAML",
-     "🧩 Apache Ossie", "🕘 Versions", "📐 Metric views", "🧠 Semantic layer", "📚 Knowledge", "✅ Review queue",
-     "🗂️ Tables", "🔎 Data preview", "💬 Ask (Text-to-SQL)", "📈 Monitor"])
+(tab_net, tab_home, tab_governance, tab_dict, tab_form, tab_yaml, tab_ossie, tab_ver, tab_mv, tab_sem, tab_know,
+ tab_review, tab_tables, tab_preview, tab_ask, tab_mon) = st.tabs(
+    ["🕸️ Network", "🏠 Domains", "📊 Governance clarity", "📘 Data dictionary", "✏️ YAML form editor",
+     "🧾 Ontology YAML", "🧩 Apache Ossie", "🕘 Versions", "📐 Metric views", "🧠 Semantic layer",
+     "📚 Knowledge", "✅ Review queue", "🗂️ Tables", "🔎 Data preview", "💬 Ask (Text-to-SQL)", "📈 Monitor"])
 
 # =========================================================================== #
 # YAML form editor (guided, step-by-step Ossie editing for business users)
@@ -1091,6 +1091,9 @@ with tab_tables:
 
 with tab_preview:
     data_preview_ui.render(onto, ss.get("runner", {}), uc_runner if ON_DATABRICKS else None)
+
+with tab_governance:
+    governance_visualization.render(onto)
 
 # =========================================================================== #
 # Governed + learned knowledge, Ask, Monitor

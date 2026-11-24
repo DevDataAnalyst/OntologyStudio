@@ -20,9 +20,9 @@ _GUIDE = {
             "🧭 Which path should I choose?",
             """Use the three choices at the top of the page:
 
-            - **📂 Update existing model**: open a model from the version store, upload an Ossie YAML/JSON file,
-              or paste YAML. Check the report, then load it to edit.
-            - **✨ Create new model**: connect tables or a file, analyze them, and edit the model.
+            - **✨ Create New Model**: connect tables or a file, analyze them, and edit the model.
+            - **📂 Review & Update Existing Model**: open a model from the version store, upload an Ossie YAML/JSON
+              file, or paste YAML. Check the report, then load it to edit.
             - **🚀 Deploy to Databricks**: preview and publish a model to Unity Catalog.
 
             Your open model stays available when you move between these choices. Need help while working?
@@ -153,11 +153,10 @@ _GUIDE = {
             "🧭 Quel parcours choisir ?",
             """Utilisez les trois choix en haut de la page :
 
-            - **📂 Update existing model** (mettre à jour) : ouvrez un modèle enregistré, importez un fichier
-              Ossie YAML/JSON
-              ou collez du YAML. Consultez le rapport, puis chargez le modèle pour le modifier.
-            - **✨ Create new model** (créer) : connectez des tables ou un fichier, analysez-les et modifiez
+            - **✨ Create New Model** (créer) : connectez des tables ou un fichier, analysez-les et modifiez
               le modèle.
+            - **📂 Review & Update Existing Model** (mettre à jour) : ouvrez un modèle enregistré, importez un
+              fichier Ossie YAML/JSON ou collez du YAML. Consultez le rapport, puis chargez le modèle pour le modifier.
             - **🚀 Deploy to Databricks** (déployer) : vérifiez l'aperçu et publiez le modèle dans Unity Catalog.
 
             Le modèle ouvert reste disponible lorsque vous changez de parcours. Besoin d'aide pendant le travail ?

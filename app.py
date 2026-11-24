@@ -2,10 +2,10 @@
 Ontology Studio — Databricks App (Streamlit)
 
 Three sections (top of the page), around the lifecycle of a semantic model:
-  ① Update existing model : open an Ossie model from the versioned Volume store (ONTOLOGY_STORE), an upload
-                            or pasted YAML; edit it; save it back as a new version (🕘 Versions tab)
-  ② Create new model      : pick a source type (Databricks / Non-Databricks), then the flow below; publish
+  ① Create New Model      : pick a source type (Databricks / Non-Databricks), then the flow below; publish
                             the Ossie YAML to the Volume store
+  ② Review & Update Existing Model : open an Ossie model from the versioned Volume store (ONTOLOGY_STORE),
+                                     an upload or pasted YAML; edit it; save it back as a new version (🕘 Versions tab)
   ③ Deploy to Databricks  : put the model next to its tables (volume in their schema + comments, tags,
                             metric views, keys) — modules/deploy.py
 
@@ -117,12 +117,16 @@ h1, h2, h3, h4, h5, h6 {{ font-variant-numeric: lining-nums; }}  /* Raleway defa
 st.markdown(tab_css(theme.colors()), unsafe_allow_html=True)
 theme.watch()
 
-SECTIONS = {"update": "📂 Update existing model", "create": "✨ Create new model", "deploy": "🚀 Deploy to Databricks"}
+SECTIONS = {
+    "create": "✨ Create New Model",
+    "update": "📂 Review & Update Existing Model",
+    "deploy": "🚀 Deploy to Databricks",
+}
 section = st.segmented_control(
     "Section", list(SECTIONS), format_func=SECTIONS.get, default="create", required=True, key="section",
     label_visibility="collapsed",
-    help="① open a saved, uploaded or pasted Apache Ossie model and change it · ② build a new model from "
-         "your tables · ③ put a model into Unity Catalog next to its tables") or "create"
+    help="① build a new model from your tables · ② review and update a saved, uploaded or pasted Apache Ossie model · "
+         "③ put a model into Unity Catalog next to its tables") or "create"
 
 
 def user_token() -> str | None:
@@ -261,7 +265,7 @@ with st.sidebar:
             version_path = st.selectbox("Version", list(hlabels), format_func=hlabels.get,
                                         key=f"sv_ver_{smodel}_{len(hist)}")
             if not models:
-                st.caption(f"No models in `{store.root()}` yet. Save one from section ② (🕘 Versions or "
+                st.caption(f"No models in `{store.root()}` yet. Save one from section ① (🕘 Versions or "
                            "🧩 Apache Ossie tab).")
             force_open = st.checkbox("Open even if it has validation errors", value=False, key="sv_force")
             if st.button("Refresh list"):
@@ -531,7 +535,7 @@ if section == "deploy":
     st.stop()
 
 if onto is None and section == "update":
-    st.title("① Update an existing semantic model")
+    st.title("② Review & Update Existing Model")
     if source in ("Ossie YAML", "Paste YAML", "Saved version") and ss.get("ossie_report") is not None \
             and (source != "Ossie YAML" or ossie_rep is not None):
         st.caption(f"File: **{ss.ossie_report.file_name}**")
@@ -561,7 +565,7 @@ if onto is None:
         st.caption(f"File: **{ss.ossie_report.file_name}** · {nxt}")
         ossie_ui.report_view(ss.ossie_report, key="landing")
         st.stop()
-    st.title("② Create a new semantic model")
+    st.title("① Create New Model")
     land_start, land_form = st.tabs(["🏠 Get started", "✏️ YAML form editor"])
     with land_form:
         ossie_form.editor_tab(None, submit_form_model)
@@ -571,7 +575,7 @@ if onto is None:
         "**Analyze & build**. "
         "You get a network of classes and relationships you can edit, plus exports as ontology "
         "YAML, Apache Ossie YAML and Databricks metric views.\n\n"
-        "Have an **Apache Ossie** semantic model already? Use **① Update existing model** and upload it: the file is "
+        "Have an **Apache Ossie** semantic model already? Use **② Review & Update Existing Model** and upload it: the file is "
         f"checked against the official specification (current version `{ossie.CURRENT_VERSION}`; older "
         "`0.2.0.dev0` and `0.1.1` files are checked against their own version and can be upgraded) and can "
         "then be loaded into the same editor.\n\n"
@@ -579,7 +583,7 @@ if onto is None:
         "through simple forms, then download it or load it here.\n\n"
         "When the model is ready, save it to the Volume store (**🕘 Versions** or **🧩 Apache Ossie** tab) "
         "and put it next to its tables with **③ Deploy to Databricks**. To change a saved model later, use "
-        "**① Update existing model**.")
+        "**② Review & Update Existing Model**.")
     st.stop()
 
 # =========================================================================== #

@@ -38,15 +38,22 @@ No Databricks workspace handy? The same engine runs locally on a SQLite file or 
 
 ## The three sections: the lifecycle of a semantic model
 
-The page opens with a switcher with three sections. The sidebar and the tabs below change with the section; the open model stays loaded when you switch, so you can build in ②, save, and deploy in ③ without reloading anything.
+The page opens with a switcher with three sections. The sidebar and the tabs below change with the section; the open model stays loaded when you switch, so you can build in ①, save, and deploy in ③ without reloading anything.
 
 | Section | Use it to | Sidebar | Main panel |
 |---|---|---|---|
-| **① Update existing model** | change a semantic model you already have | **0 · Source type**, **1 · Open model** (*Volume store*, *Upload* or *Paste*), **2 · Semantic layer (optional)**, then **Open version** / **Load Ossie model** / **Open pasted YAML** | Before anything is open: a list of every model and version in the store. After: the same tabs as ②, including **🕘 Versions**. |
-| **② Create new model** | build a new model from tables | **0 · Source type**, **1 · Connect**, **2 · Analyze**, **3 · Semantic layer (optional)**, then **Analyze & build** | The full editor: Network, Domains, ✏️ YAML form editor, Ontology YAML, Apache Ossie (with **💾 Publish to the Volume store**), 🕘 Versions, Metric views, Semantic layer, Knowledge, Review queue, Tables, Ask, Monitor. |
+| **① Create New Model** | build a new model from tables | **0 · Source type**, **1 · Connect**, **2 · Analyze**, **3 · Semantic layer (optional)**, then **Analyze & build** | The full editor: Network, Domains, ✏️ YAML form editor, Ontology YAML, Apache Ossie (with **💾 Publish to the Volume store**), 🕘 Versions, Metric views, Semantic layer, Knowledge, Review queue, Tables, Ask, Monitor. |
+| **② Review & Update Existing Model** | change a semantic model you already have | **0 · Source type**, **1 · Open model** (*Volume store*, *Upload* or *Paste*), **2 · Semantic layer (optional)**, then **Open version** / **Load Ossie model** / **Open pasted YAML** | Before anything is open: a list of every model and version in the store. After: the same tabs as ①, including **🕘 Versions**. |
 | **③ Deploy to Databricks** | put a model into Unity Catalog next to its tables | a short note | The deploy page: pick the model, set the target, tick the options, preview every file and SQL statement, **🚀 Deploy**, then see the result and earlier deployments. |
 
-### ① Update existing model
+### ① Create New Model
+
+1. Pick the **source type** (see [below](#source-types-databricks-and-non-databricks)) and the tables or file.
+2. Adjust **Analyze** (profiling, join verification, query history, lineage, thresholds, naming) and optionally the LLM **Semantic layer** with your documents.
+3. **Analyze & build**, then edit in the network, the inspector, the form editor or the YAML.
+4. Save it: **💾 Publish to the Volume store** in the 🧩 Apache Ossie tab or **💾 Save as new version** in 🕘 Versions. Both save the model as Ossie YAML (studio-only details kept as extensions, so nothing is lost).
+
+### ② Review & Update Existing Model
 
 1. In the sidebar under **1 · Open model**, pick where the model comes from:
    - **Volume store**: pick a **Model** (a folder under `ONTOLOGY_STORE`) and a **Version** (newest first, labelled with time, kind, author and note). **Refresh list** re-reads the store.
@@ -56,13 +63,6 @@ The page opens with a switcher with three sections. The sidebar and the tabs bel
 3. The model opens in the editors: the network diagram, the ✏️ YAML form editor, the Ontology YAML text, Tables, Metric views and so on.
 4. In **🕘 Versions**, write what changed and click **💾 Save as new version**. It goes into the same model folder it came from, so the history stays in one place. The tab also shows **unsaved changes** against the version you opened, as a diff.
 
-### ② Create new model
-
-1. Pick the **source type** (see [below](#source-types-databricks-and-non-databricks)) and the tables or file.
-2. Adjust **Analyze** (profiling, join verification, query history, lineage, thresholds, naming) and optionally the LLM **Semantic layer** with your documents.
-3. **Analyze & build**, then edit in the network, the inspector, the form editor or the YAML.
-4. Save it: **💾 Publish to the Volume store** in the 🧩 Apache Ossie tab or **💾 Save as new version** in 🕘 Versions. Both save the model as Ossie YAML (studio-only details kept as extensions, so nothing is lost).
-
 ### ③ Deploy to Databricks
 
 <p align="center">
@@ -71,7 +71,7 @@ The page opens with a switcher with three sections. The sidebar and the tabs bel
 
 *A saved version deployed as `cnf_v3` into `adventureworks.dbo.semantic_models`: the app (right) and the result in Catalog Explorer (left).*
 
-1. **What to deploy:** the model open in the studio, **A saved version** from the store, or **Paste or upload Ossie YAML**. The YAML is validated; a model with errors can't be deployed (open it in ① to fix it).
+1. **What to deploy:** the model open in the studio, **A saved version** from the store, or **Paste or upload Ossie YAML**. The YAML is validated; a model with errors can't be deployed (open it in ② to fix it).
 2. **Target:** **Model name** (the folder), **Catalog**, **Schema** and **Volume** (default `semantic_models`). Catalog and schema default to where most of the model's datasets live, and the page says how many datasets are Unity Catalog tables.
 3. **What to deploy** (options): create the volume if missing · descriptions → table & column comments · tag tables with the model and version · create metric views (one per fact) · **let the app write the files** · informational PK / FK constraints. Options that need Unity Catalog tables are greyed out when the model has none.
 4. **Preview:** counts of files, comments, tags, metric views and constraints; the list of files; every SQL statement (also downloadable as **⬇️ SQL script**); the YAML (**⬇️ YAML**).
@@ -82,7 +82,7 @@ Full details in [Model lifecycle](#model-lifecycle-versions-and-deployment).
 
 ## Source types: Databricks and Non-Databricks
 
-The sidebar starts with **0 · Source type**. It decides which sources section ② offers; sections ① and ③ work with either.
+The sidebar starts with **0 · Source type**. It decides which sources section ① offers; sections ② and ③ work with either.
 
 | Source type | Source | Status | What it reads |
 |---|---|---|---|
@@ -98,11 +98,11 @@ A model built from a Non-Databricks source can still be versioned and deployed: 
 
 ## Walkthrough
 
-Every step below happens in section ② except the last, which uses ③. These screenshots use the AdventureWorks sample tables (`adventureworks.dbo`) in Unity Catalog; the network diagram uses the bundled `retail_star.db` sample. Click an image to see it full size.
+Every step below happens in section ① except the last, which uses ③. These screenshots use the AdventureWorks sample tables (`adventureworks.dbo`) in Unity Catalog; the network diagram uses the bundled `retail_star.db` sample. Click an image to see it full size.
 
 ### 1. Pick tables, build, and edit the network
 
-Pick **② Create new model** at the top. In the sidebar, choose the source type **Databricks**, then **Unity Catalog**, a catalog, one or more schemas and up to 100 tables, then click **Analyze & build**. The **Network** tab draws every class as a card (**F** amber for facts, **D** blue for dimensions, **E** grey for entities) with its row, column and measure counts, and every relationship with crow's-foot ends on the many side. Click a class to edit its role, description, synonyms, column roles and metrics in the inspector on the right.
+Pick **① Create New Model** at the top. In the sidebar, choose the source type **Databricks**, then **Unity Catalog**, a catalog, one or more schemas and up to 100 tables, then click **Analyze & build**. The **Network** tab draws every class as a card (**F** amber for facts, **D** blue for dimensions, **E** grey for entities) with its row, column and measure counts, and every relationship with crow's-foot ends on the many side. Click a class to edit its role, description, synonyms, column roles and metrics in the inspector on the right.
 
 ![Network tab: the D3.js ontology diagram for the retail sample, with facts, dimensions and labelled many-to-one relationships](docs/images/network.svg)
 
@@ -158,9 +158,9 @@ First pick the **source type** in the sidebar. **Databricks** reads Unity Catalo
 
 - **Unity Catalog** (on Databricks): pick a catalog, one or more of its schemas, and up to 100 tables and views from those schemas. Declared foreign keys that point into another schema or catalog are resolved too.
 - **Upload a file**: a SQLite database (`.db`, `.sqlite`, `.sqlite3`) or a SQL script (`.sql`, `.ddl`, `.txt`). With the dialect on **auto**, a script first runs in an in-memory SQLite database, so dumps with `INSERT`s get profiled too. Otherwise, or if that fails, the DDL is parsed with [sqlglot](https://github.com/tobymao/sqlglot) in the dialect you pick: MySQL, Postgres, T-SQL, Oracle, Snowflake, Databricks, BigQuery, Redshift, DuckDB or Teradata.
-- **Ossie YAML** (section ①, *Upload*): an [Apache Ossie](https://github.com/apache/ossie) semantic model (`.yaml`, `.yml` or `.json`). It is validated first (see [Apache Ossie](#6-apache-ossie-validation-import-and-export)) and loads into the editor when it passes.
-- **Saved version** (section ①, *Volume store*): open any version saved to the Volume store (needs [`ONTOLOGY_STORE`](#configuration)).
-- **Paste** (section ①): paste an Ossie model or a studio ontology YAML. The **Ontology YAML** tab also accepts a pasted Ossie model: it is validated, then opened.
+- **Ossie YAML** (section ②, *Upload*): an [Apache Ossie](https://github.com/apache/ossie) semantic model (`.yaml`, `.yml` or `.json`). It is validated first (see [Apache Ossie](#6-apache-ossie-validation-import-and-export)) and loads into the editor when it passes.
+- **Saved version** (section ②, *Volume store*): open any version saved to the Volume store (needs [`ONTOLOGY_STORE`](#configuration)).
+- **Paste** (section ②): paste an Ossie model or a studio ontology YAML. The **Ontology YAML** tab also accepts a pasted Ossie model: it is validated, then opened.
 
 ### 2. Analyze
 
@@ -585,7 +585,7 @@ How it behaves:
 flowchart LR
     U(["Signed-in user"])
     subgraph APP["Databricks App · Streamlit (app.py)"]
-        SEC["① Update · ② Create · ③ Deploy"]
+        SEC["① Create · ② Review & Update · ③ Deploy"]
         UI["Sidebar: Source type · Connect / Open model · Analyze<br/>Tabs: Network · Domains · Form editor · YAML · Apache Ossie<br/>Versions · Metric views · Semantic layer · Knowledge<br/>Review queue · Tables · Ask · Monitor"]
         ENG["Engine (modules/)"]
         SEC --> UI --> ENG

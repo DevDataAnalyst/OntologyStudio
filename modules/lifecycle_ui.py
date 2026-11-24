@@ -221,7 +221,7 @@ def deploy_page(onto: dict | None, token: str | None, runner: Callable | None, o
     if rep.errors:
         with st.expander("Validation details"):
             ossie_ui.report_view(rep, key="deploy", show_stats=False, upgrade=False)
-        st.error("Fix the errors before deploying (section ① opens the model for editing).")
+        st.error("Fix the errors before deploying (section ② opens the model for editing).")
         return
 
     model_onto = onto if pick == "Model open in the studio" else None

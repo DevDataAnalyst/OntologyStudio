@@ -1,8 +1,8 @@
 {
   "id": "R09",
   "cuid": "AZcnrR09000000000000",
-  "name": "R09 Labour Cost per FTE by Cost Center",
-  "folder": "Public Folders/Finance/Ledger",
+  "name": "R09 Key Account Credit Utilization",
+  "folder": "Public Folders/Finance/Receivables",
   "usage": {
     "refreshes_90d": 121,
     "users_90d": 8
@@ -15,57 +15,57 @@
   "dataProviders": [
     {
       "id": "DP0",
-      "name": "Ledger",
+      "name": "Receivables",
       "dataSourceId": "UNV_CNR_FIN",
       "dataSourceType": "unx",
       "querySpecification": {
         "resultObjects": [
-          "O_FY",
-          "O_CC",
-          "O_CCREG",
-          "M_LAB"
+          "O_CUST",
+          "O_KEYACC",
+          "M_AROPEN"
         ],
         "filters": {
           "operator": "And",
           "conditions": [
             {
-              "object": "O_FY",
-              "operator": "Equal",
-              "prompt": "P_FY"
+              "predefinedFilter": "F_KEYACC"
             }
           ]
         }
       },
       "customSql": false,
-      "promptValues": {
-        "P_FY": [
-          2025
-        ]
-      },
+      "promptValues": {},
       "queryPlan": {
         "statements": [
-          "SELECT\n  FISCAL_PERIODS.FISCAL_YEAR,\n  COST_CENTERS.COST_CENTER_NAME,\n  COST_CENTERS.COST_CENTER_REGION,\n  SUM(CASE WHEN GL_JOURNAL_LINES.ACCOUNT_NUMBER BETWEEN 5000 AND 5099 THEN GL_JOURNAL_LINES.EXPENSE_AMOUNT END)\nFROM\n  CNR_FIN.COST_CENTERS  COST_CENTERS,\n  CNR_FIN.FISCAL_PERIODS  FISCAL_PERIODS,\n  CNR_FIN.GL_JOURNAL_LINES  GL_JOURNAL_LINES\nWHERE\n  ( GL_JOURNAL_LINES.COST_CENTER_ID=COST_CENTERS.COST_CENTER_ID  )\n  AND  ( GL_JOURNAL_LINES.PERIOD_ID=FISCAL_PERIODS.PERIOD_ID  )\n  AND  ( FISCAL_PERIODS.FISCAL_YEAR = 2025 )\nGROUP BY\n  FISCAL_PERIODS.FISCAL_YEAR,\n  COST_CENTERS.COST_CENTER_NAME,\n  COST_CENTERS.COST_CENTER_REGION"
+          "SELECT\n  CUSTOMERS.CUSTOMER_NAME,\n  DECODE(CUSTOMERS.IS_KEY_ACCOUNT,1,'Yes','No'),\n  SUM(AR_INVOICES.OPEN_AMOUNT)\nFROM\n  CNR_FIN.AR_INVOICES  AR_INVOICES,\n  CNR_FIN.CUSTOMERS  CUSTOMERS\nWHERE\n  ( AR_INVOICES.CUSTOMER_ID=CUSTOMERS.CUSTOMER_ID  )\n  AND  ( CUSTOMERS.IS_KEY_ACCOUNT = 1 )\nGROUP BY\n  CUSTOMERS.CUSTOMER_NAME,\n  DECODE(CUSTOMERS.IS_KEY_ACCOUNT,1,'Yes','No')"
         ]
       }
     },
     {
       "id": "DP1",
-      "name": "Organisation",
+      "name": "Customers",
       "dataSourceId": "UNV_CNR_FIN",
       "dataSourceType": "unx",
       "querySpecification": {
         "resultObjects": [
-          "O_CC",
-          "O_CCREG",
+          "O_CUST",
+          "O_KEYACC",
           "M_HC"
         ],
-        "filters": null
+        "filters": {
+          "operator": "And",
+          "conditions": [
+            {
+              "predefinedFilter": "F_KEYACC"
+            }
+          ]
+        }
       },
       "customSql": false,
       "promptValues": {},
       "queryPlan": {
         "statements": [
-          "SELECT\n  COST_CENTERS.COST_CENTER_NAME,\n  COST_CENTERS.COST_CENTER_REGION,\n  SUM(COST_CENTERS.HEADCOUNT)\nFROM\n  CNR_FIN.COST_CENTERS  COST_CENTERS\nGROUP BY\n  COST_CENTERS.COST_CENTER_NAME,\n  COST_CENTERS.COST_CENTER_REGION"
+          "SELECT\n  CUSTOMERS.CUSTOMER_NAME,\n  DECODE(CUSTOMERS.IS_KEY_ACCOUNT,1,'Yes','No'),\n  SUM(CUSTOMERS.CREDIT_LIMIT)\nFROM\n  CNR_FIN.CUSTOMERS  CUSTOMERS\nWHERE\n  ( CUSTOMERS.IS_KEY_ACCOUNT = 1 )\nGROUP BY\n  CUSTOMERS.CUSTOMER_NAME,\n  DECODE(CUSTOMERS.IS_KEY_ACCOUNT,1,'Yes','No')"
         ]
       }
     }
@@ -73,9 +73,9 @@
   "variables": [
     {
       "id": "V_LPF",
-      "name": "Labour Cost per FTE",
+      "name": "Credit Utilization",
       "qualification": "Measure",
-      "formula": "=[Labour Expense]/[Headcount]"
+      "formula": "=[AR Open Amount]/[Credit Limit]"
     }
   ],
   "reports": [
@@ -87,13 +87,13 @@
           "id": "B1",
           "type": "Table",
           "axes": [
-            "Cost Center",
-            "Cost Center Region"
+            "Customer Name",
+            "Key Account"
           ],
           "measures": [
-            "Labour Expense",
-            "Headcount",
-            "Labour Cost per FTE"
+            "AR Open Amount",
+            "Credit Limit",
+            "Credit Utilization"
           ]
         }
       ]

@@ -118,25 +118,9 @@ def plan(sir: dict, concepts: dict, mv: dict) -> list[dict]:
                 for i, d in enumerate(dims):
                     f = fmap.get(d.get("field") or "")
                     (sel.append(f"{f} AS d{i}") if f else missing.append(d["name"]))
-                where = []
-                for cnd in dp["conditions"]:
-                    o = objects.get(f"obj:{cnd['object']}")
-                    f = fmap.get((o or {}).get("field") or "")
-                    vals = dp["prompt_values"].get(cnd["prompt"], []) if cnd.get("prompt") else cnd.get("values", [])
-                    if not f:
-                        missing.append(f"filter on {(o or {}).get('name')}")
-                    else:
-                        pred = _condition(f, cnd["operator"], vals)
-                        (where.append(pred) if pred else
-                         missing.append(f"filter on {(o or {}).get('name')} ({cnd['operator']} isn't translated)"))
-                for pf in dp["predefined_filters"]:
-                    flt = concepts["filters"].get(_snake(objects[pf]["name"])) if pf in objects else None
-                    expr = (flt or {}).get("expression", {}).get("value")
-                    if not expr:
-                        missing.append(f"filter {pf}")
-                        continue
-                    rewritten = _rewrite_filter(expr, fmap)
-                    (where.append(rewritten) if rewritten else missing.append(f"filter {objects[pf]['name']}"))
+                where, _cols, miss = dp_where(dp, objects, concepts, fmap)
+                missing += miss
+                where += inner_join_guards(mv["views"][view], [fmap.get(d.get("field") or "") for d in dims])
                 if missing:
                     item.update(status="manual", reason="not in the metric view: " + ", ".join(missing))
                     items.append(item)
@@ -154,6 +138,53 @@ def plan(sir: dict, concepts: dict, mv: dict) -> list[dict]:
                 item["compare_sql"] = _compare(l1_dbx, l3, len(dims), len(mine))
                 items.append(item)
     return items
+
+
+def dp_where(dp: dict, objects: dict, concepts: dict, fmap: dict, prompts: str = "value"):
+    """A data provider's query filters and predefined filters as predicates on metric view fields.
+
+    prompts="value" applies the captured prompt answers (reconciliation); prompts="column" leaves prompted
+    conditions out and returns their fields, so a view can expose them for the BI tool to filter (Pattern 2).
+    Returns (where, prompt_fields, missing)."""
+    where, cols, missing = [], [], []
+    for cnd in dp["conditions"]:
+        o = objects.get(f"obj:{cnd['object']}")
+        f = fmap.get((o or {}).get("field") or "")
+        if not f:
+            missing.append(f"filter on {(o or {}).get('name')}")
+            continue
+        if cnd.get("prompt") and prompts == "column":
+            cols.append(((o or {}).get("name") or f, f))
+            continue
+        vals = dp["prompt_values"].get(cnd["prompt"], []) if cnd.get("prompt") else cnd.get("values", [])
+        pred = _condition(f, cnd["operator"], vals)
+        (where.append(pred) if pred else
+         missing.append(f"filter on {(o or {}).get('name')} ({cnd['operator']} isn't translated)"))
+    for pf in dp["predefined_filters"]:
+        flt = concepts["filters"].get(_snake(objects[pf]["name"])) if pf in objects else None
+        expr = (flt or {}).get("expression", {}).get("value")
+        if not expr:
+            missing.append(f"filter {pf}")
+            continue
+        rewritten = _rewrite_filter(expr, fmap)
+        (where.append(rewritten) if rewritten else missing.append(f"filter {objects[pf]['name']}"))
+    return where, cols, missing
+
+
+def inner_join_guards(view: dict, fields: list[str | None]) -> list[str]:
+    """BO joins in the WHERE clause are inner joins; metric view joins are LEFT OUTER, so fact rows with no
+    match (e.g. balance-sheet GL lines without a cost center) come back as a NULL group (seen live on R04,
+    2026-11-27). For every join a grouping field reads from, require the joined row to exist: test its key
+    field (join_key_<join>, added by to_mv), not the displayed value, which may be NULL on a matched row."""
+    exprs = {f["name"]: f["expr"] for f in view.get("fields", [])}
+    out = []
+    for f in fields:
+        e = exprs.get(f or "") or ""
+        for j in re.findall(r"\b([A-Za-z_]\w*)\.\w+", e):
+            key = f"join_key_{j}"
+            if key in exprs and f"{key} IS NOT NULL" not in out:
+                out.append(f"{key} IS NOT NULL")
+    return out
 
 
 def _snake(s):

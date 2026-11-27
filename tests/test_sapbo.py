@@ -84,7 +84,7 @@ def test_planted_findings_are_reported(res):
 
 def test_same_name_measures_are_disambiguated(res):
     m = res["concepts"]["metrics"]
-    assert "revenue_freight_billing" in m and "revenue_gl_journal_lines" in m
+    assert "revenue_freight_revenue" in m and "revenue_gl_entries" in m
 
 
 def test_provenance_summary_uses_client_classes(res):
@@ -128,7 +128,7 @@ def test_pattern3_classifier(res):
     governed = {m["name"]: m["label"] for m in res["concepts"]["metrics"].values() if m["scope"] == "universe"}
     # a brand-new ratio is a business definition: flagged for review, not silently accepted
     assert consume.classify_dax("x", "DIVIDE([freight_revenue], [carloads])", governed)["classification"] == "review"
-    assert consume.classify_dax("y", "SUM('freight_billing'[linehaul_revenue])", governed)["classification"] \
+    assert consume.classify_dax("y", "SUM('freight_revenue'[linehaul_revenue])", governed)["classification"] \
         == "semantic override"
 
 
@@ -161,3 +161,52 @@ def test_enrichment_with_stub_then_review():
     assert p["proposal"] in after["ossie_yaml"]
     assert enrich.acceptance(c)["approved"] == 1
     assert after["provenance"]["LLM-enriched"] >= 1
+
+
+# --------------------------------------------------------------------------- live-check regressions (2026-11-27)
+def test_number_format_uses_yaml_1_1_keys(res):
+    for v in res["mv"]["views"].values():
+        for m in v["measures"]:
+            assert "thousand_separators" not in (m.get("format") or {}), m["name"]
+    from modules.sapbo.to_mv import _format
+    assert _format("#,##0") == {"type": "number", "decimal_places": {"type": "exact", "places": 0}}
+    assert _format("0.0")["hide_group_separator"] is True
+
+
+def test_windows_follow_the_webi_dimension(res):
+    w = {m["name"]: m["window"] for v in res["mv"]["views"].values() for m in v["measures"] if m.get("window")}
+    assert w["revenue_py"] == [{"order": "fiscal_year", "range": "current", "offset": -1}]
+    assert w["revenue_ytd"] == [{"order": "fiscal_period", "range": "cumulative"},
+                                {"order": "fiscal_year", "range": "current"}]
+    assert w["revenue_rolling_3m"][0]["range"] == "trailing 3 month inclusive"
+    dax = {d["measure"]: d["dax"] for d in res["dax"]}
+    assert "-3, MONTH" in dax["revenue_rolling_3m"] and "-1, YEAR" in dax["revenue_py"]
+
+
+LIVE_CNFINANCE = {   # tables in the live cnfinance catalog (read from information_schema on 2026-11-27)
+    "silver": {"ap_invoices", "ar_invoices", "budget", "commodities", "cost_centers", "customers",
+               "freight_revenue", "gl_accounts", "gl_entries"},
+    "gold": {"aging", "budget_vs_actual", "customer_revenue", "kpi_summary", "monthly_performance",
+             "revenue_breakdown"},
+}
+
+
+def test_fixture_maps_only_to_live_cnfinance_tables():
+    from modules.sapbo import fixture
+    for bo, uc in fixture.UC_MAPPING.items():
+        if uc is None:
+            continue
+        cat, sch, tbl = uc.split(".")
+        assert cat == "cnfinance" and tbl in LIVE_CNFINANCE[sch], (bo, uc)
+
+
+def test_inner_join_semantics_and_p2_filters(res):
+    r04 = next(i for i in res["recon_plan"] if i["report"] == "R04" and i["data_provider"] == "DP0")
+    assert "join_key_cost_centers IS NOT NULL" in r04["l3_sql"]   # BO inner join vs metric view LEFT join
+    assert "cost_center_region IS NOT NULL" not in r04["l3_sql"]  # a NULL attribute on a matched row stays
+    p2 = {v["name"].split(".")[-1]: v["select"] for v in res["p2_views"]}
+    assert "period_start_date < " in p2["v_r02_b1"]              # predefined filter: closed periods
+    assert "open_amount > 0" in p2["v_r05_b1"]                   # predefined filter: open invoices
+    assert "is_key_account = TRUE" in p2["v_r09_b1"]
+    assert "fiscal_year AS `Fiscal Year`" in p2["v_r07_b1"]      # prompted field exposed, not hard-coded
+    assert "= 2025" not in p2["v_r07_b1"]

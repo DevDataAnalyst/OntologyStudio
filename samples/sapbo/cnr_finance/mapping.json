@@ -1,26 +1,20 @@
 {
   "tables": [
     {
-      "bo_table": "FREIGHT_BILLING",
-      "uc_table": "cnfinance.silver.freight_billing",
+      "bo_table": "FREIGHT_REVENUE",
+      "uc_table": "cnfinance.silver.freight_revenue",
       "uc_columns": {
         "revenue_line_id": "Integer",
-        "period_id": "Integer",
+        "period_start": "Date",
         "fiscal_year": "Integer",
         "customer_id": "String",
         "commodity_code": "String",
-        "origin_station_code": "String",
-        "destination_station_code": "String",
-        "invoice_id": "String",
+        "origin_region": "String",
         "carloads": "Integer",
-        "net_tons": "Integer",
-        "loaded_miles": "Integer",
+        "revenue_ton_miles": "Integer",
         "linehaul_revenue": "Decimal",
         "fuel_surcharge_revenue": "Decimal",
-        "accessorial_revenue": "Decimal",
-        "line_revenue": "Decimal",
-        "revenue_ton_miles": "Integer",
-        "haul_length_band": "String"
+        "total_revenue": "Decimal"
       },
       "uc_primary_key": [
         "revenue_line_id"
@@ -36,17 +30,8 @@
         "due_date": "Date",
         "invoice_amount": "Decimal",
         "amount_paid": "Decimal",
-        "snapshot_date": "Date",
-        "period_id": "Integer",
-        "fiscal_year": "Integer",
         "open_amount": "Decimal",
-        "days_to_pay": "Integer",
-        "days_past_due": "Integer",
-        "aging_bucket": "String",
-        "is_paid_late": "Boolean",
-        "last_payment_date": "Date",
-        "is_disputed": "Boolean",
-        "payment_status": "String"
+        "aging_bucket": "String"
       },
       "uc_primary_key": [
         "invoice_id"
@@ -57,48 +42,35 @@
       "uc_table": "cnfinance.silver.ap_invoices",
       "uc_columns": {
         "ap_document_id": "String",
-        "vendor_id": "String",
-        "vendor_invoice_number": "String",
-        "account_number": "Integer",
-        "cost_center_id": "String",
-        "invoice_description": "String",
+        "vendor_name": "String",
+        "vendor_category": "String",
         "invoice_date": "Date",
         "due_date": "Date",
+        "account_number": "Integer",
+        "cost_center_id": "String",
         "invoice_amount": "Decimal",
         "amount_paid": "Decimal",
-        "snapshot_date": "Date",
-        "period_id": "Integer",
-        "fiscal_year": "Integer",
         "open_amount": "Decimal",
-        "days_to_pay": "Integer",
-        "days_past_due": "Integer",
-        "aging_bucket": "String",
-        "is_paid_late": "Boolean",
-        "payment_date": "Date",
-        "is_fuel": "Boolean"
+        "aging_bucket": "String"
       },
       "uc_primary_key": [
         "ap_document_id"
       ]
     },
     {
-      "bo_table": "GL_JOURNAL_LINES",
-      "uc_table": "cnfinance.silver.gl_journal_lines",
+      "bo_table": "GL_ENTRIES",
+      "uc_table": "cnfinance.silver.gl_entries",
       "uc_columns": {
         "journal_id": "String",
         "line_number": "Integer",
-        "posting_date": "Date",
-        "period_id": "Integer",
+        "period_start": "Date",
         "fiscal_year": "Integer",
         "journal_source": "String",
-        "journal_description": "String",
         "account_number": "Integer",
         "cost_center_id": "String",
         "debit_amount": "Decimal",
         "credit_amount": "Decimal",
-        "net_amount": "Decimal",
-        "revenue_amount": "Decimal",
-        "expense_amount": "Decimal"
+        "amount": "Decimal"
       },
       "uc_primary_key": [
         "journal_id",
@@ -106,52 +78,30 @@
       ]
     },
     {
-      "bo_table": "BUDGET_LINES",
-      "uc_table": "cnfinance.silver.budget_lines",
+      "bo_table": "BUDGET",
+      "uc_table": "cnfinance.silver.budget",
       "uc_columns": {
-        "period_id": "Integer",
+        "period_start": "Date",
         "fiscal_year": "Integer",
         "cost_center_id": "String",
         "account_number": "Integer",
-        "budget_amount": "Decimal",
-        "revenue_budget": "Decimal",
-        "expense_budget": "Decimal"
+        "budget_amount": "Decimal"
       },
       "uc_primary_key": [
-        "period_id",
+        "period_start",
         "cost_center_id",
         "account_number"
       ]
     },
     {
-      "bo_table": "FISCAL_PERIODS",
-      "uc_table": "cnfinance.silver.fiscal_periods",
+      "bo_table": "FISCAL_CALENDAR",
+      "uc_table": "cnfinance.gold.monthly_performance",
       "uc_columns": {
-        "period_id": "Integer",
-        "fiscal_year": "Integer",
-        "fiscal_quarter": "Integer",
-        "period_number": "Integer",
         "period_start": "Date",
-        "period_end": "Date",
-        "is_closed": "Boolean",
-        "quarter_label": "String",
-        "days_in_period": "Integer"
+        "fiscal_year": "Integer"
       },
       "uc_primary_key": [
-        "period_id"
-      ]
-    },
-    {
-      "bo_table": "COMMODITY_GROUPS",
-      "uc_table": "cnfinance.silver.commodity_groups",
-      "uc_columns": {
-        "group_code": "String",
-        "group_name": "String",
-        "business_segment": "String",
-        "revenue_account_number": "Integer"
-      },
-      "uc_primary_key": [
-        "group_code"
+        "period_start"
       ]
     },
     {
@@ -160,29 +110,10 @@
       "uc_columns": {
         "commodity_code": "String",
         "commodity_name": "String",
-        "group_code": "String",
-        "car_type": "String",
-        "is_hazardous": "Boolean"
+        "business_unit": "String"
       },
       "uc_primary_key": [
         "commodity_code"
-      ]
-    },
-    {
-      "bo_table": "STATIONS",
-      "uc_table": "cnfinance.silver.stations",
-      "uc_columns": {
-        "station_code": "String",
-        "station_name": "String",
-        "province_state": "String",
-        "country": "String",
-        "region": "String",
-        "station_type": "String",
-        "latitude": "Float",
-        "longitude": "Float"
-      },
-      "uc_primary_key": [
-        "station_code"
       ]
     },
     {
@@ -192,33 +123,13 @@
         "customer_id": "String",
         "customer_name": "String",
         "industry": "String",
-        "hq_city": "String",
-        "hq_province_state": "String",
         "hq_country": "String",
-        "credit_limit": "Decimal",
         "payment_terms_days": "Integer",
-        "customer_since": "Date",
-        "is_key_account": "Boolean",
-        "is_active": "Boolean"
+        "credit_limit": "Decimal",
+        "is_key_account": "Boolean"
       },
       "uc_primary_key": [
         "customer_id"
-      ]
-    },
-    {
-      "bo_table": "VENDORS",
-      "uc_table": "cnfinance.silver.vendors",
-      "uc_columns": {
-        "vendor_id": "String",
-        "vendor_name": "String",
-        "vendor_category": "String",
-        "vendor_city": "String",
-        "vendor_province_state": "String",
-        "vendor_country": "String",
-        "vendor_payment_terms_days": "Integer"
-      },
-      "uc_primary_key": [
-        "vendor_id"
       ]
     },
     {
@@ -227,10 +138,7 @@
       "uc_columns": {
         "cost_center_id": "String",
         "cost_center_name": "String",
-        "department": "String",
-        "cost_center_region": "String",
-        "cost_center_function": "String",
-        "headcount": "Integer"
+        "region": "String"
       },
       "uc_primary_key": [
         "cost_center_id"
@@ -243,47 +151,40 @@
         "account_number": "Integer",
         "account_name": "String",
         "account_type": "String",
-        "financial_statement": "String",
-        "statement_line": "String",
-        "normal_balance": "String",
-        "is_active_account": "Boolean"
+        "statement_line": "String"
       },
       "uc_primary_key": [
         "account_number"
       ]
     },
     {
-      "bo_table": "AGG_REVENUE_MONTHLY",
-      "uc_table": "cnfinance.gold.revenue_monthly",
+      "bo_table": "AGG_MONTHLY_PERFORMANCE",
+      "uc_table": "cnfinance.gold.monthly_performance",
       "uc_columns": {
-        "period_id": "Integer",
+        "period_start": "Date",
         "fiscal_year": "Integer",
         "freight_revenues": "Decimal",
         "total_carloads": "Integer"
       },
       "uc_primary_key": [
-        "period_id"
+        "period_start"
       ]
     },
     {
-      "bo_table": "AGING_BANDS",
+      "bo_table": "BALANCE_BANDS",
       "uc_table": null
     },
     {
-      "bo_table": "DEST_STATION",
-      "uc_table": "cnfinance.silver.stations",
+      "bo_table": "BUDGET_ACCOUNT",
+      "uc_table": "cnfinance.silver.gl_accounts",
       "uc_columns": {
-        "station_code": "String",
-        "station_name": "String",
-        "province_state": "String",
-        "country": "String",
-        "region": "String",
-        "station_type": "String",
-        "latitude": "Float",
-        "longitude": "Float"
+        "account_number": "Integer",
+        "account_name": "String",
+        "account_type": "String",
+        "statement_line": "String"
       },
       "uc_primary_key": [
-        "station_code"
+        "account_number"
       ]
     }
   ]

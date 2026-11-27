@@ -161,3 +161,23 @@ def test_enrichment_with_stub_then_review():
     assert p["proposal"] in after["ossie_yaml"]
     assert enrich.acceptance(c)["approved"] == 1
     assert after["provenance"]["LLM-enriched"] >= 1
+
+
+# --------------------------------------------------------------------------- live-check regressions (2026-11-27)
+def test_number_format_uses_yaml_1_1_keys(res):
+    for v in res["mv"]["views"].values():
+        for m in v["measures"]:
+            assert "thousand_separators" not in (m.get("format") or {}), m["name"]
+    from modules.sapbo.to_mv import _format
+    assert _format("#,##0") == {"type": "number", "decimal_places": {"type": "exact", "places": 0}}
+    assert _format("0.0")["hide_group_separator"] is True
+
+
+def test_windows_follow_the_webi_dimension(res):
+    w = {m["name"]: m["window"] for v in res["mv"]["views"].values() for m in v["measures"] if m.get("window")}
+    assert w["revenue_py"] == [{"order": "fiscal_year", "range": "current", "offset": -1}]
+    assert w["revenue_ytd"] == [{"order": "fiscal_period", "range": "cumulative"},
+                                {"order": "fiscal_year", "range": "current"}]
+    assert w["revenue_rolling_3m"][0]["range"] == "trailing 3 month inclusive"
+    dax = {d["measure"]: d["dax"] for d in res["dax"]}
+    assert "-3, MONTH" in dax["revenue_rolling_3m"] and "-1, YEAR" in dax["revenue_py"]

@@ -142,6 +142,12 @@ def _dax_of(node, table: str, measures: set[str]) -> str:
 def _dax_window(name: str, base: str, window: list[dict], date_col: str) -> str:
     w0 = window[0]
     if w0.get("offset"):
+        if isinstance(w0["offset"], int):          # offset along a dimension, e.g. fiscal_year -1
+            unit = "YEAR" if "year" in w0["order"] else "MONTH" if "period" in w0["order"] or "month" in w0["order"] \
+                else None
+            if unit is None:
+                raise _Untranslatable(str(window))
+            return f"CALCULATE([{base}], DATEADD({date_col}, {w0['offset']}, {unit}))"
         n, unit = w0["offset"].split()
         return f"CALCULATE([{base}], DATEADD({date_col}, {n}, {unit.upper().rstrip('S')}))"
     if w0["range"] == "cumulative" and len(window) > 1:
@@ -150,7 +156,7 @@ def _dax_window(name: str, base: str, window: list[dict], date_col: str) -> str:
         return f"CALCULATE([{base}], FILTER(ALL({date_col}), {date_col} <= MAX({date_col})))"
     m = re.match(r"trailing (\d+) (\w+?)s?( inclusive)?$", w0["range"])
     if m:
-        n = int(m.group(1)) + (1 if m.group(3) else 0)
+        n = int(m.group(1))            # "trailing 3 month inclusive" = current month + 2 before (verified live)
         return f"CALCULATE([{base}], DATESINPERIOD({date_col}, MAX({date_col}), -{n}, {m.group(2).upper()}))"
     raise _Untranslatable(str(window))
 
@@ -205,7 +211,7 @@ def _fmt(f: dict | None) -> str | None:
     dec = "." + "0" * places if places else ""
     if f.get("type") == "percentage":
         return f"0{dec}%"
-    return ("#,##0" if f.get("thousand_separators") else "0") + dec
+    return ("0" if f.get("hide_group_separator") else "#,##0") + dec
 
 
 def tmdl_measures(rows: list[dict]) -> str:

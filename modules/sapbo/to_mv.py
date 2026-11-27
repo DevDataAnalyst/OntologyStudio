@@ -31,8 +31,9 @@ from .to_ossie import MV_DIALECT, VENDOR
 MAX_DEPTH = 3
 SQL_TYPES = {"Integer": "BIGINT", "Decimal": "DECIMAL(38,6)", "Float": "DOUBLE", "String": "STRING",
              "Boolean": "BOOLEAN", "Date": "DATE", "DateTime": "TIMESTAMP"}
-WINDOW_NOTE = ("Window ranges follow the metric view reference (trailing N <unit> [inclusive]); verify the "
-               "frame against BO on the warehouse (reconciliation L3).")
+TRAILING_NOTE = ("Webi Previous() sums are a trailing window over the period date. It matches BO when the "
+                 "period date is on the axis; grouped by fiscal year and an opaque period number the window "
+                 "collapses to the month, so such a block needs the date on its axis or a human rewrite.")
 
 
 def _x(el: dict) -> dict:
@@ -119,23 +120,42 @@ def _rewrite_metric(expr: str, resolve) -> tuple[str | None, str | None]:
     return out.sql(dialect="databricks"), None
 
 
-def _window(win: dict, order_field: str | None, year_field: str | None) -> tuple[list | None, str]:
-    if not win or not order_field:
-        return None, "no time field to order by"
+def _window(win: dict, order_field: str | None, year_field: str | None,
+            field_names: dict[str, str] | None = None) -> tuple[list | None, str, str]:
+    """A Webi time function as a metric view window. Returns (window, status, note).
+
+    The window is ordered on the dimension the Webi formula names, which is what BO does: RelativeValue(...;
+    [Fiscal Year];-1) moves along Fiscal Year, RunningSum(...;[Fiscal Year]) restarts per Fiscal Year and runs
+    along the block's period. Ordering on a date instead only matches BO when the date itself is on the axis
+    (verified live 2026-11-27: date-ordered PY/YTD were NULL or wrong when grouped by fiscal year and period).
+    """
+    fn = field_names or {}
     k = win.get("window")
     if k == "offset":
-        along = (win.get("along") or "").split(".")[-1]
-        months = 12 if "year" in along else 1
-        return [{"order": order_field, "range": "current", "offset": f"{win['offset'] * months} month"}], ""
+        along = fn.get(win.get("along") or "")
+        if along:
+            return [{"order": along, "range": "current", "offset": int(win["offset"])}], "Transformed", ""
+        if not order_field:
+            return None, "Manual", "no field to order the window by"
+        months = 12 if "year" in (win.get("along") or "") else 1
+        return ([{"order": order_field, "range": "current", "offset": f"{win['offset'] * months} month"}],
+                "Partial", "ordered on the date: matches BO only when the date is on the axis")
     if k == "cumulative":
-        w = [{"order": order_field, "range": "cumulative"}]
-        if win.get("reset_by") and year_field:
-            w.append({"order": year_field, "range": "current"})
-        return w, ""
+        reset = fn.get(win.get("reset_by") or "") or year_field
+        period = next((v for key, v in fn.items() if key.endswith(".fiscal_period")), None) or order_field
+        if not period:
+            return None, "Manual", "no field to order the window by"
+        w = [{"order": period, "range": "cumulative"}]
+        if win.get("reset_by") and reset:
+            w.append({"order": reset, "range": "current"})
+        return w, "Transformed", ""
     if k == "trailing":
+        if not order_field:
+            return None, "Manual", "no date field to order the window by"
         n = int(win.get("periods", 1))
-        return [{"order": order_field, "range": f"trailing {n - 1} month inclusive"}], WINDOW_NOTE
-    return None, f"window kind {k} not supported"
+        return ([{"order": order_field, "range": f"trailing {n} month inclusive"}], "Partial",
+                TRAILING_NOTE)
+    return None, "Manual", f"window kind {k} not supported"
 
 
 class _View:
@@ -244,14 +264,14 @@ class _View:
                 row.update(status="Manual", reason=f"its base measure {base} isn't in this view")
                 rows.append(row)
                 return False
-            spec, note = _window(win, self.order_field, self.year_field)
+            spec, status, note = _window(win, self.order_field, self.year_field, self.field_names)
             if not spec:
-                row.update(status="Manual", reason=note)
+                row.update(status=status, reason=note)
                 rows.append(row)
                 return False
             base_expr = next(mm["expr"] for mm in self.view["measures"] if mm["name"] == base)
             md = {"name": name, "expr": base_expr, "window": spec}
-            row.update(status="Transformed", reason=f"Webi {win['window']} → window measure. {note}".strip())
+            row.update(status=status, reason=f"Webi {win['window']} → window measure. {note}".strip())
         elif comps and (x.get("mv_expression") or _expr_of(metric, (MV_DIALECT,))):
             missing = [cc for cc in comps if cc not in defined]
             if missing:
@@ -314,8 +334,10 @@ def _format(bo: str | None) -> dict | None:
     if bo.endswith("%"):
         return {"type": "percentage", "decimal_places": {"type": "exact", "places": bo.count("0") - 1 if "." in bo else 0}}
     places = len(bo.split(".")[1]) if "." in bo else 0
-    return {"type": "number", "decimal_places": {"type": "exact", "places": places},
-            "thousand_separators": "," in bo}
+    fmt = {"type": "number", "decimal_places": {"type": "exact", "places": places}}
+    if "," not in bo:
+        fmt["hide_group_separator"] = True      # YAML 1.1 key; there is no thousand_separators
+    return fmt
 
 
 def _order(metrics: list[dict], all_metrics: dict) -> list[dict]:

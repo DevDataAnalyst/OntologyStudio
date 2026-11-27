@@ -202,7 +202,8 @@ def test_fixture_maps_only_to_live_cnfinance_tables():
 
 def test_inner_join_semantics_and_p2_filters(res):
     r04 = next(i for i in res["recon_plan"] if i["report"] == "R04" and i["data_provider"] == "DP0")
-    assert "cost_center IS NOT NULL" in r04["l3_sql"]           # BO inner join vs metric view LEFT join
+    assert "join_key_cost_centers IS NOT NULL" in r04["l3_sql"]   # BO inner join vs metric view LEFT join
+    assert "cost_center_region IS NOT NULL" not in r04["l3_sql"]  # a NULL attribute on a matched row stays
     p2 = {v["name"].split(".")[-1]: v["select"] for v in res["p2_views"]}
     assert "period_start_date < " in p2["v_r02_b1"]              # predefined filter: closed periods
     assert "open_amount > 0" in p2["v_r05_b1"]                   # predefined filter: open invoices

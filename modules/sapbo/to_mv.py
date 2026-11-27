@@ -551,6 +551,8 @@ def convert(doc: dict, catalog: str = "cnfinance", schema: str = "semantic", rep
                      "kind": "security", "view": "", "status": "Unsupported",
                      "reason": "metric view sources can't carry row filters; decide a Unity Catalog policy"})
     out_views = {n: v.view for n, v in views.items()}
+    for v in out_views.values():
+        _add_join_keys(v)
     field_names = {n: v.field_names for n, v in views.items()}
     measure_view = {}
     for r in rows:
@@ -565,6 +567,28 @@ def convert(doc: dict, catalog: str = "cnfinance", schema: str = "semantic", rep
             measure_views[mm["name"]].append(n)
     return {"views": out_views, "ddl": ddl, "report": rows, "targets": targets, "checks": checks,
             "field_names": field_names, "measure_view": measure_view, "measure_views": dict(measure_views)}
+
+
+JOIN_KEY_PREFIX = "join_key_"
+
+
+def _add_join_keys(view: dict) -> None:
+    """One field per join exposing the joined table's key (join_key_<join>), so a query can ask for BO's
+    inner-join semantics (`join_key_x IS NOT NULL`) without dropping rows whose displayed attribute is NULL."""
+    names = {f["name"] for f in view.get("fields", [])}
+
+    def walk(joins, prefix):
+        for j in joins or []:
+            path = f"{prefix}.{j['name']}" if prefix else j["name"]
+            m = re.search(rf"\b{re.escape(j['name'])}\.(\w+)", j.get("on", ""))
+            name = f"{JOIN_KEY_PREFIX}{j['name']}"
+            if m and name not in names:
+                view["fields"].append({"name": name, "expr": f"{path}.{m.group(1)}",
+                                       "comment": f"Key of the joined {j['name']} row (NULL when the fact row has no "
+                                                  "match): filter IS NOT NULL for BO inner-join semantics."})
+                names.add(name)
+            walk(j.get("joins"), path)
+    walk(view.get("joins"), "")
 
 
 def pick_views(mv: dict, metrics: list[str], fields: list[str] | None = None) -> list[tuple[str, list[str]]]:

@@ -173,15 +173,17 @@ def dp_where(dp: dict, objects: dict, concepts: dict, fmap: dict, prompts: str =
 
 def inner_join_guards(view: dict, fields: list[str | None]) -> list[str]:
     """BO joins in the WHERE clause are inner joins; metric view joins are LEFT OUTER, so fact rows with no
-    match (e.g. balance-sheet GL lines without a cost center) come back as a NULL group. Grouping fields read
-    from a joined table get `IS NOT NULL`, which restores BO's rows (verified live on R04, 2026-11-27)."""
-    joins = {j["name"] for j in view.get("joins", [])}
+    match (e.g. balance-sheet GL lines without a cost center) come back as a NULL group (seen live on R04,
+    2026-11-27). For every join a grouping field reads from, require the joined row to exist: test its key
+    field (join_key_<join>, added by to_mv), not the displayed value, which may be NULL on a matched row."""
     exprs = {f["name"]: f["expr"] for f in view.get("fields", [])}
     out = []
     for f in fields:
-        e = exprs.get(f or "")
-        if e and re.match(r"^\s*([A-Za-z_][\w]*)\.", e) and re.match(r"^\s*([A-Za-z_][\w]*)", e).group(1) in joins:
-            out.append(f"{f} IS NOT NULL")
+        e = exprs.get(f or "") or ""
+        for j in re.findall(r"\b([A-Za-z_]\w*)\.\w+", e):
+            key = f"join_key_{j}"
+            if key in exprs and f"{key} IS NOT NULL" not in out:
+                out.append(f"{key} IS NOT NULL")
     return out
 
 

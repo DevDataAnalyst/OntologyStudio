@@ -25,10 +25,10 @@
     "reports": "rest:/biprws/raylight/v1 (simulated)"
   },
   "counts": {
-    "tables": 17,
-    "joins": 21,
+    "tables": 14,
+    "joins": 15,
     "contexts": 5,
-    "items": 56,
+    "items": 51,
     "reports": 10
   }
 }

@@ -161,7 +161,7 @@ def _dax_window(name: str, base: str, window: list[dict], date_col: str) -> str:
     raise _Untranslatable(str(window))
 
 
-def dax_measures(mv: dict, date_table: str = "fiscal_periods", date_column: str = "period_start") -> list[dict]:
+def dax_measures(mv: dict, date_table: str = "fiscal_calendar", date_column: str = "period_start") -> list[dict]:
     """Pattern 1a: DAX for every metric view measure, over a star model whose tables are named like the metric
     view joins (source fact = the view's base dataset name)."""
     rows = []
@@ -241,19 +241,19 @@ AGG_FUNCS = {"SUM", "SUMX", "AVERAGE", "COUNT", "COUNTROWS", "DISTINCTCOUNT", "M
 
 PATTERN3_SAMPLES = [
     {"name": "Freight Revenue YoY %", "kind_expected": "presentation extension",
-     "dax": "DIVIDE([freight_revenue] - CALCULATE([freight_revenue], SAMEPERIODLASTYEAR('fiscal_periods'[period_start])), "
-            "CALCULATE([freight_revenue], SAMEPERIODLASTYEAR('fiscal_periods'[period_start])))"},
+     "dax": "DIVIDE([freight_revenue] - CALCULATE([freight_revenue], SAMEPERIODLASTYEAR('fiscal_calendar'[period_start])), "
+            "CALCULATE([freight_revenue], SAMEPERIODLASTYEAR('fiscal_calendar'[period_start])))"},
     {"name": "Freight Revenue 3M Avg", "kind_expected": "presentation extension",
-     "dax": "AVERAGEX(DATESINPERIOD('fiscal_periods'[period_start], MAX('fiscal_periods'[period_start]), -3, MONTH), "
+     "dax": "AVERAGEX(DATESINPERIOD('fiscal_calendar'[period_start], MAX('fiscal_calendar'[period_start]), -3, MONTH), "
             "[freight_revenue])"},
     {"name": "Revenue per RTM", "kind_expected": "review",
      "dax": "DIVIDE([freight_revenue], [revenue_ton_miles])"},
     {"name": "Key Account Revenue", "kind_expected": "review",
      "dax": "CALCULATE([freight_revenue], 'customers'[is_key_account] = TRUE())"},
     {"name": "Freight Revenue", "kind_expected": "semantic override",
-     "dax": "SUM('freight_billing'[linehaul_revenue]) + SUM('freight_billing'[accessorial_revenue])"},
+     "dax": "SUM('freight_revenue'[linehaul_revenue]) + SUM('freight_revenue'[fuel_surcharge_revenue])"},
     {"name": "Operating Ratio", "kind_expected": "semantic override",
-     "dax": "DIVIDE([operating_expenses], CALCULATE([freight_revenue], REMOVEFILTERS('commodity_groups')))"},
+     "dax": "DIVIDE([operating_expenses], CALCULATE([freight_revenue], REMOVEFILTERS('commodities')))"},
 ]
 
 

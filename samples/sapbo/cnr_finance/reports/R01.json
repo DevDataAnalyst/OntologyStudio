@@ -1,7 +1,7 @@
 {
   "id": "R01",
   "cuid": "AZcnrR01000000000000",
-  "name": "R01 Freight Revenue by Commodity Group",
+  "name": "R01 Freight Revenue by Business Unit",
   "folder": "Public Folders/Finance/Revenue",
   "usage": {
     "refreshes_90d": 412,
@@ -22,7 +22,6 @@
         "resultObjects": [
           "O_FY",
           "O_FP",
-          "O_SEG",
           "O_CGRP",
           "M_FREV",
           "M_CARS"
@@ -33,7 +32,7 @@
       "promptValues": {},
       "queryPlan": {
         "statements": [
-          "SELECT\n  FISCAL_PERIODS.FISCAL_YEAR,\n  FISCAL_PERIODS.PERIOD_NUMBER,\n  COMMODITY_GROUPS.BUSINESS_SEGMENT,\n  COMMODITY_GROUPS.GROUP_NAME,\n  SUM(FREIGHT_BILLING.LINE_REVENUE),\n  SUM(FREIGHT_BILLING.CARLOADS)\nFROM\n  CNR_FIN.COMMODITIES  COMMODITIES,\n  CNR_FIN.COMMODITY_GROUPS  COMMODITY_GROUPS,\n  CNR_FIN.FISCAL_PERIODS  FISCAL_PERIODS,\n  CNR_FIN.FREIGHT_BILLING  FREIGHT_BILLING\nWHERE\n  ( FREIGHT_BILLING.COMMODITY_CODE=COMMODITIES.COMMODITY_CODE  )\n  AND  ( COMMODITIES.GROUP_CODE=COMMODITY_GROUPS.GROUP_CODE  )\n  AND  ( FREIGHT_BILLING.PERIOD_ID=FISCAL_PERIODS.PERIOD_ID  )\nGROUP BY\n  FISCAL_PERIODS.FISCAL_YEAR,\n  FISCAL_PERIODS.PERIOD_NUMBER,\n  COMMODITY_GROUPS.BUSINESS_SEGMENT,\n  COMMODITY_GROUPS.GROUP_NAME"
+          "SELECT\n  FISCAL_CALENDAR.FISCAL_YEAR,\n  EXTRACT(MONTH FROM FISCAL_CALENDAR.PERIOD_START),\n  COMMODITIES.BUSINESS_UNIT,\n  SUM(FREIGHT_REVENUE.TOTAL_REVENUE),\n  SUM(FREIGHT_REVENUE.CARLOADS)\nFROM\n  CNR_FIN.COMMODITIES  COMMODITIES,\n  CNR_FIN.FISCAL_CALENDAR  FISCAL_CALENDAR,\n  CNR_FIN.FREIGHT_REVENUE  FREIGHT_REVENUE\nWHERE\n  ( FREIGHT_REVENUE.COMMODITY_CODE=COMMODITIES.COMMODITY_CODE  )\n  AND  ( FREIGHT_REVENUE.PERIOD_START=FISCAL_CALENDAR.PERIOD_START  )\nGROUP BY\n  FISCAL_CALENDAR.FISCAL_YEAR,\n  EXTRACT(MONTH FROM FISCAL_CALENDAR.PERIOD_START),\n  COMMODITIES.BUSINESS_UNIT"
         ]
       }
     }
@@ -43,7 +42,7 @@
       "id": "V_SEGSHORT",
       "name": "Segment Code",
       "qualification": "Dimension",
-      "formula": "=If([Business Segment]=\"Bulk\") Then \"BLK\" ElseIf([Business Segment]=\"Merchandise\") Then \"MER\" Else \"INT\""
+      "formula": "=If([Business Unit]=\"Coal\") Then \"BLK\" ElseIf([Business Unit]=\"Intermodal\") Then \"INT\" Else \"MER\""
     }
   ],
   "reports": [
@@ -57,7 +56,7 @@
           "axes": [
             "Fiscal Year",
             "Fiscal Period",
-            "Commodity Group"
+            "Business Unit"
           ],
           "measures": [
             "Freight Revenue",

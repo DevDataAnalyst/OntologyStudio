@@ -84,7 +84,7 @@ def test_planted_findings_are_reported(res):
 
 def test_same_name_measures_are_disambiguated(res):
     m = res["concepts"]["metrics"]
-    assert "revenue_freight_billing" in m and "revenue_gl_journal_lines" in m
+    assert "revenue_freight_revenue" in m and "revenue_gl_entries" in m
 
 
 def test_provenance_summary_uses_client_classes(res):
@@ -128,7 +128,7 @@ def test_pattern3_classifier(res):
     governed = {m["name"]: m["label"] for m in res["concepts"]["metrics"].values() if m["scope"] == "universe"}
     # a brand-new ratio is a business definition: flagged for review, not silently accepted
     assert consume.classify_dax("x", "DIVIDE([freight_revenue], [carloads])", governed)["classification"] == "review"
-    assert consume.classify_dax("y", "SUM('freight_billing'[linehaul_revenue])", governed)["classification"] \
+    assert consume.classify_dax("y", "SUM('freight_revenue'[linehaul_revenue])", governed)["classification"] \
         == "semantic override"
 
 
@@ -181,3 +181,20 @@ def test_windows_follow_the_webi_dimension(res):
     assert w["revenue_rolling_3m"][0]["range"] == "trailing 3 month inclusive"
     dax = {d["measure"]: d["dax"] for d in res["dax"]}
     assert "-3, MONTH" in dax["revenue_rolling_3m"] and "-1, YEAR" in dax["revenue_py"]
+
+
+LIVE_CNFINANCE = {   # tables in the live cnfinance catalog (read from information_schema on 2026-11-27)
+    "silver": {"ap_invoices", "ar_invoices", "budget", "commodities", "cost_centers", "customers",
+               "freight_revenue", "gl_accounts", "gl_entries"},
+    "gold": {"aging", "budget_vs_actual", "customer_revenue", "kpi_summary", "monthly_performance",
+             "revenue_breakdown"},
+}
+
+
+def test_fixture_maps_only_to_live_cnfinance_tables():
+    from modules.sapbo import fixture
+    for bo, uc in fixture.UC_MAPPING.items():
+        if uc is None:
+            continue
+        cat, sch, tbl = uc.split(".")
+        assert cat == "cnfinance" and tbl in LIVE_CNFINANCE[sch], (bo, uc)

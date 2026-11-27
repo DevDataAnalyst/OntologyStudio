@@ -12,8 +12,8 @@
   "dataFoundation": {
     "tables": [
       {
-        "id": "T_FREIGHT_BILLING",
-        "name": "FREIGHT_BILLING",
+        "id": "T_FREIGHT_REVENUE",
+        "name": "FREIGHT_REVENUE",
         "type": "table",
         "qualifier": "CNR_FIN",
         "columns": [
@@ -22,8 +22,8 @@
             "dataType": "NUMBER(10)"
           },
           {
-            "name": "PERIOD_ID",
-            "dataType": "NUMBER(10)"
+            "name": "PERIOD_START",
+            "dataType": "DATE"
           },
           {
             "name": "FISCAL_YEAR",
@@ -38,15 +38,7 @@
             "dataType": "VARCHAR2(200)"
           },
           {
-            "name": "ORIGIN_STATION_CODE",
-            "dataType": "VARCHAR2(200)"
-          },
-          {
-            "name": "DESTINATION_STATION_CODE",
-            "dataType": "VARCHAR2(200)"
-          },
-          {
-            "name": "INVOICE_ID",
+            "name": "ORIGIN_REGION",
             "dataType": "VARCHAR2(200)"
           },
           {
@@ -54,11 +46,7 @@
             "dataType": "NUMBER(10)"
           },
           {
-            "name": "NET_TONS",
-            "dataType": "NUMBER(10)"
-          },
-          {
-            "name": "LOADED_MILES",
+            "name": "REVENUE_TON_MILES",
             "dataType": "NUMBER(10)"
           },
           {
@@ -70,20 +58,8 @@
             "dataType": "NUMBER(18,2)"
           },
           {
-            "name": "ACCESSORIAL_REVENUE",
+            "name": "TOTAL_REVENUE",
             "dataType": "NUMBER(18,2)"
-          },
-          {
-            "name": "LINE_REVENUE",
-            "dataType": "NUMBER(18,2)"
-          },
-          {
-            "name": "REVENUE_TON_MILES",
-            "dataType": "NUMBER(10)"
-          },
-          {
-            "name": "HAUL_LENGTH_BAND",
-            "dataType": "VARCHAR2(200)"
           }
         ]
       },
@@ -118,47 +94,11 @@
             "dataType": "NUMBER(18,2)"
           },
           {
-            "name": "SNAPSHOT_DATE",
-            "dataType": "DATE"
-          },
-          {
-            "name": "PERIOD_ID",
-            "dataType": "NUMBER(10)"
-          },
-          {
-            "name": "FISCAL_YEAR",
-            "dataType": "NUMBER(10)"
-          },
-          {
             "name": "OPEN_AMOUNT",
             "dataType": "NUMBER(18,2)"
           },
           {
-            "name": "DAYS_TO_PAY",
-            "dataType": "NUMBER(10)"
-          },
-          {
-            "name": "DAYS_PAST_DUE",
-            "dataType": "NUMBER(10)"
-          },
-          {
             "name": "AGING_BUCKET",
-            "dataType": "VARCHAR2(200)"
-          },
-          {
-            "name": "IS_PAID_LATE",
-            "dataType": "NUMBER(1)"
-          },
-          {
-            "name": "LAST_PAYMENT_DATE",
-            "dataType": "DATE"
-          },
-          {
-            "name": "IS_DISPUTED",
-            "dataType": "NUMBER(1)"
-          },
-          {
-            "name": "PAYMENT_STATUS",
             "dataType": "VARCHAR2(200)"
           }
         ]
@@ -174,23 +114,11 @@
             "dataType": "VARCHAR2(200)"
           },
           {
-            "name": "VENDOR_ID",
+            "name": "VENDOR_NAME",
             "dataType": "VARCHAR2(200)"
           },
           {
-            "name": "VENDOR_INVOICE_NUMBER",
-            "dataType": "VARCHAR2(200)"
-          },
-          {
-            "name": "ACCOUNT_NUMBER",
-            "dataType": "NUMBER(10)"
-          },
-          {
-            "name": "COST_CENTER_ID",
-            "dataType": "VARCHAR2(200)"
-          },
-          {
-            "name": "INVOICE_DESCRIPTION",
+            "name": "VENDOR_CATEGORY",
             "dataType": "VARCHAR2(200)"
           },
           {
@@ -202,6 +130,14 @@
             "dataType": "DATE"
           },
           {
+            "name": "ACCOUNT_NUMBER",
+            "dataType": "NUMBER(10)"
+          },
+          {
+            "name": "COST_CENTER_ID",
+            "dataType": "VARCHAR2(200)"
+          },
+          {
             "name": "INVOICE_AMOUNT",
             "dataType": "NUMBER(18,2)"
           },
@@ -210,50 +146,18 @@
             "dataType": "NUMBER(18,2)"
           },
           {
-            "name": "SNAPSHOT_DATE",
-            "dataType": "DATE"
-          },
-          {
-            "name": "PERIOD_ID",
-            "dataType": "NUMBER(10)"
-          },
-          {
-            "name": "FISCAL_YEAR",
-            "dataType": "NUMBER(10)"
-          },
-          {
             "name": "OPEN_AMOUNT",
             "dataType": "NUMBER(18,2)"
           },
           {
-            "name": "DAYS_TO_PAY",
-            "dataType": "NUMBER(10)"
-          },
-          {
-            "name": "DAYS_PAST_DUE",
-            "dataType": "NUMBER(10)"
-          },
-          {
             "name": "AGING_BUCKET",
             "dataType": "VARCHAR2(200)"
-          },
-          {
-            "name": "IS_PAID_LATE",
-            "dataType": "NUMBER(1)"
-          },
-          {
-            "name": "PAYMENT_DATE",
-            "dataType": "DATE"
-          },
-          {
-            "name": "IS_FUEL",
-            "dataType": "NUMBER(1)"
           }
         ]
       },
       {
-        "id": "T_GL_JOURNAL_LINES",
-        "name": "GL_JOURNAL_LINES",
+        "id": "T_GL_ENTRIES",
+        "name": "GL_ENTRIES",
         "type": "table",
         "qualifier": "CNR_FIN",
         "columns": [
@@ -266,12 +170,8 @@
             "dataType": "NUMBER(10)"
           },
           {
-            "name": "POSTING_DATE",
+            "name": "PERIOD_START",
             "dataType": "DATE"
-          },
-          {
-            "name": "PERIOD_ID",
-            "dataType": "NUMBER(10)"
           },
           {
             "name": "FISCAL_YEAR",
@@ -279,10 +179,6 @@
           },
           {
             "name": "JOURNAL_SOURCE",
-            "dataType": "VARCHAR2(200)"
-          },
-          {
-            "name": "JOURNAL_DESCRIPTION",
             "dataType": "VARCHAR2(200)"
           },
           {
@@ -302,28 +198,20 @@
             "dataType": "NUMBER(18,2)"
           },
           {
-            "name": "NET_AMOUNT",
-            "dataType": "NUMBER(18,2)"
-          },
-          {
-            "name": "REVENUE_AMOUNT",
-            "dataType": "NUMBER(18,2)"
-          },
-          {
-            "name": "EXPENSE_AMOUNT",
+            "name": "AMOUNT",
             "dataType": "NUMBER(18,2)"
           }
         ]
       },
       {
-        "id": "T_BUDGET_LINES",
-        "name": "BUDGET_LINES",
+        "id": "T_BUDGET",
+        "name": "BUDGET",
         "type": "table",
         "qualifier": "CNR_FIN",
         "columns": [
           {
-            "name": "PERIOD_ID",
-            "dataType": "NUMBER(10)"
+            "name": "PERIOD_START",
+            "dataType": "DATE"
           },
           {
             "name": "FISCAL_YEAR",
@@ -340,81 +228,21 @@
           {
             "name": "BUDGET_AMOUNT",
             "dataType": "NUMBER(18,2)"
-          },
-          {
-            "name": "REVENUE_BUDGET",
-            "dataType": "NUMBER(18,2)"
-          },
-          {
-            "name": "EXPENSE_BUDGET",
-            "dataType": "NUMBER(18,2)"
           }
         ]
       },
       {
-        "id": "T_FISCAL_PERIODS",
-        "name": "FISCAL_PERIODS",
+        "id": "T_FISCAL_CALENDAR",
+        "name": "FISCAL_CALENDAR",
         "type": "table",
         "qualifier": "CNR_FIN",
         "columns": [
-          {
-            "name": "PERIOD_ID",
-            "dataType": "NUMBER(10)"
-          },
-          {
-            "name": "FISCAL_YEAR",
-            "dataType": "NUMBER(10)"
-          },
-          {
-            "name": "FISCAL_QUARTER",
-            "dataType": "NUMBER(10)"
-          },
-          {
-            "name": "PERIOD_NUMBER",
-            "dataType": "NUMBER(10)"
-          },
           {
             "name": "PERIOD_START",
             "dataType": "DATE"
           },
           {
-            "name": "PERIOD_END",
-            "dataType": "DATE"
-          },
-          {
-            "name": "IS_CLOSED",
-            "dataType": "NUMBER(1)"
-          },
-          {
-            "name": "QUARTER_LABEL",
-            "dataType": "VARCHAR2(200)"
-          },
-          {
-            "name": "DAYS_IN_PERIOD",
-            "dataType": "NUMBER(10)"
-          }
-        ]
-      },
-      {
-        "id": "T_COMMODITY_GROUPS",
-        "name": "COMMODITY_GROUPS",
-        "type": "table",
-        "qualifier": "CNR_FIN",
-        "columns": [
-          {
-            "name": "GROUP_CODE",
-            "dataType": "VARCHAR2(200)"
-          },
-          {
-            "name": "GROUP_NAME",
-            "dataType": "VARCHAR2(200)"
-          },
-          {
-            "name": "BUSINESS_SEGMENT",
-            "dataType": "VARCHAR2(200)"
-          },
-          {
-            "name": "REVENUE_ACCOUNT_NUMBER",
+            "name": "FISCAL_YEAR",
             "dataType": "NUMBER(10)"
           }
         ]
@@ -434,56 +262,8 @@
             "dataType": "VARCHAR2(200)"
           },
           {
-            "name": "GROUP_CODE",
+            "name": "BUSINESS_UNIT",
             "dataType": "VARCHAR2(200)"
-          },
-          {
-            "name": "CAR_TYPE",
-            "dataType": "VARCHAR2(200)"
-          },
-          {
-            "name": "IS_HAZARDOUS",
-            "dataType": "NUMBER(1)"
-          }
-        ]
-      },
-      {
-        "id": "T_STATIONS",
-        "name": "STATIONS",
-        "type": "table",
-        "qualifier": "CNR_FIN",
-        "columns": [
-          {
-            "name": "STATION_CODE",
-            "dataType": "VARCHAR2(200)"
-          },
-          {
-            "name": "STATION_NAME",
-            "dataType": "VARCHAR2(200)"
-          },
-          {
-            "name": "PROVINCE_STATE",
-            "dataType": "VARCHAR2(200)"
-          },
-          {
-            "name": "COUNTRY",
-            "dataType": "VARCHAR2(200)"
-          },
-          {
-            "name": "REGION",
-            "dataType": "VARCHAR2(200)"
-          },
-          {
-            "name": "STATION_TYPE",
-            "dataType": "VARCHAR2(200)"
-          },
-          {
-            "name": "LATITUDE",
-            "dataType": "NUMBER"
-          },
-          {
-            "name": "LONGITUDE",
-            "dataType": "NUMBER"
           }
         ]
       },
@@ -506,72 +286,20 @@
             "dataType": "VARCHAR2(200)"
           },
           {
-            "name": "HQ_CITY",
-            "dataType": "VARCHAR2(200)"
-          },
-          {
-            "name": "HQ_PROVINCE_STATE",
-            "dataType": "VARCHAR2(200)"
-          },
-          {
             "name": "HQ_COUNTRY",
             "dataType": "VARCHAR2(200)"
-          },
-          {
-            "name": "CREDIT_LIMIT",
-            "dataType": "NUMBER(18,2)"
           },
           {
             "name": "PAYMENT_TERMS_DAYS",
             "dataType": "NUMBER(10)"
           },
           {
-            "name": "CUSTOMER_SINCE",
-            "dataType": "DATE"
+            "name": "CREDIT_LIMIT",
+            "dataType": "NUMBER(18,2)"
           },
           {
             "name": "IS_KEY_ACCOUNT",
             "dataType": "NUMBER(1)"
-          },
-          {
-            "name": "IS_ACTIVE",
-            "dataType": "NUMBER(1)"
-          }
-        ]
-      },
-      {
-        "id": "T_VENDORS",
-        "name": "VENDORS",
-        "type": "table",
-        "qualifier": "CNR_FIN",
-        "columns": [
-          {
-            "name": "VENDOR_ID",
-            "dataType": "VARCHAR2(200)"
-          },
-          {
-            "name": "VENDOR_NAME",
-            "dataType": "VARCHAR2(200)"
-          },
-          {
-            "name": "VENDOR_CATEGORY",
-            "dataType": "VARCHAR2(200)"
-          },
-          {
-            "name": "VENDOR_CITY",
-            "dataType": "VARCHAR2(200)"
-          },
-          {
-            "name": "VENDOR_PROVINCE_STATE",
-            "dataType": "VARCHAR2(200)"
-          },
-          {
-            "name": "VENDOR_COUNTRY",
-            "dataType": "VARCHAR2(200)"
-          },
-          {
-            "name": "VENDOR_PAYMENT_TERMS_DAYS",
-            "dataType": "NUMBER(10)"
           }
         ]
       },
@@ -590,20 +318,8 @@
             "dataType": "VARCHAR2(200)"
           },
           {
-            "name": "DEPARTMENT",
+            "name": "REGION",
             "dataType": "VARCHAR2(200)"
-          },
-          {
-            "name": "COST_CENTER_REGION",
-            "dataType": "VARCHAR2(200)"
-          },
-          {
-            "name": "COST_CENTER_FUNCTION",
-            "dataType": "VARCHAR2(200)"
-          },
-          {
-            "name": "HEADCOUNT",
-            "dataType": "NUMBER(10)"
           }
         ]
       },
@@ -626,32 +342,20 @@
             "dataType": "VARCHAR2(200)"
           },
           {
-            "name": "FINANCIAL_STATEMENT",
-            "dataType": "VARCHAR2(200)"
-          },
-          {
             "name": "STATEMENT_LINE",
             "dataType": "VARCHAR2(200)"
-          },
-          {
-            "name": "NORMAL_BALANCE",
-            "dataType": "VARCHAR2(200)"
-          },
-          {
-            "name": "IS_ACTIVE_ACCOUNT",
-            "dataType": "NUMBER(1)"
           }
         ]
       },
       {
-        "id": "T_AGG_REVENUE_MONTHLY",
-        "name": "AGG_REVENUE_MONTHLY",
+        "id": "T_AGG_MONTHLY_PERFORMANCE",
+        "name": "AGG_MONTHLY_PERFORMANCE",
         "type": "table",
         "qualifier": "CNR_FIN",
         "columns": [
           {
-            "name": "PERIOD_ID",
-            "dataType": "NUMBER(10)"
+            "name": "PERIOD_START",
+            "dataType": "DATE"
           },
           {
             "name": "FISCAL_YEAR",
@@ -668,8 +372,8 @@
         ]
       },
       {
-        "id": "T_AGING_BANDS",
-        "name": "AGING_BANDS",
+        "id": "T_BALANCE_BANDS",
+        "name": "BALANCE_BANDS",
         "type": "table",
         "qualifier": "CNR_FIN",
         "columns": [
@@ -678,53 +382,37 @@
             "dataType": "VARCHAR2(200)"
           },
           {
-            "name": "MIN_DAYS",
-            "dataType": "NUMBER(10)"
+            "name": "MIN_AMOUNT",
+            "dataType": "NUMBER(18,2)"
           },
           {
-            "name": "MAX_DAYS",
-            "dataType": "NUMBER(10)"
+            "name": "MAX_AMOUNT",
+            "dataType": "NUMBER(18,2)"
           }
         ]
       },
       {
-        "id": "T_DEST_STATION",
-        "name": "DEST_STATION",
+        "id": "T_BUDGET_ACCOUNT",
+        "name": "BUDGET_ACCOUNT",
         "type": "alias",
-        "aliasOf": "STATIONS",
+        "aliasOf": "GL_ACCOUNTS",
         "qualifier": "CNR_FIN",
         "columns": [
           {
-            "name": "STATION_CODE",
+            "name": "ACCOUNT_NUMBER",
+            "dataType": "NUMBER(10)"
+          },
+          {
+            "name": "ACCOUNT_NAME",
             "dataType": "VARCHAR2(200)"
           },
           {
-            "name": "STATION_NAME",
+            "name": "ACCOUNT_TYPE",
             "dataType": "VARCHAR2(200)"
           },
           {
-            "name": "PROVINCE_STATE",
+            "name": "STATEMENT_LINE",
             "dataType": "VARCHAR2(200)"
-          },
-          {
-            "name": "COUNTRY",
-            "dataType": "VARCHAR2(200)"
-          },
-          {
-            "name": "REGION",
-            "dataType": "VARCHAR2(200)"
-          },
-          {
-            "name": "STATION_TYPE",
-            "dataType": "VARCHAR2(200)"
-          },
-          {
-            "name": "LATITUDE",
-            "dataType": "NUMBER"
-          },
-          {
-            "name": "LONGITUDE",
-            "dataType": "NUMBER"
           }
         ]
       },
@@ -732,15 +420,11 @@
         "id": "T_DT_PERIOD_CALENDAR",
         "name": "DT_PERIOD_CALENDAR",
         "type": "derived",
-        "sql": "SELECT PERIOD_ID, FISCAL_YEAR, FISCAL_YEAR*100 + PERIOD_NUMBER AS YEAR_PERIOD FROM CNR_FIN.FISCAL_PERIODS",
+        "sql": "SELECT PERIOD_START, FISCAL_YEAR*100 + EXTRACT(MONTH FROM PERIOD_START) AS YEAR_PERIOD FROM CNR_FIN.FISCAL_CALENDAR",
         "columns": [
           {
-            "name": "PERIOD_ID",
-            "dataType": "NUMBER(10)"
-          },
-          {
-            "name": "FISCAL_YEAR",
-            "dataType": "NUMBER(10)"
+            "name": "PERIOD_START",
+            "dataType": "DATE"
           },
           {
             "name": "YEAR_PERIOD",
@@ -752,42 +436,21 @@
     "joins": [
       {
         "id": "J01",
-        "expression": "FREIGHT_BILLING.CUSTOMER_ID=CUSTOMERS.CUSTOMER_ID",
+        "expression": "FREIGHT_REVENUE.CUSTOMER_ID=CUSTOMERS.CUSTOMER_ID",
         "cardinality": "N-1",
         "outer": false,
         "shortcut": false
       },
       {
         "id": "J02",
-        "expression": "FREIGHT_BILLING.COMMODITY_CODE=COMMODITIES.COMMODITY_CODE",
-        "cardinality": "N-1",
-        "outer": false,
-        "shortcut": false
-      },
-      {
-        "id": "J03",
-        "expression": "COMMODITIES.GROUP_CODE=COMMODITY_GROUPS.GROUP_CODE",
-        "cardinality": "N-1",
-        "outer": false,
-        "shortcut": false
-      },
-      {
-        "id": "J04",
-        "expression": "FREIGHT_BILLING.ORIGIN_STATION_CODE=STATIONS.STATION_CODE",
-        "cardinality": "N-1",
-        "outer": false,
-        "shortcut": false
-      },
-      {
-        "id": "J05",
-        "expression": "FREIGHT_BILLING.DESTINATION_STATION_CODE=DEST_STATION.STATION_CODE",
+        "expression": "FREIGHT_REVENUE.COMMODITY_CODE=COMMODITIES.COMMODITY_CODE",
         "cardinality": "N-1",
         "outer": false,
         "shortcut": false
       },
       {
         "id": "J06",
-        "expression": "FREIGHT_BILLING.PERIOD_ID=FISCAL_PERIODS.PERIOD_ID",
+        "expression": "FREIGHT_REVENUE.PERIOD_START=FISCAL_CALENDAR.PERIOD_START",
         "cardinality": "N-1",
         "outer": false,
         "shortcut": false
@@ -800,29 +463,8 @@
         "shortcut": false
       },
       {
-        "id": "J08",
-        "expression": "AR_INVOICES.PERIOD_ID=FISCAL_PERIODS.PERIOD_ID",
-        "cardinality": "N-1",
-        "outer": false,
-        "shortcut": false
-      },
-      {
-        "id": "J09",
-        "expression": "AP_INVOICES.VENDOR_ID=VENDORS.VENDOR_ID",
-        "cardinality": "N-1",
-        "outer": false,
-        "shortcut": false
-      },
-      {
         "id": "J10",
         "expression": "AP_INVOICES.COST_CENTER_ID=COST_CENTERS.COST_CENTER_ID",
-        "cardinality": "N-1",
-        "outer": false,
-        "shortcut": false
-      },
-      {
-        "id": "J11",
-        "expression": "AP_INVOICES.PERIOD_ID=FISCAL_PERIODS.PERIOD_ID",
         "cardinality": "N-1",
         "outer": false,
         "shortcut": false
@@ -836,63 +478,63 @@
       },
       {
         "id": "J13",
-        "expression": "GL_JOURNAL_LINES.ACCOUNT_NUMBER=GL_ACCOUNTS.ACCOUNT_NUMBER",
+        "expression": "GL_ENTRIES.ACCOUNT_NUMBER=GL_ACCOUNTS.ACCOUNT_NUMBER",
         "cardinality": "N-1",
         "outer": false,
         "shortcut": false
       },
       {
         "id": "J14",
-        "expression": "GL_JOURNAL_LINES.COST_CENTER_ID=COST_CENTERS.COST_CENTER_ID",
+        "expression": "GL_ENTRIES.COST_CENTER_ID=COST_CENTERS.COST_CENTER_ID",
         "cardinality": "N-1",
         "outer": false,
         "shortcut": false
       },
       {
         "id": "J15",
-        "expression": "GL_JOURNAL_LINES.PERIOD_ID=FISCAL_PERIODS.PERIOD_ID",
+        "expression": "GL_ENTRIES.PERIOD_START=FISCAL_CALENDAR.PERIOD_START",
         "cardinality": "N-1",
         "outer": false,
         "shortcut": false
       },
       {
         "id": "J16",
-        "expression": "BUDGET_LINES.ACCOUNT_NUMBER=GL_ACCOUNTS.ACCOUNT_NUMBER",
+        "expression": "BUDGET.ACCOUNT_NUMBER=BUDGET_ACCOUNT.ACCOUNT_NUMBER",
         "cardinality": "N-1",
         "outer": false,
         "shortcut": false
       },
       {
         "id": "J17",
-        "expression": "BUDGET_LINES.COST_CENTER_ID=COST_CENTERS.COST_CENTER_ID",
+        "expression": "BUDGET.COST_CENTER_ID=COST_CENTERS.COST_CENTER_ID",
         "cardinality": "N-1",
         "outer": false,
         "shortcut": false
       },
       {
         "id": "J18",
-        "expression": "BUDGET_LINES.PERIOD_ID=FISCAL_PERIODS.PERIOD_ID",
+        "expression": "BUDGET.PERIOD_START=FISCAL_CALENDAR.PERIOD_START",
         "cardinality": "N-1",
         "outer": false,
         "shortcut": false
       },
       {
         "id": "J19",
-        "expression": "AGG_REVENUE_MONTHLY.PERIOD_ID=FISCAL_PERIODS.PERIOD_ID",
+        "expression": "AGG_MONTHLY_PERFORMANCE.PERIOD_START=FISCAL_CALENDAR.PERIOD_START",
         "cardinality": "N-1",
         "outer": false,
         "shortcut": false
       },
       {
         "id": "J20",
-        "expression": "DT_PERIOD_CALENDAR.PERIOD_ID=FISCAL_PERIODS.PERIOD_ID",
+        "expression": "DT_PERIOD_CALENDAR.PERIOD_START=FISCAL_CALENDAR.PERIOD_START",
         "cardinality": "1-1",
         "outer": false,
         "shortcut": false
       },
       {
         "id": "J21",
-        "expression": "AR_INVOICES.DAYS_PAST_DUE BETWEEN AGING_BANDS.MIN_DAYS AND AGING_BANDS.MAX_DAYS",
+        "expression": "AR_INVOICES.OPEN_AMOUNT BETWEEN BALANCE_BANDS.MIN_AMOUNT AND BALANCE_BANDS.MAX_AMOUNT",
         "cardinality": "N-1",
         "outer": false,
         "shortcut": false
@@ -902,13 +544,10 @@
       {
         "id": "C_REVENUE",
         "name": "REVENUE",
-        "description": "Freight billing (revenue sub-ledger) with customer, commodity, lane and period.",
+        "description": "Freight revenue (billing sub-ledger) with customer, commodity, origin region and period.",
         "joins": [
           "J01",
           "J02",
-          "J03",
-          "J04",
-          "J05",
           "J06",
           "J19",
           "J20"
@@ -917,21 +556,18 @@
       {
         "id": "C_RECEIVABLES",
         "name": "RECEIVABLES",
-        "description": "Accounts receivable invoices with customer and period.",
+        "description": "Accounts receivable invoices with customer.",
         "joins": [
           "J07",
-          "J08",
           "J21"
         ]
       },
       {
         "id": "C_PAYABLES",
         "name": "PAYABLES",
-        "description": "Accounts payable invoices with vendor, cost center, account and period.",
+        "description": "Accounts payable invoices with cost center and account.",
         "joins": [
-          "J09",
           "J10",
-          "J11",
           "J12"
         ]
       },
@@ -969,7 +605,7 @@
         "description": "Fiscal year (January to December).",
         "state": "Active",
         "hidden": false,
-        "select": "FISCAL_PERIODS.FISCAL_YEAR",
+        "select": "FISCAL_CALENDAR.FISCAL_YEAR",
         "projection": "None",
         "dataType": "Numeric",
         "lov": {
@@ -982,12 +618,12 @@
         "type": "Dimension",
         "path": "CNR Finance\\Time",
         "name": "Fiscal Quarter",
-        "description": "Fiscal quarter label, e.g. 2025-Q2.",
+        "description": "Fiscal quarter, 1 to 4.",
         "state": "Active",
         "hidden": false,
-        "select": "FISCAL_PERIODS.QUARTER_LABEL",
+        "select": "CEIL(EXTRACT(MONTH FROM FISCAL_CALENDAR.PERIOD_START)/3)",
         "projection": "None",
-        "dataType": "String",
+        "dataType": "Numeric",
         "lov": {
           "name": "LOV Fiscal Quarter",
           "automaticRefresh": true
@@ -1001,7 +637,7 @@
         "description": "Fiscal period (month) number, 1 to 12.",
         "state": "Active",
         "hidden": false,
-        "select": "FISCAL_PERIODS.PERIOD_NUMBER",
+        "select": "EXTRACT(MONTH FROM FISCAL_CALENDAR.PERIOD_START)",
         "projection": "None",
         "dataType": "Numeric",
         "lov": {
@@ -1017,7 +653,7 @@
         "description": "First calendar day of the fiscal period.",
         "state": "Active",
         "hidden": false,
-        "select": "FISCAL_PERIODS.PERIOD_START",
+        "select": "FISCAL_CALENDAR.PERIOD_START",
         "projection": "None",
         "dataType": "Date",
         "lov": {
@@ -1038,22 +674,6 @@
         "dataType": "Numeric",
         "lov": {
           "name": "LOV Year-Period",
-          "automaticRefresh": true
-        }
-      },
-      {
-        "id": "O_CLOSED",
-        "type": "Dimension",
-        "path": "CNR Finance\\Time",
-        "name": "Period Closed",
-        "description": "Whether the fiscal period is closed for posting.",
-        "state": "Active",
-        "hidden": false,
-        "select": "DECODE(FISCAL_PERIODS.IS_CLOSED,1,'Closed','Open')",
-        "projection": "None",
-        "dataType": "String",
-        "lov": {
-          "name": "LOV Period Closed",
           "automaticRefresh": true
         }
       },
@@ -1158,31 +778,15 @@
         "id": "O_CGRP",
         "type": "Dimension",
         "path": "CNR Finance\\Commodity",
-        "name": "Commodity Group",
-        "description": "Commodity group (business unit), e.g. Grain and Fertilizers.",
+        "name": "Business Unit",
+        "description": "Business unit (commodity group) freight revenue is reported by, e.g. Grain and fertilizers.",
         "state": "Active",
         "hidden": false,
-        "select": "COMMODITY_GROUPS.GROUP_NAME",
+        "select": "COMMODITIES.BUSINESS_UNIT",
         "projection": "None",
         "dataType": "String",
         "lov": {
-          "name": "LOV Commodity Group",
-          "automaticRefresh": true
-        }
-      },
-      {
-        "id": "O_SEG",
-        "type": "Dimension",
-        "path": "CNR Finance\\Commodity",
-        "name": "Business Segment",
-        "description": "Business segment the commodity group reports into.",
-        "state": "Active",
-        "hidden": false,
-        "select": "COMMODITY_GROUPS.BUSINESS_SEGMENT",
-        "projection": "None",
-        "dataType": "String",
-        "lov": {
-          "name": "LOV Business Segment",
+          "name": "LOV Business Unit",
           "automaticRefresh": true
         }
       },
@@ -1191,62 +795,14 @@
         "type": "Dimension",
         "path": "CNR Finance\\Geography",
         "name": "Origin Region",
-        "description": "Operating region of the origin station.",
+        "description": "Region the shipments started in.",
         "state": "Active",
         "hidden": false,
-        "select": "STATIONS.REGION",
+        "select": "NVL(FREIGHT_REVENUE.ORIGIN_REGION,'Unknown')",
         "projection": "None",
         "dataType": "String",
         "lov": {
           "name": "LOV Origin Region",
-          "automaticRefresh": true
-        }
-      },
-      {
-        "id": "O_OPROV",
-        "type": "Dimension",
-        "path": "CNR Finance\\Geography",
-        "name": "Origin Province",
-        "description": "Province or state of the origin station.",
-        "state": "Active",
-        "hidden": false,
-        "select": "STATIONS.PROVINCE_STATE",
-        "projection": "None",
-        "dataType": "String",
-        "lov": {
-          "name": "LOV Origin Province",
-          "automaticRefresh": true
-        }
-      },
-      {
-        "id": "O_DREG",
-        "type": "Dimension",
-        "path": "CNR Finance\\Geography",
-        "name": "Destination Region",
-        "description": "Operating region of the destination station.",
-        "state": "Active",
-        "hidden": false,
-        "select": "DEST_STATION.REGION",
-        "projection": "None",
-        "dataType": "String",
-        "lov": {
-          "name": "LOV Destination Region",
-          "automaticRefresh": true
-        }
-      },
-      {
-        "id": "O_HAUL",
-        "type": "Dimension",
-        "path": "CNR Finance\\Geography",
-        "name": "Haul Length Band",
-        "description": "Short, medium or long haul.",
-        "state": "Active",
-        "hidden": false,
-        "select": "NVL(FREIGHT_BILLING.HAUL_LENGTH_BAND,'Unknown')",
-        "projection": "None",
-        "dataType": "String",
-        "lov": {
-          "name": "LOV Haul Length Band",
           "automaticRefresh": true
         }
       },
@@ -1267,30 +823,14 @@
         }
       },
       {
-        "id": "O_DEPT",
-        "type": "Dimension",
-        "path": "CNR Finance\\Organisation",
-        "name": "Department",
-        "description": "Department that owns the cost center.",
-        "state": "Active",
-        "hidden": false,
-        "select": "COST_CENTERS.DEPARTMENT",
-        "projection": "None",
-        "dataType": "String",
-        "lov": {
-          "name": "LOV Department",
-          "automaticRefresh": true
-        }
-      },
-      {
         "id": "O_CCREG",
         "type": "Dimension",
         "path": "CNR Finance\\Organisation",
         "name": "Cost Center Region",
-        "description": "Region of the cost center.",
+        "description": "Region the cost center serves.",
         "state": "Active",
         "hidden": false,
-        "select": "COST_CENTERS.COST_CENTER_REGION",
+        "select": "COST_CENTERS.REGION",
         "projection": "None",
         "dataType": "String",
         "lov": {
@@ -1319,7 +859,7 @@
         "type": "Dimension",
         "path": "CNR Finance\\Accounts",
         "name": "Account Type",
-        "description": "Revenue, Expense, Asset, Liability or Equity.",
+        "description": "Revenue, Expense, Asset or Liability.",
         "state": "Active",
         "hidden": false,
         "select": "GL_ACCOUNTS.ACCOUNT_TYPE",
@@ -1347,6 +887,22 @@
         }
       },
       {
+        "id": "O_BSTLINE",
+        "type": "Dimension",
+        "path": "CNR Finance\\Budget",
+        "name": "Budget Statement Line",
+        "description": "Statement line of the budgeted account.",
+        "state": "Active",
+        "hidden": false,
+        "select": "BUDGET_ACCOUNT.STATEMENT_LINE",
+        "projection": "None",
+        "dataType": "String",
+        "lov": {
+          "name": "LOV Budget Statement Line",
+          "automaticRefresh": true
+        }
+      },
+      {
         "id": "O_VEND",
         "type": "Dimension",
         "path": "CNR Finance\\Vendor",
@@ -1354,7 +910,7 @@
         "description": "Supplier name.",
         "state": "Active",
         "hidden": false,
-        "select": "VENDORS.VENDOR_NAME",
+        "select": "AP_INVOICES.VENDOR_NAME",
         "projection": "None",
         "dataType": "String",
         "lov": {
@@ -1370,7 +926,7 @@
         "description": "Supplier category.",
         "state": "Active",
         "hidden": false,
-        "select": "VENDORS.VENDOR_CATEGORY",
+        "select": "AP_INVOICES.VENDOR_CATEGORY",
         "projection": "None",
         "dataType": "String",
         "lov": {
@@ -1383,10 +939,10 @@
         "type": "Dimension",
         "path": "CNR Finance\\Receivables",
         "name": "Aging Bucket",
-        "description": "Days-past-due band of the open receivable.",
+        "description": "Days-past-due band of the receivable at the extract date.",
         "state": "Active",
         "hidden": false,
-        "select": "CASE WHEN AR_INVOICES.DAYS_PAST_DUE <= 0 THEN 'Current' WHEN AR_INVOICES.DAYS_PAST_DUE <= 30 THEN '1-30' WHEN AR_INVOICES.DAYS_PAST_DUE <= 60 THEN '31-60' WHEN AR_INVOICES.DAYS_PAST_DUE <= 90 THEN '61-90' ELSE '90+' END",
+        "select": "NVL(AR_INVOICES.AGING_BUCKET,'Paid')",
         "projection": "None",
         "dataType": "String",
         "lov": {
@@ -1398,15 +954,15 @@
         "id": "O_AGBAND",
         "type": "Dimension",
         "path": "CNR Finance\\Receivables",
-        "name": "Aging Band (lookup)",
-        "description": "Aging band from the AGING_BANDS lookup table.",
+        "name": "Balance Band (lookup)",
+        "description": "Open-balance band from the BALANCE_BANDS lookup table.",
         "state": "Active",
         "hidden": false,
-        "select": "AGING_BANDS.BAND_NAME",
+        "select": "BALANCE_BANDS.BAND_NAME",
         "projection": "None",
         "dataType": "String",
         "lov": {
-          "name": "LOV Aging Band (lookup)",
+          "name": "LOV Balance Band (lookup)",
           "automaticRefresh": true
         }
       },
@@ -1415,10 +971,10 @@
         "type": "Dimension",
         "path": "CNR Finance\\Receivables",
         "name": "Payment Status",
-        "description": "Paid, partially paid or open.",
+        "description": "Paid or open at the extract date.",
         "state": "Active",
         "hidden": false,
-        "select": "AR_INVOICES.PAYMENT_STATUS",
+        "select": "DECODE(AR_INVOICES.OPEN_AMOUNT,0,'Paid','Open')",
         "projection": "None",
         "dataType": "String",
         "lov": {
@@ -1431,7 +987,7 @@
         "type": "Dimension",
         "path": "CNR Finance\\Payables",
         "name": "AP Aging Bucket",
-        "description": "Days-past-due band of the open payable.",
+        "description": "Days-past-due band of the payable.",
         "state": "Active",
         "hidden": false,
         "select": "AP_INVOICES.AGING_BUCKET",
@@ -1447,10 +1003,10 @@
         "type": "Measure",
         "path": "CNR Finance\\Revenue",
         "name": "Freight Revenue",
-        "description": "Freight revenue: line-haul + fuel surcharge + accessorial, in C$.",
+        "description": "Freight revenue: line-haul + fuel surcharge, in C$.",
         "state": "Active",
         "hidden": false,
-        "select": "@Aggregate_Aware(SUM(AGG_REVENUE_MONTHLY.FREIGHT_REVENUES), SUM(FREIGHT_BILLING.LINE_REVENUE))",
+        "select": "@Aggregate_Aware(SUM(AGG_MONTHLY_PERFORMANCE.FREIGHT_REVENUES), SUM(FREIGHT_REVENUE.TOTAL_REVENUE))",
         "projection": "Sum",
         "dataType": "Numeric",
         "format": {
@@ -1465,7 +1021,7 @@
         "description": "Line-haul revenue from billing.",
         "state": "Active",
         "hidden": false,
-        "select": "SUM(FREIGHT_BILLING.LINEHAUL_REVENUE)",
+        "select": "SUM(FREIGHT_REVENUE.LINEHAUL_REVENUE)",
         "projection": "Sum",
         "dataType": "Numeric",
         "format": {
@@ -1480,7 +1036,7 @@
         "description": "Fuel surcharge billed to customers.",
         "state": "Active",
         "hidden": false,
-        "select": "SUM(FREIGHT_BILLING.FUEL_SURCHARGE_REVENUE)",
+        "select": "SUM(FREIGHT_REVENUE.FUEL_SURCHARGE_REVENUE)",
         "projection": "Sum",
         "dataType": "Numeric",
         "format": {
@@ -1495,7 +1051,7 @@
         "description": "",
         "state": "Active",
         "hidden": false,
-        "select": "SUM(FREIGHT_BILLING.LINEHAUL_REVENUE + NVL(FREIGHT_BILLING.ACCESSORIAL_REVENUE,0))",
+        "select": "SUM(FREIGHT_REVENUE.LINEHAUL_REVENUE + NVL(FREIGHT_REVENUE.FUEL_SURCHARGE_REVENUE,0))",
         "projection": "Sum",
         "dataType": "Numeric",
         "format": {
@@ -1510,7 +1066,7 @@
         "description": "Number of carloads moved.",
         "state": "Active",
         "hidden": false,
-        "select": "SUM(FREIGHT_BILLING.CARLOADS)",
+        "select": "SUM(FREIGHT_REVENUE.CARLOADS)",
         "projection": "Sum",
         "dataType": "Numeric",
         "format": {
@@ -1525,7 +1081,7 @@
         "description": "Revenue ton-miles (RTM).",
         "state": "Active",
         "hidden": false,
-        "select": "SUM(FREIGHT_BILLING.REVENUE_TON_MILES)",
+        "select": "SUM(FREIGHT_REVENUE.REVENUE_TON_MILES)",
         "projection": "Sum",
         "dataType": "Numeric",
         "format": {
@@ -1540,7 +1096,7 @@
         "description": "Freight revenue divided by carloads.",
         "state": "Active",
         "hidden": false,
-        "select": "SUM(FREIGHT_BILLING.LINE_REVENUE)/NULLIF(SUM(FREIGHT_BILLING.CARLOADS),0)",
+        "select": "SUM(FREIGHT_REVENUE.TOTAL_REVENUE)/NULLIF(SUM(FREIGHT_REVENUE.CARLOADS),0)",
         "projection": "Delegated",
         "dataType": "Numeric",
         "format": {
@@ -1555,7 +1111,7 @@
         "description": "Customers with at least one billing line.",
         "state": "Active",
         "hidden": false,
-        "select": "COUNT(DISTINCT FREIGHT_BILLING.CUSTOMER_ID)",
+        "select": "COUNT(DISTINCT FREIGHT_REVENUE.CUSTOMER_ID)",
         "projection": "Delegated",
         "dataType": "Numeric"
       },
@@ -1564,10 +1120,11 @@
         "type": "Measure",
         "path": "CNR Finance\\Ledger",
         "name": "Revenue",
-        "description": "Total revenues posted to the general ledger.",
+        "description": "Total revenues posted to the general ledger (accounts 4000-4999).",
         "state": "Active",
         "hidden": false,
-        "select": "SUM(GL_JOURNAL_LINES.REVENUE_AMOUNT)",
+        "select": "SUM(GL_ENTRIES.AMOUNT)",
+        "where": "GL_ENTRIES.ACCOUNT_NUMBER BETWEEN 4000 AND 4999",
         "projection": "Sum",
         "dataType": "Numeric",
         "format": {
@@ -1579,10 +1136,11 @@
         "type": "Measure",
         "path": "CNR Finance\\Ledger",
         "name": "Operating Expenses",
-        "description": "Operating expenses posted to the general ledger.",
+        "description": "Operating expenses posted to the general ledger (accounts 5000-5999).",
         "state": "Active",
         "hidden": false,
-        "select": "SUM(GL_JOURNAL_LINES.EXPENSE_AMOUNT)",
+        "select": "SUM(GL_ENTRIES.AMOUNT)",
+        "where": "GL_ENTRIES.ACCOUNT_NUMBER BETWEEN 5000 AND 5999",
         "projection": "Sum",
         "dataType": "Numeric",
         "format": {
@@ -1597,8 +1155,8 @@
         "description": "Labour and fringe benefits (accounts 5000-5099).",
         "state": "Active",
         "hidden": false,
-        "select": "SUM(GL_JOURNAL_LINES.EXPENSE_AMOUNT)",
-        "where": "GL_JOURNAL_LINES.ACCOUNT_NUMBER BETWEEN 5000 AND 5099",
+        "select": "SUM(GL_ENTRIES.AMOUNT)",
+        "where": "GL_ENTRIES.ACCOUNT_NUMBER BETWEEN 5000 AND 5099",
         "projection": "Sum",
         "dataType": "Numeric",
         "format": {
@@ -1613,8 +1171,8 @@
         "description": "Fuel expense (accounts 5200-5299).",
         "state": "Active",
         "hidden": false,
-        "select": "SUM(GL_JOURNAL_LINES.EXPENSE_AMOUNT)",
-        "where": "GL_JOURNAL_LINES.ACCOUNT_NUMBER BETWEEN 5200 AND 5299",
+        "select": "SUM(GL_ENTRIES.AMOUNT)",
+        "where": "GL_ENTRIES.ACCOUNT_NUMBER BETWEEN 5200 AND 5299",
         "projection": "Sum",
         "dataType": "Numeric",
         "format": {
@@ -1629,7 +1187,7 @@
         "description": "Operating expenses as a share of revenues (lower is better).",
         "state": "Active",
         "hidden": false,
-        "select": "SUM(GL_JOURNAL_LINES.EXPENSE_AMOUNT)/NULLIF(SUM(GL_JOURNAL_LINES.REVENUE_AMOUNT),0)",
+        "select": "SUM(CASE WHEN GL_ENTRIES.ACCOUNT_NUMBER BETWEEN 5000 AND 5999 THEN GL_ENTRIES.AMOUNT END)/NULLIF(SUM(CASE WHEN GL_ENTRIES.ACCOUNT_NUMBER BETWEEN 4000 AND 4999 THEN GL_ENTRIES.AMOUNT END),0)",
         "projection": "Delegated",
         "dataType": "Numeric",
         "format": {
@@ -1644,7 +1202,8 @@
         "description": "Budgeted revenue.",
         "state": "Active",
         "hidden": false,
-        "select": "SUM(BUDGET_LINES.REVENUE_BUDGET)",
+        "select": "SUM(BUDGET.BUDGET_AMOUNT)",
+        "where": "BUDGET.ACCOUNT_NUMBER BETWEEN 4000 AND 4999",
         "projection": "Sum",
         "dataType": "Numeric",
         "format": {
@@ -1659,7 +1218,8 @@
         "description": "Budgeted operating expense.",
         "state": "Active",
         "hidden": false,
-        "select": "SUM(BUDGET_LINES.EXPENSE_BUDGET)",
+        "select": "SUM(BUDGET.BUDGET_AMOUNT)",
+        "where": "BUDGET.ACCOUNT_NUMBER BETWEEN 5000 AND 5999",
         "projection": "Sum",
         "dataType": "Numeric",
         "format": {
@@ -1686,7 +1246,7 @@
         "type": "Measure",
         "path": "CNR Finance\\Receivables",
         "name": "AR Open Amount",
-        "description": "Open (unpaid) receivable balance at the snapshot date.",
+        "description": "Open (unpaid) receivable balance at the extract date.",
         "state": "Active",
         "hidden": false,
         "select": "SUM(AR_INVOICES.OPEN_AMOUNT)",
@@ -1705,7 +1265,7 @@
         "state": "Active",
         "hidden": false,
         "select": "SUM(AR_INVOICES.OPEN_AMOUNT)",
-        "where": "AR_INVOICES.DAYS_PAST_DUE > 0",
+        "where": "AR_INVOICES.DUE_DATE < DATE '2025-12-31'",
         "projection": "Sum",
         "dataType": "Numeric",
         "format": {
@@ -1716,15 +1276,15 @@
         "id": "M_DTP",
         "type": "Measure",
         "path": "CNR Finance\\Receivables",
-        "name": "Avg Days to Pay",
-        "description": "Average days customers take to pay.",
+        "name": "Avg Invoice Amount",
+        "description": "Average receivable invoice amount.",
         "state": "Active",
         "hidden": false,
-        "select": "AVG(AR_INVOICES.DAYS_TO_PAY)",
+        "select": "AVG(AR_INVOICES.INVOICE_AMOUNT)",
         "projection": "Sum",
         "dataType": "Numeric",
         "format": {
-          "numberFormat": "0.0"
+          "numberFormat": "#,##0"
         }
       },
       {
@@ -1760,24 +1320,27 @@
       {
         "id": "M_HC",
         "type": "Measure",
-        "path": "CNR Finance\\Organisation",
-        "name": "Headcount",
-        "description": "Full-time equivalents in the cost center.",
+        "path": "CNR Finance\\Customer",
+        "name": "Credit Limit",
+        "description": "Credit limit granted to the customers, in C$.",
         "state": "Active",
         "hidden": false,
-        "select": "SUM(COST_CENTERS.HEADCOUNT)",
+        "select": "SUM(CUSTOMERS.CREDIT_LIMIT)",
         "projection": "Sum",
-        "dataType": "Numeric"
+        "dataType": "Numeric",
+        "format": {
+          "numberFormat": "#,##0"
+        }
       },
       {
         "id": "F_CLOSED",
         "type": "Filter",
         "path": "CNR Finance\\Filters",
         "name": "Closed Periods",
-        "description": "Only fiscal periods closed for posting.",
+        "description": "Only fiscal periods closed for posting (all but the current month).",
         "state": "Active",
         "hidden": false,
-        "where": "FISCAL_PERIODS.IS_CLOSED = 1"
+        "where": "FISCAL_CALENDAR.PERIOD_START < TO_DATE('2025-12-01','YYYY-MM-DD')"
       },
       {
         "id": "F_OPENINV",
@@ -1807,7 +1370,7 @@
         "description": "Prompts for one fiscal year.",
         "state": "Active",
         "hidden": false,
-        "where": "FISCAL_PERIODS.FISCAL_YEAR = @Prompt('Enter Fiscal Year:','N','Time\\Fiscal Year',mono,free,persistent)"
+        "where": "FISCAL_CALENDAR.FISCAL_YEAR = @Prompt('Enter Fiscal Year:','N','Time\\Fiscal Year',mono,free,persistent)"
       }
     ],
     "parameters": [
@@ -1846,7 +1409,6 @@
         "id": "H_COMMODITY",
         "name": "Commodity",
         "levels": [
-          "O_SEG",
           "O_CGRP",
           "O_COMM"
         ]
@@ -1858,7 +1420,7 @@
         "type": "rowRestriction",
         "name": "West finance team",
         "table": "COST_CENTERS",
-        "where": "COST_CENTERS.COST_CENTER_REGION = 'West'",
+        "where": "COST_CENTERS.REGION = 'Western'",
         "groups": [
           "grp_finance_west"
         ]

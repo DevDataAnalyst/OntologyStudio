@@ -26,6 +26,9 @@ NON_ADDITIVE = ("ratio", "distinct_count", "average", "derived", "multi_fact", "
 
 
 # ------------------------------------------------------------------------------------------------ Pattern 2
+from .recon import inner_join_guards  # noqa: E402
+
+
 def block_specs(sir: dict, concepts: dict, mv: dict) -> list[dict]:
     """Report blocks (the 'visuals') mapped to one metric view each: fields + measures."""
     objects = {o["sir_id"]: o for o in sir["semantic"]["objects"]}
@@ -55,10 +58,35 @@ def block_specs(sir: dict, concepts: dict, mv: dict) -> list[dict]:
                 fmap = mv["field_names"][view]
                 cols = [(lbl, fmap.get(f or "")) for lbl, f in axes]
                 ms = [(lbl, m) for lbl, m in measures if m in in_view]
-                spec["parts"].append({"view": view, "target": mv["targets"][view], "fields": cols, "measures": ms})
+                # the report's own filters: those of the data providers that feed these measures
+                where, prompt_cols, notes = _block_filters(rpt, objects, concepts, fmap, {m for _, m in ms})
+                for lbl, f in prompt_cols:
+                    if f not in {c for _, c in cols}:
+                        cols.append((lbl, f))
+                where += inner_join_guards(mv["views"][view], [c for _, c in cols])
+                spec["parts"].append({"view": view, "target": mv["targets"][view], "fields": cols, "measures": ms,
+                                      "where": where, "filter_notes": notes})
             spec["not_converted"] = [lbl for lbl, m in measures if not m or not mv["measure_view"].get(m)]
             specs.append(spec)
     return specs
+
+
+def _block_filters(rpt: dict, objects: dict, concepts: dict, fmap: dict, metrics: set[str]):
+    """Filters every contributing data provider applies (prompted ones become columns). A filter only some
+    of them apply can't go into one view: it's reported instead."""
+    from .recon import dp_where
+    per_dp = []
+    for dp in rpt["data_providers"]:
+        if {objects[o].get("metric") for o in dp["objects"] if o in objects} & metrics:
+            per_dp.append(dp_where(dp, objects, concepts, fmap, prompts="column"))
+    if not per_dp:
+        return [], [], []
+    common = [w for w in per_dp[0][0] if all(w in d[0] for d in per_dp)]
+    notes = sorted({w for d in per_dp for w in d[0] if w not in common})
+    notes = [f"applied by only some data providers: {w}" for w in notes]
+    notes += sorted({m for d in per_dp for m in d[2]})
+    cols = list(dict.fromkeys(c for d in per_dp for c in d[1]))
+    return common, cols, notes
 
 
 def p2_views(specs: list[dict], catalog: str = "cnfinance", schema: str = "semantic") -> list[dict]:
@@ -69,10 +97,15 @@ def p2_views(specs: list[dict], catalog: str = "cnfinance", schema: str = "seman
             missing = [lbl for lbl, f in part["fields"] if not f]
             sel = [f"{f} AS `{lbl}`" for lbl, f in fields] + [f"MEASURE({m}) AS `{lbl}`" for lbl, m in part["measures"]]
             name = f"v_{s['report'].lower()}_{s['block'].lower()}" + (f"_{i + 1}" if len(s["parts"]) > 1 else "")
-            sql = f"SELECT {', '.join(sel)}\nFROM {part['target']}" + ("\nGROUP BY ALL" if fields else "")
+            sql = f"SELECT {', '.join(sel)}\nFROM {part['target']}"
+            if part.get("where"):
+                sql += "\nWHERE " + " AND ".join(part["where"])
+            if fields:
+                sql += "\nGROUP BY ALL"
             out.append({"name": f"{catalog}.{schema}.{name}", "report": s["report"], "block": s["block"],
                         "select": sql, "ddl": f"CREATE OR REPLACE VIEW {catalog}.{schema}.{name} AS\n{sql}",
-                        "missing_axes": missing, "not_converted": s["not_converted"]})
+                        "missing_axes": missing, "not_converted": s["not_converted"],
+                        "filter_notes": part.get("filter_notes", [])})
     return out
 
 

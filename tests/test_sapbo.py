@@ -198,3 +198,14 @@ def test_fixture_maps_only_to_live_cnfinance_tables():
             continue
         cat, sch, tbl = uc.split(".")
         assert cat == "cnfinance" and tbl in LIVE_CNFINANCE[sch], (bo, uc)
+
+
+def test_inner_join_semantics_and_p2_filters(res):
+    r04 = next(i for i in res["recon_plan"] if i["report"] == "R04" and i["data_provider"] == "DP0")
+    assert "cost_center IS NOT NULL" in r04["l3_sql"]           # BO inner join vs metric view LEFT join
+    p2 = {v["name"].split(".")[-1]: v["select"] for v in res["p2_views"]}
+    assert "period_start_date < " in p2["v_r02_b1"]              # predefined filter: closed periods
+    assert "open_amount > 0" in p2["v_r05_b1"]                   # predefined filter: open invoices
+    assert "is_key_account = TRUE" in p2["v_r09_b1"]
+    assert "fiscal_year AS `Fiscal Year`" in p2["v_r07_b1"]      # prompted field exposed, not hard-coded
+    assert "= 2025" not in p2["v_r07_b1"]

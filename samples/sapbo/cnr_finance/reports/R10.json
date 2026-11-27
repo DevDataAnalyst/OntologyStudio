@@ -1,0 +1,139 @@
+{
+  "id": "R10",
+  "cuid": "AZcnrR10000000000000",
+  "name": "R10 KPI Summary (CFO pack)",
+  "folder": "Public Folders/Finance/Executive",
+  "usage": {
+    "refreshes_90d": 502,
+    "users_90d": 61
+  },
+  "constructs_intended": [
+    "C1",
+    "C2",
+    "C3",
+    "C6",
+    "C8"
+  ],
+  "dataProviders": [
+    {
+      "id": "DP0",
+      "name": "Revenue",
+      "dataSourceId": "UNV_CNR_FIN",
+      "dataSourceType": "unx",
+      "querySpecification": {
+        "resultObjects": [
+          "O_FY",
+          "M_FREV"
+        ],
+        "filters": null
+      },
+      "customSql": false,
+      "promptValues": {},
+      "queryPlan": {
+        "statements": [
+          "SELECT\n  FISCAL_PERIODS.FISCAL_YEAR,\n  SUM(AGG_REVENUE_MONTHLY.FREIGHT_REVENUES)\nFROM\n  CNR_FIN.AGG_REVENUE_MONTHLY  AGG_REVENUE_MONTHLY,\n  CNR_FIN.FISCAL_PERIODS  FISCAL_PERIODS\nWHERE\n  ( AGG_REVENUE_MONTHLY.PERIOD_ID=FISCAL_PERIODS.PERIOD_ID  )\nGROUP BY\n  FISCAL_PERIODS.FISCAL_YEAR"
+        ]
+      }
+    },
+    {
+      "id": "DP1",
+      "name": "Ledger",
+      "dataSourceId": "UNV_CNR_FIN",
+      "dataSourceType": "unx",
+      "querySpecification": {
+        "resultObjects": [
+          "O_FY",
+          "M_REV_GL",
+          "M_OPEX",
+          "M_OR"
+        ],
+        "filters": null
+      },
+      "customSql": false,
+      "promptValues": {},
+      "queryPlan": {
+        "statements": [
+          "SELECT\n  FISCAL_PERIODS.FISCAL_YEAR,\n  SUM(GL_JOURNAL_LINES.REVENUE_AMOUNT),\n  SUM(GL_JOURNAL_LINES.EXPENSE_AMOUNT),\n  SUM(GL_JOURNAL_LINES.EXPENSE_AMOUNT)/NULLIF(SUM(GL_JOURNAL_LINES.REVENUE_AMOUNT),0)\nFROM\n  CNR_FIN.FISCAL_PERIODS  FISCAL_PERIODS,\n  CNR_FIN.GL_JOURNAL_LINES  GL_JOURNAL_LINES\nWHERE\n  ( GL_JOURNAL_LINES.PERIOD_ID=FISCAL_PERIODS.PERIOD_ID  )\nGROUP BY\n  FISCAL_PERIODS.FISCAL_YEAR"
+        ]
+      }
+    },
+    {
+      "id": "DP2",
+      "name": "Monthly",
+      "dataSourceId": "UNV_CNR_FIN",
+      "dataSourceType": "unx",
+      "querySpecification": {
+        "resultObjects": [
+          "O_FY",
+          "O_FP",
+          "O_OREG",
+          "M_FREV",
+          "M_REV_BILL",
+          "M_FSC"
+        ],
+        "filters": null
+      },
+      "customSql": false,
+      "promptValues": {},
+      "queryPlan": {
+        "statements": [
+          "SELECT\n  FISCAL_PERIODS.FISCAL_YEAR,\n  FISCAL_PERIODS.PERIOD_NUMBER,\n  STATIONS.REGION,\n  SUM(FREIGHT_BILLING.LINE_REVENUE),\n  SUM(FREIGHT_BILLING.LINEHAUL_REVENUE),\n  SUM(FREIGHT_BILLING.FUEL_SURCHARGE_REVENUE)\nFROM\n  CNR_FIN.FISCAL_PERIODS  FISCAL_PERIODS,\n  CNR_FIN.FREIGHT_BILLING  FREIGHT_BILLING,\n  CNR_FIN.STATIONS  STATIONS\nWHERE\n  ( FREIGHT_BILLING.ORIGIN_STATION_CODE=STATIONS.STATION_CODE  )\n  AND  ( FREIGHT_BILLING.PERIOD_ID=FISCAL_PERIODS.PERIOD_ID  )\nGROUP BY\n  FISCAL_PERIODS.FISCAL_YEAR,\n  FISCAL_PERIODS.PERIOD_NUMBER,\n  STATIONS.REGION"
+        ]
+      }
+    }
+  ],
+  "variables": [
+    {
+      "id": "V_NET10",
+      "name": "Net Revenue",
+      "qualification": "Measure",
+      "formula": "=[Revenue]-[Fuel Surcharge Revenue]"
+    },
+    {
+      "id": "V_R3M",
+      "name": "Revenue Rolling 3M",
+      "qualification": "Measure",
+      "formula": "=[Freight Revenue]+Previous([Freight Revenue])+Previous([Freight Revenue];2)"
+    },
+    {
+      "id": "V_MAXREG",
+      "name": "Best Region Revenue",
+      "qualification": "Measure",
+      "formula": "=Max([Freight Revenue] ForEach ([Origin Region]))"
+    }
+  ],
+  "reports": [
+    {
+      "id": "RPT1",
+      "name": "Report 1",
+      "blocks": [
+        {
+          "id": "B1",
+          "type": "Table",
+          "axes": [
+            "Fiscal Year"
+          ],
+          "measures": [
+            "Freight Revenue",
+            "Revenue",
+            "Operating Expenses",
+            "Operating Ratio"
+          ]
+        },
+        {
+          "id": "B2",
+          "type": "Chart",
+          "axes": [
+            "Fiscal Year",
+            "Fiscal Period"
+          ],
+          "measures": [
+            "Freight Revenue",
+            "Revenue Rolling 3M",
+            "Net Revenue"
+          ]
+        }
+      ]
+    }
+  ]
+}

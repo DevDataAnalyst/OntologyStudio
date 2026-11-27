@@ -1,0 +1,92 @@
+{
+  "id": "R07",
+  "cuid": "AZcnrR07000000000000",
+  "name": "R07 Top 20 Customers by Revenue",
+  "folder": "Public Folders/Finance/Revenue",
+  "usage": {
+    "refreshes_90d": 377,
+    "users_90d": 45
+  },
+  "constructs_intended": [
+    "C8",
+    "C2",
+    "C7"
+  ],
+  "dataProviders": [
+    {
+      "id": "DP0",
+      "name": "Revenue",
+      "dataSourceId": "UNV_CNR_FIN",
+      "dataSourceType": "unx",
+      "querySpecification": {
+        "resultObjects": [
+          "O_FY",
+          "O_CUST",
+          "O_IND",
+          "M_FREV",
+          "M_CARS"
+        ],
+        "filters": {
+          "operator": "And",
+          "conditions": [
+            {
+              "object": "O_FY",
+              "operator": "Equal",
+              "prompt": "P_FY"
+            }
+          ]
+        }
+      },
+      "customSql": false,
+      "promptValues": {
+        "P_FY": [
+          2025
+        ]
+      },
+      "queryPlan": {
+        "statements": [
+          "SELECT\n  FISCAL_PERIODS.FISCAL_YEAR,\n  CUSTOMERS.CUSTOMER_NAME,\n  CUSTOMERS.INDUSTRY,\n  SUM(FREIGHT_BILLING.LINE_REVENUE),\n  SUM(FREIGHT_BILLING.CARLOADS)\nFROM\n  CNR_FIN.CUSTOMERS  CUSTOMERS,\n  CNR_FIN.FISCAL_PERIODS  FISCAL_PERIODS,\n  CNR_FIN.FREIGHT_BILLING  FREIGHT_BILLING\nWHERE\n  ( FREIGHT_BILLING.CUSTOMER_ID=CUSTOMERS.CUSTOMER_ID  )\n  AND  ( FREIGHT_BILLING.PERIOD_ID=FISCAL_PERIODS.PERIOD_ID  )\n  AND  ( FISCAL_PERIODS.FISCAL_YEAR = 2025 )\nGROUP BY\n  FISCAL_PERIODS.FISCAL_YEAR,\n  CUSTOMERS.CUSTOMER_NAME,\n  CUSTOMERS.INDUSTRY"
+        ]
+      }
+    }
+  ],
+  "variables": [
+    {
+      "id": "V_RANK",
+      "name": "Customer Rank",
+      "qualification": "Measure",
+      "formula": "=Rank([Freight Revenue];([Customer Name]))"
+    },
+    {
+      "id": "V_SHARE",
+      "name": "Share of Total",
+      "qualification": "Measure",
+      "formula": "=Percentage([Freight Revenue])"
+    }
+  ],
+  "reports": [
+    {
+      "id": "RPT1",
+      "name": "Report 1",
+      "blocks": [
+        {
+          "id": "B1",
+          "type": "Table",
+          "axes": [
+            "Customer Name",
+            "Industry"
+          ],
+          "measures": [
+            "Freight Revenue",
+            "Share of Total",
+            "Customer Rank"
+          ],
+          "ranking": {
+            "top": 20,
+            "by": "Freight Revenue"
+          }
+        }
+      ]
+    }
+  ]
+}

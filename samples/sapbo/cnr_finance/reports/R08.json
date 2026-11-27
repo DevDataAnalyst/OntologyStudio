@@ -1,0 +1,98 @@
+{
+  "id": "R08",
+  "cuid": "AZcnrR08000000000000",
+  "name": "R08 Fuel Surcharge Recovery",
+  "folder": "Public Folders/Finance/Revenue",
+  "usage": {
+    "refreshes_90d": 152,
+    "users_90d": 9
+  },
+  "constructs_intended": [
+    "C2",
+    "C4",
+    "C6"
+  ],
+  "dataProviders": [
+    {
+      "id": "DP0",
+      "name": "Billing",
+      "dataSourceId": "UNV_CNR_FIN",
+      "dataSourceType": "unx",
+      "querySpecification": {
+        "resultObjects": [
+          "O_FY",
+          "O_FP",
+          "M_FSC",
+          "M_FREV",
+          "M_FBADJ"
+        ],
+        "filters": null
+      },
+      "customSql": false,
+      "promptValues": {},
+      "queryPlan": {
+        "statements": [
+          "SELECT\n  FISCAL_PERIODS.FISCAL_YEAR,\n  FISCAL_PERIODS.PERIOD_NUMBER,\n  SUM(FREIGHT_BILLING.FUEL_SURCHARGE_REVENUE),\n  SUM(FREIGHT_BILLING.LINE_REVENUE),\n  SUM(FREIGHT_BILLING.LINEHAUL_REVENUE + NVL(FREIGHT_BILLING.ACCESSORIAL_REVENUE,0))\nFROM\n  CNR_FIN.FISCAL_PERIODS  FISCAL_PERIODS,\n  CNR_FIN.FREIGHT_BILLING  FREIGHT_BILLING\nWHERE\n  ( FREIGHT_BILLING.PERIOD_ID=FISCAL_PERIODS.PERIOD_ID  )\nGROUP BY\n  FISCAL_PERIODS.FISCAL_YEAR,\n  FISCAL_PERIODS.PERIOD_NUMBER"
+        ]
+      }
+    },
+    {
+      "id": "DP1",
+      "name": "Ledger",
+      "dataSourceId": "UNV_CNR_FIN",
+      "dataSourceType": "unx",
+      "querySpecification": {
+        "resultObjects": [
+          "O_FY",
+          "O_FP",
+          "M_FUELX"
+        ],
+        "filters": null
+      },
+      "customSql": false,
+      "promptValues": {},
+      "queryPlan": {
+        "statements": [
+          "SELECT\n  FISCAL_PERIODS.FISCAL_YEAR,\n  FISCAL_PERIODS.PERIOD_NUMBER,\n  SUM(CASE WHEN GL_JOURNAL_LINES.ACCOUNT_NUMBER BETWEEN 5200 AND 5299 THEN GL_JOURNAL_LINES.EXPENSE_AMOUNT END)\nFROM\n  CNR_FIN.FISCAL_PERIODS  FISCAL_PERIODS,\n  CNR_FIN.GL_JOURNAL_LINES  GL_JOURNAL_LINES\nWHERE\n  ( GL_JOURNAL_LINES.PERIOD_ID=FISCAL_PERIODS.PERIOD_ID  )\nGROUP BY\n  FISCAL_PERIODS.FISCAL_YEAR,\n  FISCAL_PERIODS.PERIOD_NUMBER"
+        ]
+      }
+    }
+  ],
+  "variables": [
+    {
+      "id": "V_REC",
+      "name": "Fuel Recovery Rate",
+      "qualification": "Measure",
+      "formula": "=[Fuel Surcharge Revenue]/[Fuel Expense]"
+    },
+    {
+      "id": "V_NET",
+      "name": "Net Revenue",
+      "qualification": "Measure",
+      "formula": "=[Freight Revenue]-[Fuel Surcharge Revenue]"
+    }
+  ],
+  "reports": [
+    {
+      "id": "RPT1",
+      "name": "Report 1",
+      "blocks": [
+        {
+          "id": "B1",
+          "type": "Table",
+          "axes": [
+            "Fiscal Year",
+            "Fiscal Period"
+          ],
+          "measures": [
+            "Fuel Surcharge Revenue",
+            "Fuel Expense",
+            "Fuel Recovery Rate",
+            "Net Revenue",
+            "FB_AMT_ADJ"
+          ]
+        }
+      ]
+    }
+  ]
+}

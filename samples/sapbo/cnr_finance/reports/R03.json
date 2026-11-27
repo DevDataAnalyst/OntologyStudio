@@ -1,0 +1,83 @@
+{
+  "id": "R03",
+  "cuid": "AZcnrR03000000000000",
+  "name": "R03 Revenue YTD vs Prior Year by Region",
+  "folder": "Public Folders/Finance/Revenue",
+  "usage": {
+    "refreshes_90d": 356,
+    "users_90d": 41
+  },
+  "constructs_intended": [
+    "C3",
+    "C1",
+    "C5"
+  ],
+  "dataProviders": [
+    {
+      "id": "DP0",
+      "name": "Revenue",
+      "dataSourceId": "UNV_CNR_FIN",
+      "dataSourceType": "unx",
+      "querySpecification": {
+        "resultObjects": [
+          "O_FY",
+          "O_FP",
+          "O_PSTART",
+          "O_OREG",
+          "M_FREV"
+        ],
+        "filters": null
+      },
+      "customSql": false,
+      "promptValues": {},
+      "queryPlan": {
+        "statements": [
+          "SELECT\n  FISCAL_PERIODS.FISCAL_YEAR,\n  FISCAL_PERIODS.PERIOD_NUMBER,\n  FISCAL_PERIODS.PERIOD_START,\n  STATIONS.REGION,\n  SUM(FREIGHT_BILLING.LINE_REVENUE)\nFROM\n  CNR_FIN.FISCAL_PERIODS  FISCAL_PERIODS,\n  CNR_FIN.FREIGHT_BILLING  FREIGHT_BILLING,\n  CNR_FIN.STATIONS  STATIONS\nWHERE\n  ( FREIGHT_BILLING.ORIGIN_STATION_CODE=STATIONS.STATION_CODE  )\n  AND  ( FREIGHT_BILLING.PERIOD_ID=FISCAL_PERIODS.PERIOD_ID  )\nGROUP BY\n  FISCAL_PERIODS.FISCAL_YEAR,\n  FISCAL_PERIODS.PERIOD_NUMBER,\n  FISCAL_PERIODS.PERIOD_START,\n  STATIONS.REGION"
+        ]
+      }
+    }
+  ],
+  "variables": [
+    {
+      "id": "V_PY",
+      "name": "Revenue PY",
+      "qualification": "Measure",
+      "formula": "=RelativeValue([Freight Revenue];([Fiscal Year]);-1)"
+    },
+    {
+      "id": "V_YTD",
+      "name": "Revenue YTD",
+      "qualification": "Measure",
+      "formula": "=RunningSum([Freight Revenue];([Fiscal Year]))"
+    },
+    {
+      "id": "V_YOY",
+      "name": "YoY %",
+      "qualification": "Measure",
+      "formula": "=([Freight Revenue]-[Revenue PY])/[Revenue PY]"
+    }
+  ],
+  "reports": [
+    {
+      "id": "RPT1",
+      "name": "Report 1",
+      "blocks": [
+        {
+          "id": "B1",
+          "type": "Table",
+          "axes": [
+            "Fiscal Year",
+            "Fiscal Period",
+            "Origin Region"
+          ],
+          "measures": [
+            "Freight Revenue",
+            "Revenue PY",
+            "Revenue YTD",
+            "YoY %"
+          ]
+        }
+      ]
+    }
+  ]
+}

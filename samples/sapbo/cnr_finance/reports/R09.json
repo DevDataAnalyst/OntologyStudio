@@ -1,0 +1,102 @@
+{
+  "id": "R09",
+  "cuid": "AZcnrR09000000000000",
+  "name": "R09 Labour Cost per FTE by Cost Center",
+  "folder": "Public Folders/Finance/Ledger",
+  "usage": {
+    "refreshes_90d": 121,
+    "users_90d": 8
+  },
+  "constructs_intended": [
+    "C2",
+    "C8",
+    "C4"
+  ],
+  "dataProviders": [
+    {
+      "id": "DP0",
+      "name": "Ledger",
+      "dataSourceId": "UNV_CNR_FIN",
+      "dataSourceType": "unx",
+      "querySpecification": {
+        "resultObjects": [
+          "O_FY",
+          "O_CC",
+          "O_CCREG",
+          "M_LAB"
+        ],
+        "filters": {
+          "operator": "And",
+          "conditions": [
+            {
+              "object": "O_FY",
+              "operator": "Equal",
+              "prompt": "P_FY"
+            }
+          ]
+        }
+      },
+      "customSql": false,
+      "promptValues": {
+        "P_FY": [
+          2025
+        ]
+      },
+      "queryPlan": {
+        "statements": [
+          "SELECT\n  FISCAL_PERIODS.FISCAL_YEAR,\n  COST_CENTERS.COST_CENTER_NAME,\n  COST_CENTERS.COST_CENTER_REGION,\n  SUM(CASE WHEN GL_JOURNAL_LINES.ACCOUNT_NUMBER BETWEEN 5000 AND 5099 THEN GL_JOURNAL_LINES.EXPENSE_AMOUNT END)\nFROM\n  CNR_FIN.COST_CENTERS  COST_CENTERS,\n  CNR_FIN.FISCAL_PERIODS  FISCAL_PERIODS,\n  CNR_FIN.GL_JOURNAL_LINES  GL_JOURNAL_LINES\nWHERE\n  ( GL_JOURNAL_LINES.COST_CENTER_ID=COST_CENTERS.COST_CENTER_ID  )\n  AND  ( GL_JOURNAL_LINES.PERIOD_ID=FISCAL_PERIODS.PERIOD_ID  )\n  AND  ( FISCAL_PERIODS.FISCAL_YEAR = 2025 )\nGROUP BY\n  FISCAL_PERIODS.FISCAL_YEAR,\n  COST_CENTERS.COST_CENTER_NAME,\n  COST_CENTERS.COST_CENTER_REGION"
+        ]
+      }
+    },
+    {
+      "id": "DP1",
+      "name": "Organisation",
+      "dataSourceId": "UNV_CNR_FIN",
+      "dataSourceType": "unx",
+      "querySpecification": {
+        "resultObjects": [
+          "O_CC",
+          "O_CCREG",
+          "M_HC"
+        ],
+        "filters": null
+      },
+      "customSql": false,
+      "promptValues": {},
+      "queryPlan": {
+        "statements": [
+          "SELECT\n  COST_CENTERS.COST_CENTER_NAME,\n  COST_CENTERS.COST_CENTER_REGION,\n  SUM(COST_CENTERS.HEADCOUNT)\nFROM\n  CNR_FIN.COST_CENTERS  COST_CENTERS\nGROUP BY\n  COST_CENTERS.COST_CENTER_NAME,\n  COST_CENTERS.COST_CENTER_REGION"
+        ]
+      }
+    }
+  ],
+  "variables": [
+    {
+      "id": "V_LPF",
+      "name": "Labour Cost per FTE",
+      "qualification": "Measure",
+      "formula": "=[Labour Expense]/[Headcount]"
+    }
+  ],
+  "reports": [
+    {
+      "id": "RPT1",
+      "name": "Report 1",
+      "blocks": [
+        {
+          "id": "B1",
+          "type": "Table",
+          "axes": [
+            "Cost Center",
+            "Cost Center Region"
+          ],
+          "measures": [
+            "Labour Expense",
+            "Headcount",
+            "Labour Cost per FTE"
+          ]
+        }
+      ]
+    }
+  ]
+}

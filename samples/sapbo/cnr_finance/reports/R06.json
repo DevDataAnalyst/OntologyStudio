@@ -1,0 +1,68 @@
+{
+  "id": "R06",
+  "cuid": "AZcnrR06000000000000",
+  "name": "R06 AP Aging and Vendor Spend",
+  "folder": "Public Folders/Finance/Payables",
+  "usage": {
+    "refreshes_90d": 198,
+    "users_90d": 12
+  },
+  "constructs_intended": [
+    "C1",
+    "C5",
+    "C7"
+  ],
+  "dataProviders": [
+    {
+      "id": "DP0",
+      "name": "Payables",
+      "dataSourceId": "UNV_CNR_FIN",
+      "dataSourceType": "unx",
+      "querySpecification": {
+        "resultObjects": [
+          "O_VEND",
+          "O_VCAT",
+          "O_APAGING",
+          "M_APINV",
+          "M_APOPEN"
+        ],
+        "filters": null
+      },
+      "customSql": true,
+      "promptValues": {},
+      "queryPlan": {
+        "statements": [
+          "SELECT\n  VENDORS.VENDOR_NAME,\n  VENDORS.VENDOR_CATEGORY,\n  AP_INVOICES.AGING_BUCKET,\n  SUM(AP_INVOICES.INVOICE_AMOUNT),\n  SUM(AP_INVOICES.OPEN_AMOUNT)\nFROM\n  CNR_FIN.AP_INVOICES  AP_INVOICES,\n  CNR_FIN.VENDORS  VENDORS\nWHERE\n  ( AP_INVOICES.VENDOR_ID=VENDORS.VENDOR_ID  )\n  AND  ( VENDORS.VENDOR_CATEGORY <> 'Intercompany' )\nGROUP BY\n  VENDORS.VENDOR_NAME,\n  VENDORS.VENDOR_CATEGORY,\n  AP_INVOICES.AGING_BUCKET"
+        ]
+      }
+    }
+  ],
+  "variables": [],
+  "reports": [
+    {
+      "id": "RPT1",
+      "name": "Report 1",
+      "blocks": [
+        {
+          "id": "B1",
+          "type": "Table",
+          "axes": [
+            "Vendor Name",
+            "Vendor Category",
+            "AP Aging Bucket"
+          ],
+          "measures": [
+            "AP Invoiced Amount",
+            "AP Open Amount"
+          ],
+          "sorts": [
+            {
+              "by": "AP Open Amount",
+              "dir": "desc"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

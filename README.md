@@ -27,6 +27,7 @@ No Databricks workspace handy? The same engine runs locally on a SQLite file or 
 - [Source types: Databricks and Non-Databricks](#source-types-databricks-and-non-databricks)
 - [Walkthrough](#walkthrough)
 - [Features](#features): [Connect](#1-connect) · [Analyze](#2-analyze) · [Edit](#3-edit) · [Export](#4-export) · [Ask](#5-ask-test-the-ontology) · [Apache Ossie](#6-apache-ossie-validation-import-and-export) · [Govern and learn](#7-govern-and-learn-domains-certification-pages-learned-snippets) · [Monitor](#8-monitor-traces-feedback-cost-and-budgets)
+- [SAP BusinessObjects migration workspace](#sap-businessobjects-migration-workspace)
 - [Model lifecycle: versions and deployment](#model-lifecycle-versions-and-deployment)
 - [Architecture](#architecture) and [who runs what](#who-runs-what)
 - [Deploy to Databricks Apps](#deploy-to-databricks-apps), [Databricks Free Edition](#databricks-free-edition) and [permissions](#permissions-users-need)
@@ -88,6 +89,7 @@ The sidebar starts with **0 · Source type**. It decides which sources section �
 |---|---|---|---|
 | **Databricks** | Unity Catalog tables & views | available (inside Databricks Apps) | up to 100 tables and views from any catalog and schemas you can read, with your permissions |
 | **Non-Databricks** | SQLite database or `.sql` script | available | a SQLite file, or DDL in MySQL, Postgres, T-SQL, Oracle, Snowflake, Databricks, BigQuery, Redshift, DuckDB or Teradata |
+| Non-Databricks | SAP BusinessObjects (Universe + reports) | available | an [extract bundle](docs/sapbo/extract-bundle.md) of one Universe and its Web Intelligence reports; opens the SAP BO workspace below |
 | Non-Databricks | Snowflake | *coming soon* (placeholder) | planned: `INFORMATION_SCHEMA` through a connection stored as an app secret |
 | Non-Databricks | PostgreSQL | *coming soon* (placeholder) | planned: the catalog of a Postgres database (or Lakebase) through a secret |
 | Non-Databricks | Informatica CDGC (glossary overlay) | *coming soon* (placeholder) | planned: glossary terms, owners and certification from Informatica Cloud Data Governance & Catalog, layered on top of the tables |
@@ -488,6 +490,28 @@ The **📘 Data dictionary** tab shows each data object the way a Power BI devel
 
 ---
 
+## SAP BusinessObjects migration workspace
+
+Picking **SAP BusinessObjects** as the source opens a workspace for the BO → Ossie → metric views → Power BI POC. It
+reads an [extract bundle](docs/sapbo/extract-bundle.md); the synthetic *CNR Finance* bundle (a fictional railway's
+finance Universe over the `cnfinance` catalog, 10 reports that exercise contexts, aggregate awareness, prompts,
+derived tables, custom SQL and report variables) is built in. Pick catalog and schema for the views, then **Run SAP BO
+pipeline**.
+
+| Tab | What it does |
+|---|---|
+| 1 · Extract | extraction coverage per artifact type and report, the manual comparison checklist (CSV), BO → UC mapping, captured SQL |
+| 2 · Normalize | provenance counts in the client's five classes, findings (unmapped tables, missing cardinalities, theta joins, same-name measures…), metrics, datasets, relationships, report calculations, gap report |
+| 3 · Enrich | LLM proposals for missing descriptions and synonyms (Databricks Apps only) and the review inbox; nothing is exported as a definition until approved |
+| 4 · Ossie | the canonical Ossie YAML with validation; **Open in Ontology Studio** loads it into the normal tabs |
+| 5 · Metric views | conversion status per element (Direct, Transformed, Partial, Unsupported, Manual), per-view DDL, `deploy.sql` |
+| 6 · Power BI | P1 DAX/TMDL measures, P2 SQL views per report block, P3 DAX extension-vs-override classifier, P4 Publish-to-Power BI notes |
+| 7 · Reconcile | BO SQL (transpiled to Databricks) vs. the metric view, per statement; runs on the warehouse in Databricks Apps |
+
+Deployment stays manual (download `deploy.sql`). Not done by the app: extraction from a live BO server, building the
+Power BI model or reports, and Publish to Power BI (a Databricks private preview). The CLI runs the same pipeline:
+`python -m modules.sapbo run -o runs/cnr`, and `python -m modules.sapbo recon --profile <p> --warehouse <id>`.
+
 ## Model lifecycle: versions and deployment
 
 ### Versioned store (`ONTOLOGY_STORE`)
@@ -866,6 +890,7 @@ python -m pytest tests -q
 | `samples/ossie/retail_star.ossie.yaml` | The retail sample exported to Ossie `0.3.0.dev0` by the app. |
 | `samples/ossie/sales_analytics_0.2.0.dev0.yaml` | A model in the former `0.2.0.dev0` shape: passes with a warning and offers the upgrade. |
 | `samples/ossie/broken_example.ossie.yaml`, `semantic_errors.ossie.yaml` | Deliberately broken files: schema errors, then semantic errors (references, arity, scoping, SQL). |
+| `samples/sapbo/cnr_finance/` | Synthetic SAP BO extract bundle: the CNR Finance Universe, 10 Web Intelligence reports and the BO → `cnfinance` table mapping. |
 | `samples/query_logs/northwind_query_log.csv` | 60 Northwind queries by five people from dashboards, notebooks, Genie spaces, a job and the SQL editor, with comments, a popular `net_revenue` and a competing naive `revenue`, for learned snippets and the review queue. |
 
 ## Project layout

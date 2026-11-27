@@ -29,6 +29,9 @@ SOURCES = [
            note="Pick up to 100 tables or views in any catalog; runs with your permissions."),
     Source("Upload file", "SQLite database or .sql script", NON_DATABRICKS,
            note="Upload a SQLite file or a DDL script in any common SQL dialect."),
+    Source("SAP BusinessObjects", "SAP BusinessObjects (Universe + reports)", NON_DATABRICKS,
+           note="Migrate a BO Universe and its Web Intelligence reports: extract bundle -> gap report -> "
+                "Apache Ossie -> Databricks metric views, Power BI helpers and reconciliation queries."),
     Source("Snowflake", "Snowflake", NON_DATABRICKS, available=False,
            note="Planned: read INFORMATION_SCHEMA through a Snowflake connection stored as an app secret."),
     Source("PostgreSQL", "PostgreSQL", NON_DATABRICKS, available=False,

@@ -1,0 +1,134 @@
+{
+  "id": "R04",
+  "cuid": "AZcnrR04000000000000",
+  "name": "R04 Budget vs Actual by Cost Center",
+  "folder": "Public Folders/Finance/Budget",
+  "usage": {
+    "refreshes_90d": 301,
+    "users_90d": 29
+  },
+  "constructs_intended": [
+    "C4",
+    "C2",
+    "C7"
+  ],
+  "dataProviders": [
+    {
+      "id": "DP0",
+      "name": "Actual",
+      "dataSourceId": "UNV_CNR_FIN",
+      "dataSourceType": "unx",
+      "querySpecification": {
+        "resultObjects": [
+          "O_FY",
+          "O_CC",
+          "O_DEPT",
+          "M_REV_GL",
+          "M_OPEX"
+        ],
+        "filters": {
+          "operator": "And",
+          "conditions": [
+            {
+              "object": "O_FY",
+              "operator": "Equal",
+              "prompt": "P_FY"
+            }
+          ]
+        }
+      },
+      "customSql": false,
+      "promptValues": {
+        "P_FY": [
+          2025
+        ]
+      },
+      "queryPlan": {
+        "statements": [
+          "SELECT\n  FISCAL_PERIODS.FISCAL_YEAR,\n  COST_CENTERS.COST_CENTER_NAME,\n  COST_CENTERS.DEPARTMENT,\n  SUM(GL_JOURNAL_LINES.REVENUE_AMOUNT),\n  SUM(GL_JOURNAL_LINES.EXPENSE_AMOUNT)\nFROM\n  CNR_FIN.COST_CENTERS  COST_CENTERS,\n  CNR_FIN.FISCAL_PERIODS  FISCAL_PERIODS,\n  CNR_FIN.GL_JOURNAL_LINES  GL_JOURNAL_LINES\nWHERE\n  ( GL_JOURNAL_LINES.COST_CENTER_ID=COST_CENTERS.COST_CENTER_ID  )\n  AND  ( GL_JOURNAL_LINES.PERIOD_ID=FISCAL_PERIODS.PERIOD_ID  )\n  AND  ( FISCAL_PERIODS.FISCAL_YEAR = 2025 )\nGROUP BY\n  FISCAL_PERIODS.FISCAL_YEAR,\n  COST_CENTERS.COST_CENTER_NAME,\n  COST_CENTERS.DEPARTMENT"
+        ]
+      }
+    },
+    {
+      "id": "DP1",
+      "name": "Budget",
+      "dataSourceId": "UNV_CNR_FIN",
+      "dataSourceType": "unx",
+      "querySpecification": {
+        "resultObjects": [
+          "O_FY",
+          "O_CC",
+          "O_DEPT",
+          "M_RBUD",
+          "M_XBUD"
+        ],
+        "filters": {
+          "operator": "And",
+          "conditions": [
+            {
+              "object": "O_FY",
+              "operator": "Equal",
+              "prompt": "P_FY"
+            }
+          ]
+        }
+      },
+      "customSql": false,
+      "promptValues": {
+        "P_FY": [
+          2025
+        ]
+      },
+      "queryPlan": {
+        "statements": [
+          "SELECT\n  FISCAL_PERIODS.FISCAL_YEAR,\n  COST_CENTERS.COST_CENTER_NAME,\n  COST_CENTERS.DEPARTMENT,\n  SUM(BUDGET_LINES.REVENUE_BUDGET),\n  SUM(BUDGET_LINES.EXPENSE_BUDGET)\nFROM\n  CNR_FIN.BUDGET_LINES  BUDGET_LINES,\n  CNR_FIN.COST_CENTERS  COST_CENTERS,\n  CNR_FIN.FISCAL_PERIODS  FISCAL_PERIODS\nWHERE\n  ( BUDGET_LINES.COST_CENTER_ID=COST_CENTERS.COST_CENTER_ID  )\n  AND  ( BUDGET_LINES.PERIOD_ID=FISCAL_PERIODS.PERIOD_ID  )\n  AND  ( FISCAL_PERIODS.FISCAL_YEAR = 2025 )\nGROUP BY\n  FISCAL_PERIODS.FISCAL_YEAR,\n  COST_CENTERS.COST_CENTER_NAME,\n  COST_CENTERS.DEPARTMENT"
+        ]
+      }
+    }
+  ],
+  "variables": [
+    {
+      "id": "V_RVAR",
+      "name": "Revenue Variance",
+      "qualification": "Measure",
+      "formula": "=[Revenue]-[Revenue Budget]"
+    },
+    {
+      "id": "V_RVARP",
+      "name": "Revenue Variance %",
+      "qualification": "Measure",
+      "formula": "=[Revenue Variance]/[Revenue Budget]"
+    },
+    {
+      "id": "V_XVAR",
+      "name": "Expense Variance",
+      "qualification": "Measure",
+      "formula": "=[Operating Expenses]-[Expense Budget]"
+    }
+  ],
+  "reports": [
+    {
+      "id": "RPT1",
+      "name": "Report 1",
+      "blocks": [
+        {
+          "id": "B1",
+          "type": "Table",
+          "axes": [
+            "Cost Center",
+            "Department"
+          ],
+          "measures": [
+            "Revenue",
+            "Revenue Budget",
+            "Revenue Variance",
+            "Revenue Variance %",
+            "Operating Expenses",
+            "Expense Budget",
+            "Expense Variance"
+          ]
+        }
+      ]
+    }
+  ]
+}

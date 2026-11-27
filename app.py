@@ -39,6 +39,7 @@ from modules import (
 from modules.dictionary_ui import dictionary_tab
 from modules import lifecycle_ui as lc, semantics, store, theme
 from modules import sources as src
+from modules import sapbo_ui
 from modules import metric_views as mv
 from modules import mv_builder_ui as mvb
 from modules import workbench_ui as wb
@@ -280,6 +281,8 @@ with st.sidebar:
                                   placeholder="version: 0.3.0.dev0\nname: sales\ndatasets:\n  - name: orders\n"
                                               "    source: main.sales.orders")
         force_open = st.checkbox("Open even if it has validation errors", value=False, key="paste_force")
+    elif source == "SAP BusinessObjects":
+        sapbo_ui.sidebar(ON_DATABRICKS)
     elif planned is not None:
         st.info(f"**{planned.label}** is coming soon. {planned.note}")
     elif section == "create" and source is None:
@@ -289,7 +292,8 @@ with st.sidebar:
     profile, verify, use_history, history_days, use_lineage, lineage_days = True, True, False, 90, False, 180
     threshold, enum_max, onto_name, base_iri, prefix = 0.75, 12, "MyOntology", "http://example.org/ontology/", "ex"
     naming, strip, collapse, include_views = "semantic", True, True, True
-    if section == "create":
+    sapbo = source == "SAP BusinessObjects"
+    if section == "create" and not sapbo:
         st.header("2 · Analyze")
         with st.expander("Discovery & lineage", expanded=False):
             profile = st.checkbox("Profile data (row counts, samples, enumerations)", value=True)
@@ -316,7 +320,7 @@ with st.sidebar:
             include_views = st.checkbox("Include views", value=True)
 
     enrich, docs_files = False, None
-    if section != "deploy":
+    if section != "deploy" and not sapbo:
         st.header(("3" if section == "create" else "2") + " · Semantic layer (optional)")
         enrich = st.checkbox("LLM: descriptions, synonyms, code meanings, rules, metrics",
                              value=False, disabled=not ON_DATABRICKS)
@@ -325,7 +329,7 @@ with st.sidebar:
                                       accept_multiple_files=True, disabled=not enrich)
 
     go = False
-    if section != "deploy":
+    if section != "deploy" and not sapbo:
         can_go = planned is None and bool(selected_fqns or uploaded or version_path or ossie_ready
                                           or paste_text.strip())
         go = st.button({"Saved version": "Open version", "Ossie YAML": "Load Ossie model",
@@ -532,6 +536,10 @@ if open_error:
 
 if section == "deploy":
     lc.deploy_page(onto, user_token(), uc_runner if ON_DATABRICKS else None, ON_DATABRICKS)
+    st.stop()
+
+if section == "create" and source == "SAP BusinessObjects" and ss.get("sapbo_view", True):
+    sapbo_ui.workspace(open_text, uc_runner() if ON_DATABRICKS else None, ON_DATABRICKS)
     st.stop()
 
 if onto is None and section == "update":

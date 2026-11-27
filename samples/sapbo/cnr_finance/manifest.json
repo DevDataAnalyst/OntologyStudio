@@ -1,0 +1,34 @@
+{
+  "bundle_version": "0.1",
+  "source_system": {
+    "type": "sap_bo",
+    "version": "4.3 SP4 (synthetic)"
+  },
+  "extracted_at": "2026-11-27T00:00:00Z",
+  "extractor": "synthetic fixture (modules/sapbo/fixture.py)",
+  "universe": "UNV_CNR_FIN",
+  "reports": [
+    "R01",
+    "R02",
+    "R03",
+    "R04",
+    "R05",
+    "R06",
+    "R07",
+    "R08",
+    "R09",
+    "R10"
+  ],
+  "extraction_methods": {
+    "universe.businessLayer": "rest:/biprws/sl/v1 (simulated)",
+    "universe.dataFoundation": "sdk:semantic-layer-java (simulated)",
+    "reports": "rest:/biprws/raylight/v1 (simulated)"
+  },
+  "counts": {
+    "tables": 17,
+    "joins": 21,
+    "contexts": 5,
+    "items": 56,
+    "reports": 10
+  }
+}

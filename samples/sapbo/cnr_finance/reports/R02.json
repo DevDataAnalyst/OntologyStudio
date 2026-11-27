@@ -1,0 +1,112 @@
+{
+  "id": "R02",
+  "cuid": "AZcnrR02000000000000",
+  "name": "R02 Operating Ratio Trend",
+  "folder": "Public Folders/Finance/Ledger",
+  "usage": {
+    "refreshes_90d": 288,
+    "users_90d": 22
+  },
+  "constructs_intended": [
+    "C2",
+    "C4",
+    "C3",
+    "C7"
+  ],
+  "dataProviders": [
+    {
+      "id": "DP0",
+      "name": "Ledger",
+      "dataSourceId": "UNV_CNR_FIN",
+      "dataSourceType": "unx",
+      "querySpecification": {
+        "resultObjects": [
+          "O_FY",
+          "O_FP",
+          "M_OPEX",
+          "M_REV_GL",
+          "M_OR"
+        ],
+        "filters": {
+          "operator": "And",
+          "conditions": [
+            {
+              "predefinedFilter": "F_CLOSED"
+            }
+          ]
+        }
+      },
+      "customSql": false,
+      "promptValues": {},
+      "queryPlan": {
+        "statements": [
+          "SELECT\n  FISCAL_PERIODS.FISCAL_YEAR,\n  FISCAL_PERIODS.PERIOD_NUMBER,\n  SUM(GL_JOURNAL_LINES.EXPENSE_AMOUNT),\n  SUM(GL_JOURNAL_LINES.REVENUE_AMOUNT),\n  SUM(GL_JOURNAL_LINES.EXPENSE_AMOUNT)/NULLIF(SUM(GL_JOURNAL_LINES.REVENUE_AMOUNT),0)\nFROM\n  CNR_FIN.FISCAL_PERIODS  FISCAL_PERIODS,\n  CNR_FIN.GL_JOURNAL_LINES  GL_JOURNAL_LINES\nWHERE\n  ( GL_JOURNAL_LINES.PERIOD_ID=FISCAL_PERIODS.PERIOD_ID  )\n  AND  ( FISCAL_PERIODS.IS_CLOSED = 1 )\nGROUP BY\n  FISCAL_PERIODS.FISCAL_YEAR,\n  FISCAL_PERIODS.PERIOD_NUMBER"
+        ]
+      }
+    },
+    {
+      "id": "DP1",
+      "name": "Billing",
+      "dataSourceId": "UNV_CNR_FIN",
+      "dataSourceType": "unx",
+      "querySpecification": {
+        "resultObjects": [
+          "O_FY",
+          "O_FP",
+          "M_FREV"
+        ],
+        "filters": {
+          "operator": "And",
+          "conditions": [
+            {
+              "predefinedFilter": "F_CLOSED"
+            }
+          ]
+        }
+      },
+      "customSql": false,
+      "promptValues": {},
+      "queryPlan": {
+        "statements": [
+          "SELECT\n  FISCAL_PERIODS.FISCAL_YEAR,\n  FISCAL_PERIODS.PERIOD_NUMBER,\n  SUM(FREIGHT_BILLING.LINE_REVENUE)\nFROM\n  CNR_FIN.FISCAL_PERIODS  FISCAL_PERIODS,\n  CNR_FIN.FREIGHT_BILLING  FREIGHT_BILLING\nWHERE\n  ( FREIGHT_BILLING.PERIOD_ID=FISCAL_PERIODS.PERIOD_ID  )\n  AND  ( FISCAL_PERIODS.IS_CLOSED = 1 )\nGROUP BY\n  FISCAL_PERIODS.FISCAL_YEAR,\n  FISCAL_PERIODS.PERIOD_NUMBER"
+        ]
+      }
+    }
+  ],
+  "variables": [
+    {
+      "id": "V_ORPCT",
+      "name": "Operating Ratio %",
+      "qualification": "Measure",
+      "formula": "=[Operating Expenses]/[Revenue]*100"
+    },
+    {
+      "id": "V_GLVSBILL",
+      "name": "GL vs Billing Gap",
+      "qualification": "Measure",
+      "formula": "=[Revenue]-[Freight Revenue]"
+    }
+  ],
+  "reports": [
+    {
+      "id": "RPT1",
+      "name": "Report 1",
+      "blocks": [
+        {
+          "id": "B1",
+          "type": "Table",
+          "axes": [
+            "Fiscal Year",
+            "Fiscal Period"
+          ],
+          "measures": [
+            "Operating Expenses",
+            "Revenue",
+            "Operating Ratio",
+            "Operating Ratio %"
+          ]
+        }
+      ]
+    }
+  ]
+}

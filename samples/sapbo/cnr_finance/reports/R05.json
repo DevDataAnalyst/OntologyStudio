@@ -1,0 +1,83 @@
+{
+  "id": "R05",
+  "cuid": "AZcnrR05000000000000",
+  "name": "R05 AR Aging Buckets",
+  "folder": "Public Folders/Finance/Receivables",
+  "usage": {
+    "refreshes_90d": 264,
+    "users_90d": 18
+  },
+  "constructs_intended": [
+    "C5",
+    "C7",
+    "C2"
+  ],
+  "dataProviders": [
+    {
+      "id": "DP0",
+      "name": "Receivables",
+      "dataSourceId": "UNV_CNR_FIN",
+      "dataSourceType": "unx",
+      "querySpecification": {
+        "resultObjects": [
+          "O_AGING",
+          "O_CUST",
+          "M_AROPEN",
+          "M_AROVD",
+          "M_ARINV",
+          "M_DTP"
+        ],
+        "filters": {
+          "operator": "And",
+          "conditions": [
+            {
+              "predefinedFilter": "F_OPENINV"
+            }
+          ]
+        }
+      },
+      "customSql": false,
+      "promptValues": {},
+      "queryPlan": {
+        "statements": [
+          "SELECT\n  CASE WHEN AR_INVOICES.DAYS_PAST_DUE <= 0 THEN 'Current' WHEN AR_INVOICES.DAYS_PAST_DUE <= 30 THEN '1-30' WHEN AR_INVOICES.DAYS_PAST_DUE <= 60 THEN '31-60' WHEN AR_INVOICES.DAYS_PAST_DUE <= 90 THEN '61-90' ELSE '90+' END,\n  CUSTOMERS.CUSTOMER_NAME,\n  SUM(AR_INVOICES.OPEN_AMOUNT),\n  SUM(CASE WHEN AR_INVOICES.DAYS_PAST_DUE > 0 THEN AR_INVOICES.OPEN_AMOUNT END),\n  SUM(AR_INVOICES.INVOICE_AMOUNT),\n  AVG(AR_INVOICES.DAYS_TO_PAY)\nFROM\n  CNR_FIN.AR_INVOICES  AR_INVOICES,\n  CNR_FIN.CUSTOMERS  CUSTOMERS\nWHERE\n  ( AR_INVOICES.CUSTOMER_ID=CUSTOMERS.CUSTOMER_ID  )\n  AND  ( AR_INVOICES.OPEN_AMOUNT > 0 )\nGROUP BY\n  CASE WHEN AR_INVOICES.DAYS_PAST_DUE <= 0 THEN 'Current' WHEN AR_INVOICES.DAYS_PAST_DUE <= 30 THEN '1-30' WHEN AR_INVOICES.DAYS_PAST_DUE <= 60 THEN '31-60' WHEN AR_INVOICES.DAYS_PAST_DUE <= 90 THEN '61-90' ELSE '90+' END,\n  CUSTOMERS.CUSTOMER_NAME"
+        ]
+      }
+    }
+  ],
+  "variables": [
+    {
+      "id": "V_OVDPCT",
+      "name": "Overdue %",
+      "qualification": "Measure",
+      "formula": "=[AR Overdue Amount]/[AR Open Amount]"
+    },
+    {
+      "id": "V_DSO",
+      "name": "DSO (approx)",
+      "qualification": "Measure",
+      "formula": "=[AR Open Amount]/[AR Invoiced Amount]*365"
+    }
+  ],
+  "reports": [
+    {
+      "id": "RPT1",
+      "name": "Report 1",
+      "blocks": [
+        {
+          "id": "B1",
+          "type": "Crosstab",
+          "axes": [
+            "Aging Bucket"
+          ],
+          "measures": [
+            "AR Open Amount",
+            "AR Overdue Amount",
+            "Overdue %",
+            "Avg Days to Pay"
+          ]
+        }
+      ]
+    }
+  ]
+}

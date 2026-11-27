@@ -141,14 +141,28 @@ def is_bare_column(tree) -> bool:
     return isinstance(tree, exp.Column)
 
 
+def _aliases(tree) -> dict[str, str]:
+    """Table alias -> table name for every aliased table in the statement (upper case)."""
+    out = {}
+    for t in tree.find_all(exp.Table):
+        if t.alias:
+            out[t.alias.upper()] = t.name.upper()
+    return out
+
+
 def _fix_bool(tree, bool_cols: set[tuple[str, str]]):
+    """`flag = 1` -> `flag = TRUE` for columns that are BOOLEAN in Unity Catalog. Aliases (`FISCAL_PERIODS fp`)
+    are resolved to their table so `fp.IS_CLOSED = 1` is fixed too."""
+    aliases = _aliases(tree)
+
     def fix(node):
         if isinstance(node, (exp.EQ, exp.NEQ)):
             col, lit = node.this, node.expression
             if isinstance(lit, exp.Column):
                 col, lit = lit, col
             if (isinstance(col, exp.Column) and isinstance(lit, exp.Literal) and not lit.is_string
-                    and (col.table.upper(), col.name.upper()) in bool_cols and lit.this in ("0", "1")):
+                    and (aliases.get(col.table.upper(), col.table.upper()), col.name.upper()) in bool_cols
+                    and lit.this in ("0", "1")):
                 truth = exp.Boolean(this=lit.this == "1")
                 return node.__class__(this=col.copy(), expression=truth)
         return node
@@ -157,13 +171,21 @@ def _fix_bool(tree, bool_cols: set[tuple[str, str]]):
 
 def _decode_to_case(tree):
     """Oracle DECODE(x, s1, r1, ..., default) -> CASE WHEN x = s1 THEN r1 ... ELSE default END.
-    (Oracle's DECODE treats NULL = NULL as a match; CASE does not. The rule note says so.)"""
+    Oracle's DECODE matches NULL to NULL; CASE with `=` does not. So a NULL search value becomes `x IS NULL`, and
+    a search value that isn't a literal (a column, an expression) uses null-safe `x <=> s`."""
+    def cond(subject, search):
+        if isinstance(search, exp.Null):
+            return exp.Is(this=subject.copy(), expression=exp.Null())
+        if isinstance(search, (exp.Literal, exp.Boolean)):
+            return exp.EQ(this=subject.copy(), expression=search.copy())
+        return exp.NullSafeEQ(this=subject.copy(), expression=search.copy())
+
     def conv(node):
         cls = getattr(exp, "DecodeCase", None)
         if cls is not None and isinstance(node, cls):
             args = list(node.expressions)
             subject, rest = args[0], args[1:]
-            ifs = [exp.If(this=exp.EQ(this=subject.copy(), expression=rest[i].copy()), true=rest[i + 1].copy())
+            ifs = [exp.If(this=cond(subject, rest[i]), true=rest[i + 1].copy())
                    for i in range(0, len(rest) - 1, 2)]
             default = rest[-1].copy() if len(rest) % 2 == 1 else None
             return exp.Case(ifs=ifs, default=default)

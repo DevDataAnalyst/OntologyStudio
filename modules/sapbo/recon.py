@@ -29,6 +29,30 @@ def _lit(v) -> str:
     return str(v) if isinstance(v, (int, float)) else "'" + str(v).replace("'", "''") + "'"
 
 
+_COMPARE = {"Equal": "=", "NotEqual": "<>", "GreaterThan": ">", "GreaterThanOrEqual": ">=", "LessThan": "<",
+            "LessThanOrEqual": "<="}
+
+
+def _condition(field: str, op: str, vals: list) -> str | None:
+    """A BO query-spec condition as a predicate on a metric view field; None when it isn't translated (the
+    statement is then marked manual rather than asking a different question)."""
+    if op in ("IsNull", "IsNotNull"):
+        return f"{field} IS {'NOT ' if op == 'IsNotNull' else ''}NULL"
+    if not vals:
+        return None
+    if op in _COMPARE and len(vals) == 1:
+        return f"{field} {_COMPARE[op]} {_lit(vals[0])}"
+    if op in ("Equal", "InList"):
+        return f"{field} IN ({', '.join(_lit(v) for v in vals)})"
+    if op in ("NotEqual", "NotInList"):
+        return f"{field} NOT IN ({', '.join(_lit(v) for v in vals)})"
+    if op == "Between" and len(vals) == 2:
+        return f"{field} BETWEEN {_lit(vals[0])} AND {_lit(vals[1])}"
+    if op == "NotBetween" and len(vals) == 2:
+        return f"{field} NOT BETWEEN {_lit(vals[0])} AND {_lit(vals[1])}"
+    return None
+
+
 def _alias_statement(sql: str, dialect: str, names: list[str]) -> str | None:
     tree, _ = bo_sql.parse(sql, dialect)
     if tree is None or not isinstance(tree, exp.Select):
@@ -101,10 +125,10 @@ def plan(sir: dict, concepts: dict, mv: dict) -> list[dict]:
                     vals = dp["prompt_values"].get(cnd["prompt"], []) if cnd.get("prompt") else cnd.get("values", [])
                     if not f:
                         missing.append(f"filter on {(o or {}).get('name')}")
-                    elif cnd["operator"] == "Equal" and len(vals) == 1:
-                        where.append(f"{f} = {_lit(vals[0])}")
-                    elif vals:
-                        where.append(f"{f} IN ({', '.join(_lit(v) for v in vals)})")
+                    else:
+                        pred = _condition(f, cnd["operator"], vals)
+                        (where.append(pred) if pred else
+                         missing.append(f"filter on {(o or {}).get('name')} ({cnd['operator']} isn't translated)"))
                 for pf in dp["predefined_filters"]:
                     flt = concepts["filters"].get(_snake(objects[pf]["name"])) if pf in objects else None
                     expr = (flt or {}).get("expression", {}).get("value")

@@ -42,6 +42,26 @@ def test_decode_and_boolean_flags():
     assert "= TRUE" in out.upper()
 
 
+def test_decode_keeps_oracle_null_matching():
+    out, _, _ = bo_sql.to_databricks("DECODE(a, NULL, 'none', b, 'same', 'other')", "oracle")
+    assert "a IS NULL" in out and "a IS NOT DISTINCT FROM b" in out
+
+
+def test_boolean_fix_resolves_table_aliases():
+    out, err = bo_sql.transpile_statement("SELECT fp.FISCAL_YEAR FROM FISCAL_PERIODS fp WHERE fp.IS_CLOSED = 1",
+                                          "oracle", {"FISCAL_PERIODS": "cnfinance.silver.fiscal_periods"},
+                                          bool_cols={("FISCAL_PERIODS", "IS_CLOSED")})
+    assert err is None and "= TRUE" in out.upper(), out
+
+
+def test_recon_condition_operators():
+    from modules.sapbo.recon import _condition
+    assert _condition("r", "NotEqual", ["West"]) == "r <> 'West'"
+    assert _condition("r", "NotInList", ["A", "B"]) == "r NOT IN ('A', 'B')"
+    assert _condition("y", "Between", [2024, 2025]) == "y BETWEEN 2024 AND 2025"
+    assert _condition("x", "Matches", ["A%"]) is None          # untranslated -> statement marked manual
+
+
 def test_webi_formula_classifier():
     assert webi_formula.classify("=[Freight Revenue]/[Carloads]")["status"] == "Transformed"
     assert webi_formula.classify("=Rank([Revenue])")["kind"] == "presentation"
